@@ -1,0 +1,7 @@
+# Lotus-Yunzai 图鉴
+
+读取原神、星铁和绝区零的本地图鉴快照。设置 `LOTUS_ATLAS_DATA_DIR` 指向含 `map.json` 和 `items/` 的数据目录，再在宿主发送 `#角色图鉴 原神 神里绫华`。发送 `#图鉴状态` 可查看角色分类的版本与收录数量。
+
+数据目录默认是主仓的 `data/atlas/data`。可使用已有的 nanoka-atlas-backend 导出。本仓只包含查询代码。
+
+绝区零等级以同版本角色详情为准。对于旧导出的等级字段，按官方发布的安比和耀嘉音样例核对 A/S 级。详情缺失或版本不符时会标为待核对。[官方调频说明](https://zenless.hoyoverse.com/zh-cn/news/129524)
