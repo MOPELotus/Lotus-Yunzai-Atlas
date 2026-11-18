@@ -1,0 +1,113 @@
+import type { Game } from "./catalog.ts";
+import { compareKey, effectText, label, object } from "./source-values.ts";
+
+export const challengeModes = [
+  { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] },
+  { game: "gi", id: "rolecombat", name: "幻想真境剧诗", aliases: ["幻想真境"] },
+  { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌"] },
+  { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] },
+  { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] },
+  { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: [] },
+  { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫战"] },
+  { game: "zzz", id: "boss", name: "危局强袭战", aliases: ["强袭战"] },
+] as const satisfies readonly { game: Game; id: string; name: string; aliases: readonly string[] }[];
+
+export type ChallengeMode = typeof challengeModes[number];
+
+export function findChallengeMode(game: Game, query: string): ChallengeMode | undefined {
+  const key = compareKey(query);
+  return challengeModes.find((mode) => mode.game === game &&
+    [mode.name, mode.id, ...mode.aliases].some((name) => compareKey(name) === key));
+}
+
+interface ChallengeWindow {
+  readonly begin: string;
+  readonly end: string;
+  readonly from: "live" | "export";
+}
+
+function validDate(value: unknown): string {
+  const date = label(value);
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(date) || date < "2020-01-01") return "";
+  const iso = date.replace(" ", "T") + "Z";
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 19) !== iso.slice(0, 19)) return "";
+  return date;
+}
+
+function sourceWindow(list: Record<string, unknown>): ChallengeWindow | undefined {
+  const liveBegin = validDate(list.live_begin);
+  const liveEnd = validDate(list.live_end);
+  if (liveBegin && liveEnd > liveBegin) return { begin: liveBegin, end: liveEnd, from: "live" };
+
+  const begin = validDate(list.begin);
+  const end = validDate(list.end);
+  if (begin && end > begin) return { begin, end, from: "export" };
+}
+
+interface ChallengeSection {
+  readonly label: string;
+  readonly items: readonly string[];
+  readonly count: number;
+}
+
+function namedSection(label: string, values: readonly unknown[]): ChallengeSection | undefined {
+  if (!values.length) return;
+  return {
+    label,
+    count: values.length,
+    items: values.flatMap((row) => {
+      const { name } = object(row);
+      const text = effectText(name);
+      return text ? [text] : [];
+    }),
+  };
+}
+
+function detailSections(mode: ChallengeMode, value: unknown): ChallengeSection[] {
+  const detail = object(value);
+  const sections: (ChallengeSection | undefined)[] = [];
+  switch (mode.id) {
+    case "tower": {
+      const floors = Object.keys(object(detail.floor)).filter((id) => /^[1-9]\d*$/u.test(id));
+      if (floors.length) sections.push({ label: "楼层", items: floors.map((id) => `第${id}层`), count: floors.length });
+      break;
+    }
+    case "rolecombat": {
+      const count = Object.keys(object(detail.difficulty_config)).length;
+      if (count) sections.push({ label: "难度配置", items: [], count });
+      break;
+    }
+    case "maze":
+      sections.push(namedSection("来源关卡", Array.isArray(value) ? value : []));
+      break;
+    case "maze_boss":
+    case "maze_extra":
+      sections.push(namedSection("来源关卡", Array.isArray(detail.level) ? detail.level : []));
+      break;
+    case "maze_peak":
+      sections.push(namedSection("骑士", Array.isArray(detail.pre_level) ? detail.pre_level : []));
+      if (Object.keys(object(detail.boss_level)).length) {
+        sections.push(namedSection("王棋", [detail.boss_level]));
+      }
+      break;
+    case "shiyu":
+      sections.push(namedSection("防线与房间", Object.values(object(detail.zone))));
+      break;
+    case "boss":
+      for (const row of Array.isArray(detail.modes) ? detail.modes : []) {
+        const { zone_type, zone } = object(row);
+        const type = zone_type === 1001 ? "试炼" : zone_type === 1002 ? "绝境" : "来源关卡";
+        sections.push(namedSection(type, Object.values(object(zone))));
+      }
+      break;
+  }
+  return sections.filter((section) => section !== undefined);
+}
+
+export function readChallengeFacts(mode: ChallengeMode, content: Record<string, unknown>) {
+  return {
+    window: sourceWindow(object(content.list)),
+    sections: detailSections(mode, content.detail),
+  };
+}

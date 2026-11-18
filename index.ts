@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { challengeModes, findChallengeMode } from "./challenges.ts";
+import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, gameNames, type Game } from "./catalog.ts";
 
@@ -139,6 +141,77 @@ async function achievementCategoryQuery(argument: string): Promise<string> {
   }
 }
 
+async function challengeQuery(argument: string): Promise<string> {
+  const { game, query } = searchTerms(argument);
+  if (!game) return "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]";
+  const [modeName = "", ...terms] = query.split(/\s+/u);
+  const mode = findChallengeMode(game, modeName);
+  if (!mode) {
+    const names = challengeModes.filter((item) => item.game === game).map(({ name }) => name);
+    return `${gameNames[game]}挑战图鉴：${names.join("、")}。请输入模式以查看记录。`;
+  }
+  const target = terms.join(" ");
+  if (/^(?:当前|本期|当期|上期|下期|第\s*\d+\s*期)$/u.test(target)) {
+    return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
+  }
+
+  try {
+    const result = await catalog.read();
+    const category = result.pages.find((page) => page.game === game && page.challengeMode?.id === mode.id);
+    if (!category) return `快照中未收录${gameNames[game]}的${mode.name}资料。`;
+
+    const pageMatch = /^第(\d+)页$/u.exec(target);
+    if (!target || pageMatch) {
+      const page = pageMatch ? Number(pageMatch[1]) : 1;
+      const pageSize = 12;
+      const lastPage = Math.ceil(category.entries.length / pageSize);
+      if (!Number.isSafeInteger(page) || page < 1 || page > lastPage) return `请输入第 1 至 ${lastPage} 页。`;
+      const entries = category.entries.slice((page - 1) * pageSize, page * pageSize);
+      return [
+        `${gameNames[game]} · ${mode.name} · 共 ${category.entries.length} 条 · 第 ${page}/${lastPage} 页`,
+        ...entries.map(({ name, id }) => name === id ? `记录 ID ${id}` : `${name} · ID ${id}`),
+        "输入记录 ID 或名称查看关卡资料，也可在模式后追加第2页等页码。",
+        ...(result.stale ? ["部分索引未更新，可发送 #图鉴状态 查看版本。"] : []),
+      ].join("\n");
+    }
+
+    const key = compareKey(target);
+    const recordId = target.normalize("NFKC");
+    const idMatch = category.entries.find(({ id }) => id === recordId);
+    const matches = idMatch ? [idMatch] : category.entries.filter(({ name }) => key && compareKey(name) === key);
+    if (!matches.length) return "未找到挑战记录，请核对完整名称或记录 ID。";
+    if (matches.length > 1) {
+      return [`${mode.name}有 ${matches.length} 条同名记录，请用 ID 查询。`,
+        ...matches.slice(0, 12).map(({ name, id }) => `${name} · ID ${id}`),
+        ...(matches.length > 12 ? ["更多 ID 可在模式列表中查看。"] : []),
+      ].join("\n");
+    }
+
+    const [entry] = matches;
+    if (!entry) return "未找到挑战记录。";
+    const { window, sections } = await catalog.challengeFacts(entry, mode);
+    const title = [gameNames[game], mode.name, entry.name !== entry.id ? entry.name : "", `记录 ID ${entry.id}`]
+      .filter(Boolean).join(" · ");
+    const lines = [title, `快照版本 ${entry.version}`];
+    if (window) {
+      const origin = window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
+      lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
+    } else {
+      lines.push("该条目缺少已知的起止时间。");
+    }
+    if (!sections.length) lines.push("当前快照缺少可验证的关卡详情。");
+    for (const section of sections) {
+      const names = section.items.slice(0, 8);
+      const end = section.items.length > names.length ? "等" : "";
+      lines.push(`${section.label} · 共 ${section.count} 条${names.length ? ` · ${names.join("、")}${end}` : ""}`);
+    }
+    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    return lines.join("\n");
+  } catch {
+    return missing;
+  }
+}
+
 export default {
   commands: {
     "#武器图鉴": (argument: string) => equipmentQuery(argument, "#武器图鉴"),
@@ -151,6 +224,7 @@ export default {
     "#邦布图鉴": bangbooQuery,
     "#成就图鉴": achievementQuery,
     "#成就分类": achievementCategoryQuery,
+    "#挑战图鉴": challengeQuery,
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

@@ -1,6 +1,7 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
+import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 import { compareKey, effectText, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
 
@@ -22,9 +23,10 @@ const setPages = {
 const achievementPage = { id: "achievement/achievement", name: "成就" } as const;
 const bangbooPage = { id: "bangboo", name: "邦布" } as const;
 const kinds = ["character", "equipment", "set", "bangboo", "achievement"] as const;
-type Kind = typeof kinds[number];
+type StandardKind = typeof kinds[number];
+type Kind = StandardKind | "challenge";
 
-function pageFor(game: Game, kind: Kind): { id: string; name: string } | undefined {
+function pageFor(game: Game, kind: StandardKind): { id: string; name: string } | undefined {
   switch (kind) {
     case "character": return { id: "character", name: "角色" };
     case "equipment": return equipmentPages[game];
@@ -52,6 +54,8 @@ interface AtlasPage {
   readonly kind: Kind;
   readonly name: string;
   readonly entries: readonly AtlasEntry[];
+  readonly challengeMode?: ChallengeMode;
+  readonly sourceUrl?: string;
   readonly achievementCategories?: readonly AchievementCategory[];
 }
 
@@ -198,16 +202,20 @@ export function createAtlasCatalog(directory: string) {
           const gameBlock = object(object(source.games)[game]);
           const locale = object(object(gameBlock.locales).zh);
           const rawPages = object(locale.pages);
-          for (const kind of kinds) {
-            const category = pageFor(game, kind);
-            if (!category) continue;
-            const pageId = category.id;
-            const previous = snapshot?.pages.find((page) => page.game === game && page.kind === kind);
+          const standardPages = kinds.flatMap((kind) => {
+            const page = pageFor(game, kind);
+            return page ? [{ ...page, kind, challengeMode: undefined }] : [];
+          });
+          const challengePages = challengeModes.filter((mode) => mode.game === game)
+            .map((mode) => ({ id: mode.id, name: mode.name, kind: "challenge" as const, challengeMode: mode }));
+          for (const { id: pageId, name, kind, challengeMode } of [...standardPages, ...challengePages]) {
+            const previous = snapshot?.pages.find((page) =>
+              page.game === game && page.kind === kind && page.challengeMode?.id === challengeMode?.id);
             const value = rawPages[pageId];
             if (value === undefined && !previous) continue;
 
             try {
-              const page = readPage(game, kind, category.name, value);
+              const page = readPage(game, kind, name, value);
               if (kind === "set" && game === "gi") {
                 const entries: AtlasEntry[] = [];
                 for (const entry of page.entries) {
@@ -228,6 +236,8 @@ export function createAtlasCatalog(directory: string) {
                   sources,
                 });
                 pages.push({ ...page, achievementCategories });
+              } else if (challengeMode) {
+                pages.push({ ...page, challengeMode, sourceUrl: label(object(value).sourceUrl) });
               } else {
                 pages.push(page);
               }
@@ -294,6 +304,10 @@ export function createAtlasCatalog(directory: string) {
       const planar = entry.game === "hsr" && Object.keys(object(detail.parts)).length === 2 &&
         effects.length === 1 && effects[0]?.pieces === 2;
       return { category: planar ? "位面饰品" : category.name, effects };
+    },
+    async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
+      const content = await readContent(entry, mode.id);
+      return readChallengeFacts(mode, content);
     },
     async bangbooRarity(entry: AtlasEntry): Promise<string> {
       if (entry.game !== "zzz") return "";
