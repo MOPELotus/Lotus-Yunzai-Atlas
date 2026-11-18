@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url";
+import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, gameNames, type Game } from "./catalog.ts";
 
+export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment } from "./catalog.ts";
 
 const games = new Map<string, Game>([
@@ -80,6 +82,63 @@ async function bangbooQuery(argument: string): Promise<string> {
   }
 }
 
+function achievementCategoryLabel(category: AchievementCategory): string {
+  return [gameNames[category.game], category.parent, category.name].filter(Boolean).join(" · ");
+}
+
+async function achievementQuery(argument: string): Promise<string> {
+  const { game, query } = searchTerms(argument);
+  if (!query) return "用法：#成就图鉴 [原神|星铁|绝区零] 成就名或 ID";
+  try {
+    const result = await catalog.read();
+    const categories = result.pages.flatMap((page) => page.achievementCategories ?? []);
+    const matches = findAchievements(categories, query, game);
+    if (!matches.length) return "未找到匹配的成就。";
+
+    const lines = matches.slice(0, 8).map(({ category, entry }) => {
+      const title = `${achievementCategoryLabel(category)} · ${entry.name} · ID ${entry.id}`;
+      return matches.length <= 8 && entry.description ? `${title}\n${entry.description}` : title;
+    });
+    if (matches.length > lines.length) lines.push(`共 ${matches.length} 条，请补充游戏名或更完整的成就名。`);
+    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    return lines.join("\n");
+  } catch {
+    return missing;
+  }
+}
+
+async function achievementCategoryQuery(argument: string): Promise<string> {
+  const { game, query } = searchTerms(argument);
+  const suffix = /(?:^|\s+)第(\d+)页$/u.exec(query);
+  const pageNo = suffix ? Number(suffix[1]) : 1;
+  const name = suffix ? query.slice(0, suffix.index).trimEnd() : query;
+  if (!Number.isSafeInteger(pageNo) || pageNo < 1) return "页码须为正整数。";
+  try {
+    const result = await catalog.read();
+    const all = result.pages.flatMap((page) => page.achievementCategories ?? []);
+    const categories = findAchievementCategories(all, name, game);
+    if (!categories.length) return "未找到匹配的成就分类。";
+
+    const [category] = categories;
+    const selected = name && categories.length === 1 ? category : undefined;
+    const lines = selected ? selected.entries.map(({ id, name }) => `${name} · ID ${id}`)
+      : categories.map((item) => `${achievementCategoryLabel(item)} · ${item.entries.length} 项 · ID ${item.id}`);
+    const pageSize = 12;
+    const lastPage = Math.max(1, Math.ceil(lines.length / pageSize));
+    if (pageNo > lastPage) return `共 ${lastPage} 页，请调整页码。`;
+
+    const header = selected
+      ? `${achievementCategoryLabel(selected)} · ${lines.length} 项 · 第 ${pageNo}/${lastPage} 页`
+      : `成就分类 · ${lines.length} 类 · 第 ${pageNo}/${lastPage} 页`;
+    const page = [header, ...lines.slice((pageNo - 1) * pageSize, pageNo * pageSize)];
+    if (pageNo < lastPage) page.push("可在指令末尾追加第2页等页码。");
+    if (result.stale) page.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    return page.join("\n");
+  } catch {
+    return missing;
+  }
+}
+
 export default {
   commands: {
     "#武器图鉴": (argument: string) => equipmentQuery(argument, "#武器图鉴"),
@@ -90,11 +149,17 @@ export default {
     "#遗器图鉴": (argument: string) => setsQuery(argument, "#遗器图鉴", "hsr"),
     "#驱动盘图鉴": (argument: string) => setsQuery(argument, "#驱动盘图鉴", "zzz"),
     "#邦布图鉴": bangbooQuery,
+    "#成就图鉴": achievementQuery,
+    "#成就分类": achievementCategoryQuery,
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();
-        const lines = result.pages.map(({ game, name, version, entries, sampled }) =>
-          `${gameNames[game]} · ${name} · ${version} · ${entries.length} 个条目${sampled ? "（样例）" : ""}`);
+        const lines = result.pages.map(({ game, name, version, entries, sampled, achievementCategories }) => {
+          const count = achievementCategories
+            ? `${achievementCategories.length} 类 · ${achievementCategories.reduce((total, category) => total + category.entries.length, 0)} 项`
+            : `${entries.length} 个条目`;
+          return `${gameNames[game]} · ${name} · ${version} · ${count}${sampled ? "（样例）" : ""}`;
+        });
         if (result.stale) lines.push("部分索引更新失败，已有数据的分类保留了上一次可用的版本。");
         return lines.join("\n");
       } catch {

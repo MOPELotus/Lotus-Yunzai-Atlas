@@ -1,6 +1,9 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
+import { compareKey, effectText, label, object } from "./source-values.ts";
+import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
+
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
 
@@ -16,8 +19,9 @@ const setPages = {
   zzz: { id: "equipment", name: "驱动盘" },
 } as const;
 
+const achievementPage = { id: "achievement/achievement", name: "成就" } as const;
 const bangbooPage = { id: "bangboo", name: "邦布" } as const;
-const kinds = ["character", "equipment", "set", "bangboo"] as const;
+const kinds = ["character", "equipment", "set", "bangboo", "achievement"] as const;
 type Kind = typeof kinds[number];
 
 function pageFor(game: Game, kind: Kind): { id: string; name: string } | undefined {
@@ -25,6 +29,7 @@ function pageFor(game: Game, kind: Kind): { id: string; name: string } | undefin
     case "character": return { id: "character", name: "角色" };
     case "equipment": return equipmentPages[game];
     case "set": return setPages[game];
+    case "achievement": return achievementPage;
     case "bangboo": return game === "zzz" ? bangbooPage : undefined;
   }
 }
@@ -47,6 +52,7 @@ interface AtlasPage {
   readonly kind: Kind;
   readonly name: string;
   readonly entries: readonly AtlasEntry[];
+  readonly achievementCategories?: readonly AchievementCategory[];
 }
 
 interface Catalog {
@@ -56,17 +62,6 @@ interface Catalog {
 
 interface Snapshot extends Catalog {
   readonly stamp: string;
-}
-
-function object(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
-
-function label(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
 }
 
 function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPage {
@@ -92,10 +87,6 @@ function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPa
     entries.push({ game, id, name: title, version, path, rarity: label(record.rarity) });
   }
   return { game, kind, name, version, sampled: page.sampled === true, entries };
-}
-
-function compareKey(value: string): string {
-  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function score(entry: AtlasEntry, key: string): number {
@@ -168,16 +159,6 @@ interface SetEffect {
   readonly text: string;
 }
 
-function effectText(value: unknown, parameters?: readonly unknown[]): string {
-  const text = label(value).replace(/<\/?(?:unbreak|color(?:=[^>]*)?)>/giu, "");
-  const resolved = text.replace(/#(\d+)\[(i|f[0-4])\](%?)/gu, (placeholder, index, format, unit) => {
-    const parameter = parameters?.[Number(index) - 1];
-    if (typeof parameter !== "number" || !Number.isFinite(parameter)) return placeholder;
-    return (parameter * (unit ? 100 : 1)).toFixed(format === "i" ? 0 : Number(format.slice(1))) + unit;
-  });
-  return /#\d/u.test(resolved) ? "" : resolved;
-}
-
 function setEffects(game: Game, detail: Record<string, unknown>): SetEffect[] {
   if (game === "gi" && Array.isArray(detail.need) && Array.isArray(detail.affix) &&
       detail.need.length === detail.affix.length) {
@@ -235,6 +216,18 @@ export function createAtlasCatalog(directory: string) {
                   entries.push({ ...entry, name });
                 }
                 pages.push({ ...page, entries });
+              } else if (kind === "achievement") {
+                const sources = [];
+                for (const entry of page.entries) {
+                  sources.push({ id: entry.id, name: entry.name,
+                    list: (await readContent(entry, pageId)).list });
+                }
+                const achievementCategories = readAchievementCategories(game, {
+                  version: page.version,
+                  sourceUrl: label(object(value).sourceUrl),
+                  sources,
+                });
+                pages.push({ ...page, achievementCategories });
               } else {
                 pages.push(page);
               }
