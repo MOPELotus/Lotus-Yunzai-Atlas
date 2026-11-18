@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAtlasCatalog, findCharacters, findEquipment } from "./catalog.ts";
+import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findSets } from "./catalog.ts";
 
 test("角色索引保留同名条目，坏快照不替换已验证的索引", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-"));
@@ -119,6 +119,62 @@ test("装备保留武器、光锥、音擎分类并独立更新各游戏的索�
     expect(findEquipment(second, "1", "zzz")[0]?.version).toBe("1");
     const [updated] = findEquipment(second, "1", "gi");
     expect(await catalog.equipmentFacts(updated!)).toEqual({ category: "武器", rarity: "五星", scope: "" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("套装按同版本详情恢复名称、组件门槛与参数，邦布等级须一致", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-sets-"));
+  try {
+    await mkdir(join(directory, "items"));
+    const page = (name: string, path: string) => ({
+      version: "1", recordCount: 1, records: { one: { id: "1", name, path: `items/${path}.json` } },
+    });
+    const game = (pages: object) => ({ locales: { zh: { pages } } });
+    await writeFile(join(directory, "map.json"), JSON.stringify({ games: {
+      gi: game({ artifact: page("1", "artifact") }),
+      hsr: game({ relicset: page("位面样例", "relicset") }),
+      zzz: game({ equipment: page("驱动盘样例", "disk"), bangboo: page("邦布样例", "bangboo") }),
+    } }));
+    const detail = (gameId: string, pageId: string, path: string, content: object) =>
+      writeFile(join(directory, "items", `${path}.json`), JSON.stringify({
+        meta: { gameId, pageId, recordId: "1", version: "1" }, content,
+      }));
+    await detail("hsr", "relicset", "relicset", { detail: {
+      parts: { a: {}, b: {} }, require_num: {
+        "2": { desc: "速度达到<unbreak>#1[i]</unbreak>时，提升<unbreak>#2[f1]%</unbreak>。", param_list: [120, 0.075] },
+      },
+    } });
+    await detail("zzz", "equipment", "disk", { detail: { desc2: "<color=#FFFFFF>增益</color>。" } });
+    await detail("zzz", "bangboo", "bangboo", { list: { rank: 3 }, detail: { rarity: 3 } });
+    const catalog = createAtlasCatalog(directory);
+    const partial = await catalog.read();
+    expect(partial.stale).toBe(true);
+    expect(findSets(partial, "1", "gi")).toEqual([]);
+
+    await detail("gi", "artifact", "artifact", {
+      list: { set: { sample: { name: { zh: "圣遗物样例" } } } },
+      detail: { need: [1], affix: [{ desc: "样例抗性。" }] },
+    });
+    const complete = await catalog.read();
+    expect(complete.stale).toBe(false);
+    const [artifact] = findSets(complete, "圣遗物样例", "gi");
+    const [ornament] = findSets(complete, "1", "hsr");
+    const [disk] = findSets(complete, "1", "zzz");
+    const [bangboo] = findBangboos(complete, "邦布样例");
+    expect(await catalog.setFacts(artifact!)).toEqual({
+      category: "圣遗物", effects: [{ pieces: 1, text: "样例抗性。" }],
+    });
+    expect(await catalog.setFacts(ornament!)).toEqual({
+      category: "位面饰品", effects: [{ pieces: 2, text: "速度达到120时，提升7.5%。" }],
+    });
+    expect(await catalog.setFacts(disk!)).toEqual({
+      category: "驱动盘", effects: [{ pieces: 2, text: "增益。" }],
+    });
+    expect(await catalog.bangbooRarity(bangboo!)).toBe("A级");
+    await detail("zzz", "bangboo", "bangboo", { list: { rank: 3 }, detail: { rarity: 4 } });
+    expect(await catalog.bangbooRarity(bangboo!)).toBe("");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
