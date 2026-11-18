@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findSets } from "./catalog.ts";
@@ -175,6 +175,37 @@ test("套装按同版本详情恢复名称、组件门槛与参数，邦布等�
     expect(await catalog.bangbooRarity(bangboo!)).toBe("A级");
     await detail("zzz", "bangboo", "bangboo", { list: { rank: 3 }, detail: { rarity: 4 } });
     expect(await catalog.bangbooRarity(bangboo!)).toBe("");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("同尺寸同修改时间的覆写会使索引失效", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-cache-"));
+  try {
+    const mapPath = join(directory, "map.json");
+    const stamp = new Date("2026-01-01T00:00:00.000Z");
+    const writeMap = async (version: string) => {
+      const page = { version, recordCount: 1,
+        records: { one: { id: "1", name: "角色样例", path: "items/one.json" } } };
+      await writeFile(mapPath, JSON.stringify({ games: {
+        gi: { locales: { zh: { pages: { character: page } } } },
+      } }));
+      await utimes(mapPath, stamp, stamp);
+      const { dev, ino, size, mtimeMs } = await stat(mapPath);
+      return { dev, ino, size, mtimeMs };
+    };
+    const catalog = createAtlasCatalog(directory);
+    const firstMeta = await writeMap("1");
+    const first = await catalog.read();
+    expect((await catalog.read()).pages).toBe(first.pages);
+
+    for (const version of ["2", "3", "4", "5"]) {
+      expect(await writeMap(version)).toEqual(firstMeta);
+      const current = await catalog.read();
+      expect(current.stale).toBe(false);
+      expect(current.pages[0]?.version).toBe(version);
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

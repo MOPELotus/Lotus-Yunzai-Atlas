@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
@@ -65,7 +65,7 @@ interface Catalog {
 }
 
 interface Snapshot extends Catalog {
-  readonly stamp: string;
+  readonly map: Buffer;
 }
 
 function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPage {
@@ -192,10 +192,9 @@ export function createAtlasCatalog(directory: string) {
 
   async function read(): Promise<Catalog> {
     try {
-      const info = await stat(mapPath);
-      const stamp = [info.dev, info.ino, info.size, info.mtimeMs, info.ctimeMs].join(":");
-      if (stamp !== snapshot?.stamp || snapshot.stale) {
-        const source = object(JSON.parse(await readFile(mapPath, "utf8")));
+      const map = await readFile(mapPath);
+      if (!snapshot || snapshot.stale || !map.equals(snapshot.map)) {
+        const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
         let stale = false;
         for (const game of Object.keys(gameNames) as Game[]) {
@@ -248,7 +247,7 @@ export function createAtlasCatalog(directory: string) {
           }
         }
         if (!pages.length) throw new Error("图鉴索引没有可查询的分类。");
-        snapshot = { stamp, pages, stale };
+        snapshot = { map, pages, stale };
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
