@@ -11,17 +11,24 @@ const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/Bangboo
 const weaponImages = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
 const bangbooIcon = new RegExp(`^${bangbooImages}/([A-Za-z0-9_-]{1,120})\\.png$`, "u");
 const weaponIcon = /^Weapon_[A-Za-z0-9_-]{1,113}$/u;
+const genshinWeaponIcon = /^[A-Za-z0-9_]{1,120}$/u;
+const genshinWeaponTypes = new Set(["WEAPON_SWORD_ONE_HAND", "WEAPON_CLAYMORE", "WEAPON_POLE", "WEAPON_CATALYST", "WEAPON_BOW", "ITEM_TPS_WEAPON"]);
+const genshinRarities = ["", "一星", "二星", "三星", "四星", "五星"] as const;
+const genshinSingleRefinement = new Set(["11412", "11416", "15415"]);
+const genshinMissingIcons = new Map([["224008", "Sword_Template"], ["380002", "UI_EquipIcon_Claymore_LoliFriend"]]);
+const genshinStats = new Set(["atk", "fight_prop_attack_percent", "fight_prop_defense_percent", "fight_prop_hp_percent",
+  "fight_prop_critical", "fight_prop_critical_hurt", "fight_prop_element_mastery", "fight_prop_charge_efficiency", "fight_prop_physical_add_hurt"]);
 const lightconeRarities = new Map([
   ["CombatPowerLightconeRarity3", "三星"], ["CombatPowerLightconeRarity4", "四星"], ["CombatPowerLightconeRarity5", "五星"],
 ]);
 const lightconePaths = new Set(["Warrior", "Rogue", "Mage", "Shaman", "Warlock", "Knight", "Priest", "Memory", "Elation"]);
 const pages = {
-  bangboo: { game: "zzz", title: "Bangboo", folder: "邦布", images: bangbooImages },
-  weapon: { game: "zzz", title: "Weapon", folder: "音擎", images: weaponImages },
-  lightcone: { game: "hsr", title: "Light Cone", folder: "光锥" },
+  "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
+  "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
+  "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
+  "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
 } as const;
 type SourcePage = keyof typeof pages;
-const maxRecords = 256;
 const maxJsonBytes = 1024 * 1024;
 const maxIconBytes = 2 * 1024 * 1024;
 const requestTimeout = 10_000;
@@ -86,27 +93,40 @@ async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value)}\n`, { flag: "wx" });
 }
 
-function sourceIndex(pageId: SourcePage, value: unknown) {
+function sourceIndex(category: SourcePage, value: unknown) {
   const entries = Object.entries(object(value));
-  const { folder } = pages[pageId];
+  const { folder, maxRecords } = pages[category];
   if (entries.length === 0 || entries.length > maxRecords) throw new Error(`${folder}索引条目数无效。`);
   return entries.map(([id, value]) => {
     const list = object(value);
     const { zh, rank, icon, type } = list;
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
-    if (pageId === "lightcone") {
+    if (category === "hsr/lightcone") {
       const rarity = typeof rank === "string" ? lightconeRarities.get(rank) : undefined;
       if (!rarity || typeof list.baseType !== "string" || !lightconePaths.has(list.baseType)) {
         throw new Error("光锥来源索引条目结构无效。");
       }
       return { id, list, name, rarity, pathName: list.baseType.toLowerCase() };
     }
-    if (typeof icon !== "string" || (rank !== 3 && rank !== 4 && !(pageId === "weapon" && rank === 2))) {
+    if (category === "gi/weapon") {
+      const rarity = typeof rank === "number" && Number.isInteger(rank) ? genshinRarities[rank] : undefined;
+      const special = list.skin === true || type === "ITEM_TPS_WEAPON";
+      if (!rarity || typeof type !== "string" || !genshinWeaponTypes.has(type) || typeof icon !== "string" ||
+          id.length !== (special ? 6 : 5)) {
+        throw new Error("原神武器来源索引条目结构无效。");
+      }
+      if (list.skin === true && list.tag === "TAG_TYPE_COLOR_BY_ELEMENT" && /^UI_EquipIcon_[A-Za-z0-9_]+_\{0\}$/u.test(icon)) {
+        return { id, list, name, rank, rarity };
+      }
+      if (!genshinWeaponIcon.test(icon)) throw new Error("原神武器来源图标标识无效。");
+      return { id, list, name, rank, rarity, iconName: icon };
+    }
+    if (typeof icon !== "string" || (rank !== 3 && rank !== 4 && !(category === "zzz/weapon" && rank === 2))) {
       throw new Error(`${folder}来源索引条目结构无效。`);
     }
     const rarity = rank === 4 ? "S级" : rank === 3 ? "A级" : "B级";
-    if (pageId === "weapon") {
+    if (category === "zzz/weapon") {
       if (!weaponIcon.test(icon) || typeof type !== "number" || !Number.isInteger(type) || type < 1 || type > 7) {
         throw new Error("音擎来源索引条目结构无效。");
       }
@@ -138,13 +158,54 @@ function lightconeDetail(item: Record<string, unknown>, id: string, list: Record
     });
 }
 
-function detailMatches(pageId: SourcePage, detail: unknown, entry: ReturnType<typeof sourceIndex>[number]) {
+function nonnegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function genshinWeaponDetail(item: Record<string, unknown>, id: string, list: Record<string, unknown>): boolean {
+  if (item.rarity !== list.rank || item.weapon_type !== list.type || item.icon !== list.icon ||
+      item.skin !== list.skin || item.tag !== list.tag) return false;
+  if (list.skin === true || list.type === "ITEM_TPS_WEAPON") return true;
+
+  const lowRank = list.rank === 1 || list.rank === 2;
+  const cap = lowRank ? 70 : 90;
+  const stageCount = lowRank ? 4 : 6;
+  const ascension = object(item.ascension);
+  const materials = object(item.materials);
+  if (Object.keys(ascension).length !== stageCount || Object.keys(materials).length !== stageCount ||
+      !Array.from({ length: stageCount }, (_, index) => index + 1).every((stage) =>
+        nonnegative(object(ascension[stage]).fight_prop_base_attack) && Object.keys(object(materials[stage])).length > 0)) return false;
+
+  const stats = object(item.stats_modifier);
+  const { base, levels } = object(stats.atk);
+  const capModifier = object(levels)[cap];
+  const bonus = object(ascension[stageCount]).fight_prop_base_attack;
+  if (!nonnegative(base) || !nonnegative(capModifier) || !nonnegative(bonus) || Math.round(base * capModifier + bonus) !== list.atk ||
+      Object.keys(stats).length !== (lowRank ? 1 : 2)) return false;
+  const levelNumbers = Array.from({ length: cap }, (_, index) => index + 1);
+  if (!Object.entries(stats).every(([property, value]) => {
+    const { base, levels } = object(value);
+    const curve = object(levels);
+    return genshinStats.has(property) && nonnegative(base) && levelNumbers.every((level) => nonnegative(curve[level]));
+  })) return false;
+
+  const refinement = object(item.refinement);
+  const expectedRankCount = lowRank ? 0 : genshinSingleRefinement.has(id) ? 1 : 5;
+  return Object.keys(refinement).length === expectedRankCount &&
+    Array.from({ length: expectedRankCount }, (_, index) => index + 1).every((rank) => {
+      const { name, desc, param_list } = object(refinement[rank]);
+      return typeof name === "string" && name.trim().length > 0 && typeof desc === "string" && desc.trim().length > 0 && Array.isArray(param_list);
+    });
+}
+
+function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<typeof sourceIndex>[number]) {
   const { id, name, rank, iconName, list } = entry;
   const item = object(detail);
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
-  if (pageId === "lightcone") return lightconeDetail(item, id, list);
+  if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
+  if (category === "gi/weapon") return genshinWeaponDetail(item, id, list);
   if (item.id !== Number(id) || item.rarity !== rank) return false;
-  if (pageId === "bangboo") return true;
+  if (category === "zzz/bangboo") return true;
   const types = Object.keys(object(item.weapon_type));
   return item.code_name === iconName && item.icon === `${weaponImages}/${iconName}.png` &&
     types.length === 1 && types[0] === String(list.type);
@@ -156,9 +217,9 @@ function webp(bytes: Buffer): boolean {
     bytes.readUInt32LE(16) <= bytes.length - 20;
 }
 
-async function readIcon(name: string, paths: readonly string[], pageId: SourcePage, target: string,
+async function readIcon(name: string, paths: readonly string[], category: SourcePage, target: string,
   signal: AbortSignal, request: SourceFetch) {
-  const { game, folder } = pages[pageId];
+  const { game, folder } = pages[category];
   const localPath = `gallery/${game}/${name}.webp`;
   for (const path of paths) {
     const remoteUrl = `${origin}/assets/${game}/${path}.webp`;
@@ -180,13 +241,14 @@ function imageReference(fieldPath: string, originalValue: unknown, icon: Awaited
 export async function acquireAtlasSource(destination: string, requirements: readonly AtlasCandidatePage[],
   signal?: AbortSignal, request: SourceFetch = fetch): Promise<AtlasAcquiredSource> {
   const scope = requirements[0];
-  if (requirements.length !== 1 || !scope || !sourcePage(scope.pageId) || scope.game !== pages[scope.pageId].game ||
-      typeof scope.version !== "string" || !versions.test(scope.version) || (scope.game === "hsr" && scope.version.includes("+"))) {
-    throw new Error("当前只支持按指定版本抓取绝区零邦布、音擎或星铁光锥分类。");
+  const category = `${scope?.game}/${scope?.pageId}`;
+  if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
+      !versions.test(scope.version) || (scope.game !== "zzz" && scope.version.includes("+"))) {
+    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布和音擎。");
   }
-  const { pageId, version } = scope;
-  const { game, folder, title } = pages[pageId];
-  const timeout = AbortSignal.timeout(pageId === "lightcone" ? 360_000 : 180_000);
+  const { version } = scope;
+  const { game, pageId, folder, title, timeout: limit } = pages[category];
+  const timeout = AbortSignal.timeout(limit);
   const active = signal ? AbortSignal.any([signal, timeout]) : timeout;
   active.throwIfAborted();
   const resolved = resolve(destination);
@@ -197,13 +259,13 @@ export async function acquireAtlasSource(destination: string, requirements: read
   try {
     const sourcePath = `${version}/${pageId}.json`;
     const sourceUrl = `${origin}/${game}/${sourcePath}`;
-    const entries = sourceIndex(pageId, await sourceJson(sourceUrl, false, active, request));
+    const entries = sourceIndex(category, await sourceJson(sourceUrl, false, active, request));
     if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
     const images = new Map<string, Awaited<ReturnType<typeof readIcon>>>();
     const loadIcon = async (name: string, paths: readonly string[] = [name]) => {
-      if (!images.has(name)) images.set(name, await readIcon(name, paths, pageId, target, active, request));
+      if (!images.has(name)) images.set(name, await readIcon(name, paths, category, target, active, request));
       return images.get(name);
     };
     let usedPlaceholder = false;
@@ -211,7 +273,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
       const { id, name, rarity, iconName, pathName, list } = entry;
       const detailUrl = `${origin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
       const detail = await sourceJson(detailUrl, pageId === "bangboo", active, request);
-      if (detail !== undefined && !detailMatches(pageId, detail, entry)) {
+      if (detail !== undefined && !detailMatches(category, detail, entry)) {
         throw new Error(`${folder}详情与来源索引身份或等级不符（${id}）。`);
       }
       const hasDetail = detail !== undefined;
@@ -227,9 +289,13 @@ export async function acquireAtlasSource(destination: string, requirements: read
         references.push(imageReference("derived.lightConeMediumIcon", artName, art),
           imageReference("derived.path", pathIconName, pathIcon),
           imageReference("detail.derived.lightConeMediumIcon", artName, art));
-      } else if (pageId !== "lightcone" && iconName) {
-        const icon = await loadIcon(iconName, [iconName, `${pages[pageId].images}/${iconName}`]);
-        if (!icon && pageId === "weapon") throw new Error(`音擎来源图标缺失（${id}）。`);
+      } else if (iconName) {
+        const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
+        const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
+        if (!icon && category === "zzz/weapon") throw new Error(`音擎来源图标缺失（${id}）。`);
+        if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
+          throw new Error(`原神武器来源图标缺失（${id}）。`);
+        }
         references.push(imageReference("icon", list.icon, icon));
         usedPlaceholder ||= !icon;
         const detailIcon = object(detail).icon;

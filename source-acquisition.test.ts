@@ -114,7 +114,7 @@ test("抓取拒绝无关范围，并在来源身份、图标或连接错误时�
   const candidate = join(root, "candidate");
   let count = 0;
   const request = async (url: string) => { count++; return source(url); };
-  await expect(acquireAtlasSource(candidate, [{ game: "gi", pageId: "weapon", version }], undefined, request)).rejects.toThrow();
+  await expect(acquireAtlasSource(candidate, [{ game: "gi", pageId: "bangboo", version }], undefined, request)).rejects.toThrow();
   await expect(acquireAtlasSource(candidate, [{ ...scope[0], version: "../../invalid" }], undefined, request)).rejects.toThrow();
   expect(count).toBe(0);
   await expect(acquireAtlasSource(candidate, scope, undefined, async (url) => url === makeDetailUrl(53002)
@@ -281,4 +281,99 @@ test("光锥缺少详情、等级、叠影或任一真实图片时拒绝候选",
       url === target ? replacement() : lightconeSource(url))).rejects.toThrow(expected);
   }
   expect((await acquireAtlasSource(candidate, lightconeScope, undefined, async (url) => lightconeSource(url))).imageCount).toBe(3);
+}));
+
+const genshinVersion = "7.2.52";
+const genshinRecords = [
+  { id: 11101, zh: "样例低星剑", type: "WEAPON_SWORD_ONE_HAND", rank: 1, icon: "UI_EquipIcon_Low", atk: 74 },
+  { id: 11401, zh: "样例通用剑", type: "WEAPON_SWORD_ONE_HAND", rank: 4, icon: "UI_EquipIcon_Favonius", atk: 96 },
+  { id: 11412, zh: "样例单精剑", type: "WEAPON_SWORD_ONE_HAND", rank: 4, icon: "UI_EquipIcon_Psalmus", atk: 96 },
+  { id: 224008, zh: "样例活动武器", type: "ITEM_TPS_WEAPON", rank: 4, icon: "Sword_Template" },
+  { id: 310001, zh: "样例元素外观", type: "WEAPON_SWORD_ONE_HAND", rank: 5, icon: "UI_EquipIcon_Morph_{0}",
+    skin: true, tag: "TAG_TYPE_COLOR_BY_ELEMENT" },
+] as const;
+const genshinScope = [{ game: "gi", pageId: "weapon", version: genshinVersion, recordCount: genshinRecords.length }] as const;
+const genshinList = `https://static.nanoka.cc/gi/${genshinVersion}/weapon.json`;
+const genshinDetailUrl = (id: number) => `https://static.nanoka.cc/gi/${genshinVersion}/zh/weapon/${id}.json`;
+const genshinIcon = (icon: string) => `https://static.nanoka.cc/assets/gi/${icon}.webp`;
+
+function genshinDetail(record: typeof genshinRecords[number]) {
+  const { id, zh, rank, icon, type } = record;
+  const initial = { name: zh, rarity: rank, weapon_type: type, icon, desc: "原始武器说明。",
+    ...("skin" in record ? { skin: record.skin, tag: record.tag } : {}) };
+  if (!("atk" in record)) return initial;
+  const low = rank <= 2;
+  const stages = Array.from({ length: low ? 4 : 6 }, (_, index) => index + 1);
+  const levels = Object.fromEntries(Array.from({ length: 100 }, (_, index) => [index + 1, index + 1]));
+  return { ...initial, stats_modifier: { atk: { base: 1, levels },
+    ...(!low ? { fight_prop_attack_percent: { base: 0.01, levels } } : {}) },
+  ascension: Object.fromEntries(stages.map((stage) => [stage, { fight_prop_base_attack: stage }])),
+  materials: Object.fromEntries(stages.map((stage) => [stage, { fixtureMaterial: stage }])),
+  refinement: Object.fromEntries(Array.from({ length: low ? 0 : id === 11412 ? 1 : 5 }, (_, index) =>
+    [index + 1, { name: "效果", desc: "原始精炼说明。", param_list: [index + 1] }],
+  )) };
+}
+
+function genshinSource(url: string) {
+  if (url === genshinList) return Response.json(Object.fromEntries(genshinRecords.map(({ id, ...row }) => [id, row])));
+  for (const item of genshinRecords) {
+    if (url === genshinDetailUrl(item.id)) return Response.json(genshinDetail(item));
+    if ("atk" in item && url === genshinIcon(item.icon)) return new Response(new Uint8Array(webp));
+  }
+  if (url === genshinIcon("Sword_Template")) return new Response(null, { status: 404 });
+  throw new Error(`unexpected URL ${url}`);
+}
+
+test("原神武器候选保留四或六段晋阶、精炼例外、活动形态和旧图标状态", () => fixture(async (root) => {
+  await mkdir(join(root, "snapshots"));
+  const candidate = join(root, "snapshots", "1");
+  const calls: string[] = [];
+  expect(await acquireAtlasSource(candidate, genshinScope, undefined, async (url) => {
+    calls.push(url);
+    return genshinSource(url);
+  })).toMatchObject({ pages: genshinScope, imageCount: 3, missingImageCount: 1 });
+  expect(calls).toEqual([genshinList, ...genshinRecords.flatMap((item) => [genshinDetailUrl(item.id),
+    ...("skin" in item ? [] : [genshinIcon(item.icon)])])]);
+  expect(await publishAtlasCandidate(root, null, 1, genshinScope)).toMatchObject({ status: "published" });
+  const catalog = createAtlasRuntimeCatalog(root);
+  const index = await catalog.read();
+  for (const item of genshinRecords) {
+    const [entry] = findEquipment(index, String(item.id), "gi");
+    expect(entry?.name).toBe(item.zh);
+    const raw = await Bun.file(join(candidate, "data", entry!.path)).json();
+    expect(raw.content.detail).toEqual(JSON.parse(JSON.stringify(genshinDetail(item))));
+    if ("atk" in item) {
+      const localPath = `gallery/gi/${item.icon}.webp`;
+      expect(raw.meta.images).toMatchObject(["icon", "detail.icon"].map((fieldPath) => ({
+        fieldPath, originalValue: item.icon, localPath, status: "downloaded",
+      })));
+      const details = await catalog.weaponDetails(entry!);
+      const cap = item.rank <= 2 ? 70 : 90;
+      expect(details).toMatchObject({ artwork: localPath, stats: expect.arrayContaining([
+        { label: "Lv1基础攻击力", value: "1" }, { label: `Lv${cap}基础攻击力`, value: String(item.atk) },
+      ]) });
+      expect(details?.refinements).toHaveLength(item.rank <= 2 ? 0 : item.id === 11412 ? 1 : 5);
+    } else if ("skin" in item) expect(raw.meta.images).toEqual([]);
+    else expect(raw.meta.images).toMatchObject(["icon", "detail.icon"].map((fieldPath) => ({
+      fieldPath, status: "placeholder", localPath: placeholderPath, sha256: legacyPlaceholderHash,
+    })));
+  }
+}));
+
+test("原神武器当前生效等级、晋阶或真实图标不完整时清理候选", () => fixture(async (root) => {
+  const candidate = join(root, "candidate");
+  const details = genshinDetail(genshinRecords[0]);
+  if (!("stats_modifier" in details) || !details.stats_modifier) throw new Error("普通武器夹具缺少等级数据。");
+  const attack = details.stats_modifier.atk;
+  for (const [target, response, error] of [
+    [genshinDetailUrl(11101), Response.json({ ...details, stats_modifier: { atk: { ...attack,
+      levels: { ...attack.levels, 70: undefined },
+    } } }), "身份或等级不符"],
+    [genshinDetailUrl(11101), Response.json({ ...details, ascension: { ...details.ascension, 4: undefined } }), "身份或等级不符"],
+    [genshinIcon(genshinRecords[0].icon), new Response(null, { status: 404 }), "原神武器来源图标缺失"],
+  ] as const) {
+    await expect(acquireAtlasSource(candidate, genshinScope, undefined, async (url) => url === target ? response : genshinSource(url)))
+      .rejects.toThrow(error);
+  }
+  expect((await acquireAtlasSource(candidate, genshinScope, undefined, async (url) => genshinSource(url))).imageCount).toBe(3);
 }));
