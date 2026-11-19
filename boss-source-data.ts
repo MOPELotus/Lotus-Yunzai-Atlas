@@ -1,9 +1,9 @@
 import { deadlyAssaultMode, readChallengeFacts } from "./challenges.ts";
 import { label, object } from "./source-values.ts";
 
-const recordId = /^[1-9]\d{0,9}$/u;
-const encounterIcon = /^Assets\/NapResources\/UI\/Sprite\/A1DynamicLoad\/IconBossGeneral\/UnPacker\/(IconMonster[A-Za-z0-9_-]{1,110})\.png$/u;
-const enemyIcon = /^UI\/Sprite\/A1DynamicLoad\/BossCard\/UnPacker\/BossCardLv0[1-4]\/(Monster[A-Za-z0-9_-]{1,110})\.png$/u;
+import { challengeEncounterIcon as encounterIcon, challengeEnemyIcon as enemyIcon,
+  challengeRecordId as recordId, positive, validAffinity } from "./zzz-challenge-source.ts";
+
 const roleIcons = new Map([
   ["Icon_AvatarClass_Anomaly", "IconAnomaly"], ["Icon_AvatarClass_Attack", "IconAttack"],
   ["Icon_AvatarClass_Rupture", "IconRupture"], ["Icon_AvatarClass_Stun", "IconStun"], ["Icon_AvatarClass_Armorer", "IconArmorer"],
@@ -41,15 +41,6 @@ export function bossSourceIndex(value: unknown, maxRecords: number): PublishedBo
     throw new Error("危局来源实装窗口重叠。");
   }
   return rows;
-}
-
-function positive(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
-}
-
-function validAffinity(value: unknown): boolean {
-  return value !== null && typeof value === "object" && !Array.isArray(value) &&
-    Object.values(object(value)).every((affinity) => Boolean(label(affinity)));
 }
 
 function bossEffects(value: unknown, path: string, optional: boolean, images: BossImage[]): boolean {

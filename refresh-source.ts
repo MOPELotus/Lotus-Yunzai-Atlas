@@ -2,12 +2,12 @@ import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { candidateFile } from "./candidate-gallery.ts";
-import { deadlyAssaultMode, readChallengeFacts } from "./challenges.ts";
+import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import { object } from "./source-values.ts";
-import { fetchAtlasManifest, planAtlasUpdate, planPublishedBossRefresh } from "./update-plan.ts";
+import { fetchAtlasManifest, planAtlasUpdate, planPublishedZzzRefresh } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const itemIcons = ["icon", "detail.icon"] as const;
@@ -18,10 +18,12 @@ const sourcePages = {
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
+  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
 } as const;
 type SourceSelection = keyof typeof sourcePages;
 type SourcePage = typeof sourcePages[SourceSelection];
-const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone", boss: "zzz/boss" } as const;
+const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone",
+  boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
 
 function isSourceSelection(value: unknown): value is SourceSelection {
   return typeof value === "string" && Object.hasOwn(sourcePages, value);
@@ -44,6 +46,7 @@ async function readJson(root: string, path: string): Promise<unknown> {
 }
 
 async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal) {
+  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : undefined;
   const map = object(await readJson(root, "map.json"));
   const gameData = object(object(map.games)[game]);
   const pages = object(object(object(gameData.locales).zh).pages);
@@ -59,9 +62,9 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const downloaded = new Set((Array.isArray(images) ? images : []).map(object)
       .flatMap(({ status, placeholder, fieldPath }) =>
         status === "downloaded" && placeholder !== true && typeof fieldPath === "string" ? [fieldPath] : []));
-    const window = pageId === "boss" ? readChallengeFacts(deadlyAssaultMode, object(item.content)).window : undefined;
+    const window = mode ? readChallengeFacts(mode, object(item.content)).window : undefined;
     assets.set(id, { name, window, hasDetail: hasDetail === true,
-      icons: pageId === "boss" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
+      icons: mode ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   return assets;
 }
@@ -105,7 +108,8 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     return undefined;
   });
   signal?.throwIfAborted();
-  const plan = selection === "zzz/boss" ? planPublishedBossRefresh(listing, local) : planAtlasUpdate(listing, local, scope);
+  const rotationPage = page.pageId === "boss" || page.pageId === "shiyu";
+  const plan = rotationPage ? planPublishedZzzRefresh(listing, local, page.pageId) : planAtlasUpdate(listing, local, scope);
   const entry = plan.entries[0];
   if (entry?.action === "review") return { status: "review", reason: entry.reason };
   if (entry?.kind !== "versioned") return { status: "review", reason: "manifest-unavailable" };
@@ -121,7 +125,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     const current = await readAtlasSnapshotVersion(directory);
     if (current !== baseline.version) return { status: "stale", current };
     const after = await pageAssets(join(source.directory, "data"), page, signal);
-    const issues = regressions(page.title, before, after, selection === "zzz/boss");
+    const issues = regressions(page.title, before, after, rotationPage);
     if (issues.length) return { status: "invalid", issues };
     publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline);
     return publication;

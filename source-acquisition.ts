@@ -3,6 +3,7 @@ import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { object } from "./source-values.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
+import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
 const origin = "https://static.nanoka.cc";
@@ -29,6 +30,7 @@ const pages = {
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
+  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "Shiyu Defense", folder: "式舆防卫战", timeout: 360_000, maxRecords: 256 },
 } as const;
 type SourcePage = keyof typeof pages;
 const maxJsonBytes = 1024 * 1024;
@@ -244,9 +246,10 @@ export async function acquireAtlasSource(destination: string, requirements: read
   signal?: AbortSignal, request: SourceFetch = fetch): Promise<AtlasAcquiredSource> {
   const scope = requirements[0];
   const category = `${scope?.game}/${scope?.pageId}`;
+  const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
   if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
-      !versions.test(scope.version) || ((scope.game !== "zzz" || category === "zzz/boss") && scope.version.includes("+"))) {
-    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、音擎和正式版危局强袭战。");
+      !versions.test(scope.version) || ((scope.game !== "zzz" || publishedChallenge) && scope.version.includes("+"))) {
+    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、音擎和正式版危局强袭战、式舆防卫战。");
   }
   const { version } = scope;
   const { game, pageId, folder, title, timeout: limit } = pages[category];
@@ -262,7 +265,9 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const sourcePath = `${version}/${pageId}.json`;
     const sourceUrl = `${origin}/${game}/${sourcePath}`;
     const index = await sourceJson(sourceUrl, false, active, request);
-    const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords) : sourceIndex(category, index);
+    const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
+      : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
+      : sourceIndex(category, index);
     if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
@@ -272,6 +277,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
       return images.get(name);
     };
     let usedPlaceholder = false;
+    const legacyMissing = new Set<string>();
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
       const detailUrl = `${origin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
@@ -279,14 +285,23 @@ export async function acquireAtlasSource(destination: string, requirements: read
       const hasDetail = detail !== undefined;
       const detailSourceUrl = hasDetail ? detailUrl : null;
       const references = [];
-      if ("begin" in entry) {
-        for (const { fieldPath, originalValue, candidates } of bossSourceImages(detail, entry)) {
+      if ("begin" in entry || "priority" in entry) {
+        const challengeImages = "priority" in entry ? shiyuSourceImages(detail, entry) : bossSourceImages(detail, entry);
+        for (const image of challengeImages) {
+          const { fieldPath, originalValue, candidates } = image;
           let icon: Awaited<ReturnType<typeof readIcon>>;
           for (const candidate of candidates) {
             icon = await loadIcon(candidate);
             if (icon) break;
           }
-          if (!icon) throw new Error(`危局来源原图缺失（${id}，${fieldPath}）。`);
+          if (!icon) {
+            if ("legacyMissing" in image && image.legacyMissing) {
+              legacyMissing.add(originalValue);
+              continue;
+            }
+            const mode = "priority" in entry ? "式舆" : "危局";
+            throw new Error(`${mode}来源原图缺失（${id}，${fieldPath}）。`);
+          }
           references.push(imageReference(fieldPath, originalValue, icon));
         }
       } else {
@@ -340,7 +355,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const validation = await validateAtlasCandidate(data, requirements, active);
     if (!validation.ok) throw new Error(`抓取的源快照未通过校验。${validation.issues[0] ?? ""}`);
     const imageCount = [...images.values()].filter((image) => image !== undefined).length;
-    const missingImageCount = category === "zzz/boss" ? 0 : images.size - imageCount;
+    const missingImageCount = publishedChallenge ? legacyMissing.size : images.size - imageCount;
     return { directory: target, pages: validation.pages, imageCount, missingImageCount };
   } catch (error) {
     await rm(target, { recursive: true, force: true });

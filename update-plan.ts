@@ -94,11 +94,11 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
   return buildPlan(entries);
 }
 
-/** Deadly Assault acquisition uses the published build and verifies each source window separately. */
-export function planPublishedBossRefresh(manifest: unknown, local: AtlasCandidateValidation): AtlasUpdatePlan {
+/** ZZZ challenge acquisition uses the published build and verifies each source window separately. */
+export function planPublishedZzzRefresh(manifest: unknown, local: AtlasCandidateValidation, pageId: "boss" | "shiyu"): AtlasUpdatePlan {
   const { live, available } = object(object(manifest).zzz);
   const target = version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live) ? live : undefined;
-  const scope = { game: "zzz", pageId: "boss" } as const;
+  const scope = { game: "zzz", pageId } as const;
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
   return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, target)]);
