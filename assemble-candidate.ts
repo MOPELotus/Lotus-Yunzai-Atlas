@@ -37,6 +37,10 @@ function zh(root: Root, game: Game): ObjectValue {
   return object(object(gameData(root, game).locales).zh);
 }
 
+function selectPage(source: Root, page: Page): SelectedPage {
+  return { source, page, payload: object(object(zh(source, page.game).pages)[page.pageId]) };
+}
+
 async function readRoot(directory: string, required: readonly AtlasCandidatePage[], signal?: AbortSignal): Promise<Root> {
   const data = join(directory, "data");
   if (await realpath(data) !== data) throw new Error("快照 data 须为实体目录。");
@@ -57,7 +61,7 @@ function describePages(baseline: Root, replacement: Root, scope: readonly AtlasC
   for (const source of [baseline, replacement]) {
     for (const page of source.validated) {
       if (source === replacement && !scope.some((request) => pageKey(request) === pageKey(page))) continue;
-      chosen.set(pageKey(page), { source, page, payload: object(object(zh(source, page.game).pages)[page.pageId]) });
+      chosen.set(pageKey(page), selectPage(source, page));
     }
   }
   return [...chosen.values()];
@@ -93,6 +97,7 @@ function composeMap(baseline: Root, replacement: Root, pages: readonly SelectedP
 
 async function copyPages(pages: readonly SelectedPage[], target: string, signal?: AbortSignal) {
   const gallery = candidateGallery(target);
+  let detailCount = 0;
   for (const { source, page, payload } of pages) {
     for (const record of Object.values(object(payload.records))) {
       signal?.throwIfAborted();
@@ -103,10 +108,41 @@ async function copyPages(pages: readonly SelectedPage[], target: string, signal?
       if (!inside(join(target, "data", "items"), destination)) throw new Error("候选条目路径越界。");
       await copyCandidateFile(file, destination);
       const item: unknown = JSON.parse(await readFile(destination, "utf8"));
+      if (object(object(item).meta).hasDetail === true) detailCount++;
       await gallery.include(item, page.game, source.directory, signal);
     }
   }
-  return gallery.count;
+  return { imageCount: gallery.count, detailCount };
+}
+
+export async function copyAtlasCandidate(source: string, destination: string, scope: readonly Page[],
+  counts: { readonly imageCount: number; readonly detailCount: number }, signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
+  signal?.throwIfAborted();
+  const resolved = resolve(destination);
+  const [base, parent] = await Promise.all([realpath(source), realpath(dirname(resolved))]);
+  const target = join(parent, basename(resolved));
+  if (overlaps(base, target)) throw new Error("图鉴源和候选目录必须独立。");
+  const root = await readRoot(base, scope, signal);
+  if (root.validated.length !== scope.length || new Set(scope.map(pageKey)).size !== scope.length) {
+    throw new Error("原图鉴导出的分类与已核定首版不同。");
+  }
+  const pages = root.validated.map((page) => selectPage(root, page));
+  signal?.throwIfAborted();
+  await mkdir(target, { mode: 0o700 });
+  try {
+    const { imageCount, detailCount } = await copyPages(pages, target, signal);
+    if (imageCount !== counts.imageCount || detailCount !== counts.detailCount) {
+      throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
+    }
+    const data = join(target, "data");
+    await writeFile(join(data, "map.json"), JSON.stringify(root.map) + "\n", { flag: "wx" });
+    const validation = await validateAtlasCandidate(data, scope, signal);
+    if (!validation.ok) throw new Error(`首版图鉴未通过校验。${validation.issues[0] ?? ""}`);
+    return { directory: target, validation, imageCount };
+  } catch (error) {
+    await rm(target, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 /** Source roots contain data/map.json and optionally gallery/. The destination must not exist. */
@@ -125,7 +161,7 @@ export async function assembleAtlasCandidate(baseline: string, replacement: stri
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
-    const imageCount = await copyPages(pages, target, signal);
+    const { imageCount } = await copyPages(pages, target, signal);
     const dataDirectory = join(target, "data");
     await writeFile(join(dataDirectory, "map.json"), JSON.stringify(composeMap(existing, updates, pages, scope)) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(dataDirectory, pages.map(({ page }) => page), signal);

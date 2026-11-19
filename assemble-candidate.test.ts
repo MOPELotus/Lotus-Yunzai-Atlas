@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { assembleAtlasCandidate } from "./assemble-candidate.ts";
+import { assembleAtlasCandidate, copyAtlasCandidate } from "./assemble-candidate.ts";
 import type { Game } from "./catalog.ts";
 
 interface RecordFixture {
@@ -103,6 +103,26 @@ test("图库冲突或缺失时清理隔离候选，现有目标和来源保持�
     await expect(assembleAtlasCandidate(base, donor, target, scope)).rejects.toThrow();
     expect(await readFile(join(target, "sentinel"), "utf8")).toBe("原目录");
     await expect(assembleAtlasCandidate(base, donor, join(base, "incoming"), scope)).rejects.toThrow("独立目录");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("首版候选复验完整原索引、详情总数和原图哈希", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-first-copy-"));
+  try {
+    const source = join(root, "source"), target = join(root, "staged");
+    await snapshot(source, [{ game: "gi", pageId: "weapon", version: "2", rows: [{ id: "1", file: "样例", art }] }]);
+    await expect(copyAtlasCandidate(source, target, scope, { imageCount: 1, detailCount: 1 })).rejects.toThrow("详情或图库数量");
+    await expect(copyAtlasCandidate(source, target, [{ ...scope[0], recordCount: 2 }], { imageCount: 1, detailCount: 0 }))
+      .rejects.toThrow("未通过校验");
+    await writeFile(join(source, art.path), "wrong bytes");
+    await expect(copyAtlasCandidate(source, target, scope, { imageCount: 1, detailCount: 0 })).rejects.toThrow("图库文件内容与记录不符");
+    await writeFile(join(source, art.path), art.bytes);
+    const result = await copyAtlasCandidate(source, target, scope, { imageCount: 1, detailCount: 0 });
+    expect(result.validation.pages).toEqual(scope);
+    expect(await Bun.file(join(target, "data/map.json")).json()).toEqual(await Bun.file(join(source, "data/map.json")).json());
+    expect(await Bun.file(join(target, art.path)).text()).toBe(art.bytes);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

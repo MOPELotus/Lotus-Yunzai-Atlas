@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readlink, realpath, rename, rm, stat, symlink, writeFil
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createAtlasRuntimeCatalog, findEquipment } from "./catalog.ts";
-import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
+import { atlasApplyStagingPrefix, publishAtlasCandidate, publishPreparedAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
 
 const itemPath = "items/weapon.json";
 const imagePath = "gallery/gi/weapon.webp";
@@ -115,6 +115,31 @@ test("竞争发布只有一个成功，过期及较低版本保持获胜指针",
   expect(results.filter(({ status }) => status === "stale")).toEqual([{ status: "stale", current }]);
   expect(await publishAtlasCandidate(root, current, 1, pages(1))).toEqual({ status: "stale", current });
   expect(await realpath(join(root, "current"))).toBe(join(root, `snapshots/${current}/data`));
+}));
+
+test("首版发布拒绝占用的旧 data，并且多个空目录初始化请求只切换一次", () => fixture(async (work) => {
+  const root = join(work, "atlas");
+  const firstStage = await mkdtemp(join(work, atlasApplyStagingPrefix));
+  const secondStage = await mkdtemp(join(work, atlasApplyStagingPrefix));
+  await mkdir(join(root, "theme"), { recursive: true });
+  await writeFile(join(root, "theme/original"), "保留主题");
+  for (const stage of [firstStage, secondStage]) {
+    const { data } = await snapshot(stage, 1);
+    await rename(dirname(data), join(stage, "candidate"));
+    await rm(join(stage, "snapshots"), { recursive: true });
+  }
+  const initial = (stage: string) => publishPreparedAtlasCandidate(root, null, join(stage, "candidate"), pages(1), undefined, true);
+  await symlink(join(work, "missing-legacy"), join(root, "data"));
+  expect(await initial(firstStage)).toMatchObject({ status: "invalid", issues: [expect.stringContaining("已有旧版 data")] });
+  expect(await readlink(join(root, "data"))).toBe(join(work, "missing-legacy"));
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
+  await rm(join(root, "data"));
+
+  const results = await Promise.all([initial(firstStage), initial(secondStage)]);
+  expect(results.filter(({ status }) => status === "published")).toHaveLength(1);
+  expect(results.filter(({ status }) => status === "stale")).toEqual([{ status: "stale", current: 1 }]);
+  expect(await readAtlasSnapshotVersion(root)).toBe(1);
+  expect(await Bun.file(join(root, "theme/original")).text()).toBe("保留主题");
 }));
 
 test("分类、条目、图库或候选实体目录复验失败时保持旧指针", () => fixture(async (root) => {

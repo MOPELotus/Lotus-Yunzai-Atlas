@@ -95,7 +95,7 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
  * The caller provides the full page list from its assembled candidate and stops writing before publication.
  */
 async function publish(root: string, expected: Version, expectedPages: AtlasCandidateValidation["pages"],
-  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal): Promise<AtlasPublication> {
+  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize = false): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
   const directory = await realpath(root);
@@ -104,6 +104,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
   try {
     const current = await readAtlasSnapshotPointer(join(directory, "current"));
     if (current !== expected) return { status: "stale", current };
+    if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
 
     const { data: candidate, version, promote } = await prepare(directory);
     if (current !== null && version <= current) return { status: "stale", current };
@@ -127,11 +128,24 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     }
 
     signal?.throwIfAborted();
+    if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
     await promote?.();
     await commitPointer(directory, version, signal);
     return { status: "published", version, directory: join(directory, atlasSnapshotTarget(version)) };
   } finally {
     database.close();
+  }
+}
+
+const existingLegacyData = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] } as const;
+
+export async function hasLegacyAtlasData(root: string): Promise<boolean> {
+  try {
+    await lstat(join(root, "data"));
+    return true;
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+    return false;
   }
 }
 
@@ -145,7 +159,8 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
 
 /** Move an assembled, caller-owned private candidate into the version store under the publication lock. */
 export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
-  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
+  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize = false): Promise<AtlasPublication> {
+  if (initialize && expected !== null) throw new Error("首版图鉴初始化要求没有现用指针。");
   return publish(root, expected, expectedPages, async (directory) => {
     const stagedRoot = dirname(prepared);
     if (dirname(stagedRoot) !== dirname(directory) || !basename(stagedRoot).startsWith(atlasApplyStagingPrefix) ||
@@ -177,5 +192,5 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
         await rmdir(stagedRoot);
       },
     };
-  }, signal);
+  }, signal, initialize);
 }
