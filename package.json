@@ -2,7 +2,10 @@
   "name": "@lotus-yunzai/atlas",
   "private": true,
   "type": "module",
-  "exports": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./catalog": "./catalog.ts"
+  },
   "dependencies": {
     "@lotus-yunzai/skia": "workspace:*",
     "skia-canvas": "3.0.8"
