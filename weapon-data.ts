@@ -42,9 +42,14 @@ function refinement(rank: number, name: unknown, source: unknown, params: unknow
   return title || description ? [{ rank, name: title, description }] : [];
 }
 
-function genshin(detail: Record<string, unknown>) {
-  const stages = Array.isArray(detail.ascension) ? detail.ascension : Object.values(object(detail.ascension));
-  const finalAscension = object(stages.at(-1));
+function genshin(detail: Record<string, unknown>, list: Record<string, unknown>, indexedRarity: string) {
+  const rarity = detail.rarity ?? list.rank;
+  const lowRarity = rarity === 1 || rarity === 2 || (rarity === undefined && (indexedRarity === "一星" || indexedRarity === "二星"));
+  const [cap, finalStage] = lowRarity ? [70, 4] : [90, 6];
+  const stages = detail.ascension;
+  const finalAscension = object(Array.isArray(stages) && (stages.length === finalStage || stages.length === finalStage + 1)
+    ? stages.at(-1)
+    : object(stages)[finalStage]);
   const attackBonus = sourceNumber(finalAscension.fight_prop_base_attack);
   const facts = Object.entries(object(detail.stats_modifier)).flatMap(([field, value]) => {
     const kind = stats.get(field);
@@ -53,9 +58,9 @@ function genshin(detail: Record<string, unknown>) {
     if (!kind || base === undefined) return [];
     const [name, format] = kind;
     const levels = object(row.levels);
-    return [1, 90].flatMap((level) => {
+    return [1, cap].flatMap((level) => {
       const modifier = sourceNumber(levels[level]);
-      const bonus = field === "atk" && level === 90 ? attackBonus : 0;
+      const bonus = field === "atk" && level === cap ? attackBonus : 0;
       if (modifier === undefined || bonus === undefined) return [];
       const result = base * modifier + bonus;
       return Number.isFinite(result) ? [{ label: `Lv${level}${name}`, value: format.format(result) }] : [];
@@ -122,7 +127,8 @@ export function normalizeWeapon(entry: AtlasEntry, content: Record<string, unkno
   const { game } = entry;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
-  const { stats, refinements } = game === "gi" ? genshin(detail) : game === "hsr" ? starRail(detail) : zenless(detail);
+  const { stats, refinements } = game === "gi" ? genshin(detail, object(content.list), entry.rarity)
+    : game === "hsr" ? starRail(detail) : zenless(detail);
   const description = effectText(detail.desc);
   const story = effectText(detail.story) || effectText(detail.background);
   if (!description && !stats.length && !refinements.length && !story) return;

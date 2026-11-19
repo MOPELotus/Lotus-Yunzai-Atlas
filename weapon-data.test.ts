@@ -52,6 +52,25 @@ test("缺少末次突破数值时不推定满级基础攻击，纯索引仍可�
   expect(normalizeWeapon(entry, { list: { type: "WEAPON_SWORD_ONE_HAND" } }, [])).toBeUndefined();
 });
 
+test("原神一二星武器按实际第四次晋阶计算 Lv70，即使曲线还包含 Lv90", () => {
+  for (const [rarity, base, first, max] of [[1, 23.245, "23", "185"], [2, 32.93, "33", "243"]] as const) {
+    const detail = {
+      rarity, stats_modifier: { atk: { base, levels: { 1: 1, 70: 5.968, 90: 7.346 } } },
+      ascension: { 4: { fight_prop_base_attack: 46.7 } },
+    };
+    expect(normalizeWeapon(entry, { detail }, [])?.stats).toEqual([
+      { label: "Lv1基础攻击力", value: first }, { label: "Lv70基础攻击力", value: max },
+    ]);
+    expect(normalizeWeapon(entry, { list: { rank: rarity }, detail: { ...detail, rarity: undefined } }, [])?.stats.at(-1))
+      .toEqual({ label: "Lv70基础攻击力", value: max });
+  }
+  const partial = normalizeWeapon({ ...entry, rarity: "一星" }, { detail: {
+    stats_modifier: { atk: { base: 23.245, levels: { 1: 1, 70: 5.968, 90: 7.346 } } },
+    ascension: { 3: { fight_prop_base_attack: 31.1 } },
+  } }, []);
+  expect(partial?.stats).toEqual([{ label: "Lv1基础攻击力", value: "23" }]);
+});
+
 test("光锥以真实晋阶上限计算属性，并按各叠影参数还原效果", () => {
   const details = normalizeWeapon({ ...entry, game: "hsr" }, { detail: {
     stats: [{ max_level: 20, base_hp: 40, base_attack: 20, base_defence: 12 },
