@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
-  findNextFiction, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedStarrailNext,
+  findChallengeMode, findCurrentChallenge, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
+  onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -373,7 +374,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
   const previous = target === "上期" &&
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id || mode.id === shiyuMode.id);
-  const forecast = target === "下期" && (mode.id === shiyuMode.id || mode.id === fictionMode.id);
+  const forecast = target === "下期" && (mode.id === shiyuMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id);
   const relative = previous || forecast;
   const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
@@ -410,8 +411,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       if (result.stale || category.sampled) return unverifiedRotation;
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
       const matched = forecast
-        ? await (mode.id === fictionMode.id
-          ? findNextFiction(category.entries, readFacts) : findNextShiyu(category.entries, readFacts))
+        ? await (mode.id === shiyuMode.id
+          ? findNextShiyu(category.entries, readFacts) : findAnnouncedStarrailNext(mode, category.entries, readFacts))
         : previous ? await findPreviousChallenge(mode, category.entries, readFacts)
         : await findCurrentChallenge(mode, category.entries, readFacts);
       if (!matched) return unverifiedRotation;
@@ -520,6 +521,9 @@ const atlas = {
     "#星铁上期混沌回忆图鉴": "#星铁上期混沌图鉴",
     "#星铁上期忘却图鉴": "#星铁上期混沌图鉴",
     "#星铁上期忘却之庭图鉴": "#星铁上期混沌图鉴",
+    "#星铁下期混沌回忆图鉴": "#星铁下期混沌图鉴",
+    "#星铁下期忘却图鉴": "#星铁下期混沌图鉴",
+    "#星铁下期忘却之庭图鉴": "#星铁下期混沌图鉴",
     "#星铁异相仲裁图鉴": "#星铁异相图鉴",
     "#星铁本期异相仲裁图鉴": "#星铁本期异相图鉴",
     "#星铁当期异相图鉴": "#星铁本期异相图鉴",
@@ -573,6 +577,7 @@ const atlas = {
     "#星铁下期虚构图鉴": () => challengeQuery("星铁 虚构叙事 下期"),
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
     "#星铁上期混沌图鉴": () => challengeQuery("星铁 混沌回忆 上期"),
+    "#星铁下期混沌图鉴": () => challengeQuery("星铁 混沌回忆 下期"),
     "#星铁异相图鉴": () => challengeQuery("星铁 异相仲裁"),
     "#星铁本期异相图鉴": () => challengeQuery("星铁 异相仲裁 本期"),
     "#星铁上期异相图鉴": () => challengeQuery("星铁 异相仲裁 上期"),

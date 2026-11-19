@@ -105,20 +105,29 @@ export async function findNextShiyu<Entry extends { readonly id: string }, Facts
   return (await findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now))?.adjacent;
 }
 
-export async function findNextFiction<Entry extends { readonly id: string; readonly name: string }, Facts extends RotationFacts>(
-  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+// Official 4.6 and 4.7 announcements. The API uses an exclusive end at the next minute.
+// https://hsr.hoyoverse.com/en-us/news/166468
+// https://www.hoyolab.com/article/47394097
+const announcedStarrailRotations = {
+  maze_extra: {
+    current: { id: "2027", name: "取象为文", begin: "2026-10-19 04:00:00", end: "2026-11-30 04:00:00" },
+    next: { id: "2028", name: "虚事成理", begin: "2026-11-30 04:00:00", end: "2027-01-11 04:00:00" },
+  },
+  maze: {
+    current: { id: "1036", name: "物竞天择", begin: "2026-11-02 04:00:00", end: "2026-12-14 04:00:00" },
+    next: { id: "1037", name: "漆黑残响", begin: "2026-12-14 04:00:00", end: "2027-01-25 04:00:00" },
+  },
+};
+
+export async function findAnnouncedStarrailNext<Entry extends { readonly id: string; readonly name: string }, Facts extends RotationFacts>(
+  mode: typeof chaosMode | typeof fictionMode, entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
-  const rotation = await findAdjacentChallenge(fictionMode, "next", entries, readFacts, now);
+  const rotation = await findAdjacentChallenge(mode, "next", entries, readFacts, now);
   if (!rotation) return;
-  const { current, adjacent: next } = rotation;
-  // Official 4.6 and 4.7 announcements. The API uses an exclusive end at the next minute.
-  // https://hsr.hoyoverse.com/en-us/news/166468
-  // https://www.hoyolab.com/article/47394097
-  if (current.entry.id !== "2027" || current.entry.name !== "取象为文" ||
-    current.facts.window?.begin !== "2026-10-19 04:00:00" || current.facts.window.end !== "2026-11-30 04:00:00" ||
-    next.entry.id !== "2028" || next.entry.name !== "虚事成理" ||
-    next.facts.window?.begin !== "2026-11-30 04:00:00" || next.facts.window.end !== "2027-01-11 04:00:00") return;
-  return next;
+  const announcement = announcedStarrailRotations[mode.id];
+  const pairs = [[rotation.current, announcement.current], [rotation.adjacent, announcement.next]] as const;
+  if (pairs.every(([{ entry, facts: { window } }, { id, name, begin, end }]) =>
+    entry.id === id && entry.name === name && window?.begin === begin && window.end === end)) return rotation.adjacent;
 }
 
 export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(

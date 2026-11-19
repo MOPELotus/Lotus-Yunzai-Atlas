@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, findNextFiction, findPreviousChallenge, hasChallengeRotation,
+import { apocalypseMode, challengeModes, chaosMode, fictionMode, findAnnouncedStarrailNext, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
   onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
@@ -120,7 +120,7 @@ test("虚构下期仅预览官网公告与正式实装窗口一致的相邻记�
   const undated = { ...row("2029"), name: "待核对" };
   const records = [current, undated, next];
   const select = async (entries = records, time = "2026-11-29T19:59:59Z") =>
-    (await findNextFiction(entries, async (entry) => readChallengeFacts(fictionMode, entry), Date.parse(time)))?.entry.id;
+    (await findAnnouncedStarrailNext(fictionMode, entries, async (entry) => readChallengeFacts(fictionMode, entry), Date.parse(time)))?.entry.id;
   expect(await select()).toBe("2028");
   expect(await select(records, "2026-11-29T20:00:00Z")).toBeUndefined();
   expect(await select([current, undated])).toBeUndefined();
@@ -142,6 +142,19 @@ test("混沌上期识别相邻实装窗口，忽略只有导出时间的记录",
   expect(await select("2026-07-06T03:59:59+08:00")).toBe("1031");
   expect(await select("2026-07-06T04:00:00+08:00")).toBe("1032");
   expect(await select("2026-11-20T12:00:00+08:00")).toBeUndefined();
+});
+
+test("混沌下期只返回与公告相符的漆黑残响预览", async () => {
+  const current = { ...row("1036", "2026-11-02 04:00:00", "2026-12-14 04:00:00"), name: "物竞天择" };
+  const next = { ...row("1037", "2026-12-14 04:00:00", "2027-01-25 04:00:00"), name: "漆黑残响" };
+  const undated = { ...row("1038"), name: "待核对" };
+  const records = [current, next, undated];
+  const select = async (entries = records, time = "2026-12-13T19:59:59Z") =>
+    (await findAnnouncedStarrailNext(chaosMode, entries, async (entry) => readChallengeFacts(chaosMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select()).toBe("1037");
+  expect(await select(records, "2026-12-13T20:00:00Z")).toBeUndefined();
+  expect(await select([current, { ...next, list: { ...next.list, live_end: "2027-01-26 04:00:00" } }])).toBeUndefined();
+  expect(await select([current, undated])).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {
