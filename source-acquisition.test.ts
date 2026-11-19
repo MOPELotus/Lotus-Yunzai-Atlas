@@ -199,3 +199,86 @@ test("音擎详情或图标不完整时清理候选，允许重新抓取", () =>
     url === weaponIcon(`${weaponIconPrefix}/${icon}`) ? missing() : weaponSource(url))).rejects.toThrow("音擎来源图标缺失");
   expect((await acquireAtlasSource(candidate, weaponScope, undefined, async (url) => weaponSource(url))).imageCount).toBe(3);
 }));
+
+const lightconeVersion = "4.7.52";
+const lightconeScope = [{ game: "hsr", pageId: "lightcone", version: lightconeVersion, recordCount: 2 }] as const;
+const lightconeListUrl = `https://static.nanoka.cc/hsr/${lightconeVersion}/lightcone.json`;
+const lightconeDetailUrl = (id: number) => `https://static.nanoka.cc/hsr/${lightconeVersion}/zh/lightcone/${id}.json`;
+const lightconeAsset = (name: string) => `https://static.nanoka.cc/assets/hsr/${name}.webp`;
+const cones = [
+  { id: 20000, zh: "样例光锥甲", rank: "CombatPowerLightconeRarity3", baseType: "Rogue" },
+  { id: 23000, zh: "样例光锥乙", rank: "CombatPowerLightconeRarity5", baseType: "Rogue" },
+] as const;
+
+function coneDetail({ id, zh, rank, baseType }: typeof cones[number]) {
+  return {
+    name: zh, rarity: rank, base_type: baseType,
+    stats: Array.from({ length: 7 }, (_, index) => ({ equipment_id: id, max_level: (index + 2) * 10,
+      base_hp: 20, base_hp_add: 1, base_attack: 10, base_attack_add: 1, base_defence: 5, base_defence_add: 1 })),
+    refinements: { name: "效果夹具", desc: "增加#1[i]%攻击力。", level: Object.fromEntries(
+      [1, 2, 3, 4, 5].map((rank) => [rank, { param_list: [rank / 10] }]),
+    ) },
+  };
+}
+
+function lightconeSource(url: string) {
+  if (url === lightconeListUrl) return Response.json(Object.fromEntries(cones.map(({ id, ...row }) => [id, row])));
+  if (url === lightconeAsset("pathicon/rogue")) return new Response(new Uint8Array(webp));
+  for (const item of cones) {
+    if (url === lightconeDetailUrl(item.id)) return Response.json(coneDetail(item));
+    if (url === lightconeAsset(`lightconemediumicon/${item.id}`)) return new Response(new Uint8Array(webp));
+  }
+  throw new Error(`unexpected URL ${url}`);
+}
+
+test("光锥来源保留完整等级、叠影、原图和共享命途图标", () => fixture(async (root) => {
+  const candidate = join(root, "snapshots", "1");
+  await mkdir(join(root, "snapshots"));
+  const calls: string[] = [];
+  const result = await acquireAtlasSource(candidate, lightconeScope, undefined, async (url) => {
+    calls.push(url);
+    return lightconeSource(url);
+  });
+  expect(result).toMatchObject({ pages: lightconeScope, imageCount: 3, missingImageCount: 0 });
+  expect(calls).toEqual([lightconeListUrl, lightconeDetailUrl(20000), lightconeAsset("lightconemediumicon/20000"),
+    lightconeAsset("pathicon/rogue"), lightconeDetailUrl(23000), lightconeAsset("lightconemediumicon/23000")]);
+  expect(await publishAtlasCandidate(root, null, 1, lightconeScope)).toMatchObject({ status: "published" });
+  const catalog = createAtlasRuntimeCatalog(root);
+  const index = await catalog.read();
+  for (const [position, cone] of cones.entries()) {
+    const [entry] = findEquipment(index, String(cone.id), "hsr");
+    expect(entry).toMatchObject({ name: cone.zh, rarity: ["三星", "五星"][position] });
+    const raw = await Bun.file(join(candidate, "data", entry!.path)).json();
+    const artName = `lightconemediumicon/${cone.id}`;
+    const asset = (fieldPath: string, value: string) => ({ fieldPath, originalValue: value, localPath: `gallery/hsr/${value}.webp`,
+      status: "downloaded", sha256: createHash("sha256").update(webp).digest("hex") });
+    expect(raw).toMatchObject({ meta: { images: [asset("derived.lightConeMediumIcon", artName),
+      asset("derived.path", "pathicon/rogue"), asset("detail.derived.lightConeMediumIcon", artName)] },
+      content: { detail: coneDetail(cone) } });
+    const details = await catalog.weaponDetails(entry!);
+    expect(details).toMatchObject({ artwork: `gallery/hsr/${artName}.webp`, refinements: [1, 2, 3, 4, 5].map((rank) => ({
+      rank, name: "效果夹具", description: `增加${rank * 10}%攻击力。`,
+    })), stats: [{ label: "Lv1生命", value: "20" }, { label: "Lv80生命", value: "99" },
+      { label: "Lv1攻击", value: "10" }, { label: "Lv80攻击", value: "89" },
+      { label: "Lv1防御", value: "5" }, { label: "Lv80防御", value: "84" }] });
+  }
+}));
+
+test("光锥缺少详情、等级、叠影或任一真实图片时拒绝候选", () => fixture(async (root) => {
+  const candidate = join(root, "candidate");
+  const first = cones[0];
+  const detail = coneDetail(first);
+  const detailUrl = lightconeDetailUrl(first.id);
+  const missing = () => new Response(null, { status: 404 });
+  for (const [target, replacement, expected] of [
+    [detailUrl, missing, "HTTP 404"],
+    [detailUrl, () => Response.json({ ...detail, stats: detail.stats.slice(0, -1) }), "身份或等级不符"],
+    [detailUrl, () => Response.json({ ...detail, refinements: { ...detail.refinements, level: {} } }), "身份或等级不符"],
+    [lightconeAsset(`lightconemediumicon/${first.id}`), missing, "原图缺失"],
+    [lightconeAsset("pathicon/rogue"), missing, "命途图标缺失"],
+  ] as const) {
+    await expect(acquireAtlasSource(candidate, lightconeScope, undefined, async (url) =>
+      url === target ? replacement() : lightconeSource(url))).rejects.toThrow(expected);
+  }
+  expect((await acquireAtlasSource(candidate, lightconeScope, undefined, async (url) => lightconeSource(url))).imageCount).toBe(3);
+}));
