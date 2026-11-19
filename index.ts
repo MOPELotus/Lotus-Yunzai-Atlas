@@ -603,9 +603,11 @@ const atlas = {
   },
 };
 
-export function createModule({ signal }: { readonly signal?: AbortSignal } = {}) {
-  const maintenance = createAtlasMaintenance(atlasRoot, { signal, dataOverride: Bun.env.LOTUS_ATLAS_DATA_DIR });
-  return { ...atlas, commands: { ...atlas.commands, ...maintenance } };
+export function createModule({ signal, atlasUpdateConfig }: { readonly signal?: AbortSignal; readonly atlasUpdateConfig?: unknown } = {}) {
+  const { commands, atlasSchedule } = createAtlasMaintenance(atlasRoot, {
+    signal, updateConfig: atlasUpdateConfig, dataOverride: Bun.env.LOTUS_ATLAS_DATA_DIR,
+  });
+  return { ...atlas, commands: { ...atlas.commands, ...commands }, atlasSchedule };
 }
 
 export default createModule();

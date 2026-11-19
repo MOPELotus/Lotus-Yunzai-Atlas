@@ -65,7 +65,7 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     let manifestCalls = 0;
     let sourceCalls = 0;
     let missingIcon = true;
-    const commands = createAtlasMaintenance(root, {
+    const { commands } = createAtlasMaintenance(root, {
       async manifest() { manifestCalls++; return { zzz: { live, latest, available: [live, latest] } }; },
       async request(url) { sourceCalls++; expect(url).not.toContain(latest); return source(live, missingIcon ? "icon-missing" : "all")(url); },
     });
@@ -98,7 +98,7 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     expect(await update("", context)).toContain(`邦布 · 已是同一正式版本 ${live}`);
     expect(sourceCalls).toBe(after);
 
-    const explicit = createAtlasMaintenance(root, { dataOverride: join(root, "data"), manifest: async () => ({ zzz: { live, available: [live] } }) });
+    const { commands: explicit } = createAtlasMaintenance(root, { dataOverride: join(root, "data"), manifest: async () => ({ zzz: { live, available: [live] } }) });
     expect(await explicit["#检查图鉴更新"]("", context)).toContain(`邦布 · ${oldVersion} → ${live}`);
     expect(await explicit["#更新图鉴"]("", context)).toContain("当前使用显式图鉴数据目录");
     expect(await readAtlasSnapshotVersion(root)).toBe(1);
@@ -106,6 +106,47 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("定时与手动共用分类、发布互斥和生命周期，失败后下次重新检查", () => fixture(async (work, root) => {
+  const release = "3.4.5";
+  let checks = 0;
+  let fail = true;
+  const controller = new AbortController();
+  const { atlasSchedule, commands } = createAtlasMaintenance(root, {
+    signal: controller.signal,
+    updateConfig: { update_args: ["--page", "zzz=bangboo"], challenge_args: ["--page", "zzz=character"] },
+    async manifest() {
+      checks++;
+      if (fail) throw new Error("fixture temporary failure");
+      return { zzz: { live: release, available: [release] } };
+    },
+    request: source(release),
+  });
+  expect(atlasSchedule.challenge.cron).toBeUndefined();
+  expect(await atlasSchedule.challenge.run()).toContain("未启用");
+  expect(checks).toBe(0);
+
+  const pending = atlasSchedule.version.run();
+  expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain("已有图鉴更新正在进行");
+  expect(await pending).toContain("图鉴版本清单不可用");
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
+  expect(checks).toBe(1);
+
+  fail = false;
+  const published = await atlasSchedule.version.run();
+  expect(published).toContain(`邦布 · 已更新至 ${release}`);
+  expect(published).not.toContain("音擎");
+  expect(await readAtlasSnapshotVersion(root)).toBe(1);
+  expect(checks).toBe(2);
+
+  controller.abort();
+  expect(await atlasSchedule.version.run()).toContain("已中止");
+  expect(checks).toBe(2);
+
+  const unready = createAtlasMaintenance(join(work, "missing"), { updateConfig: {}, async manifest() { checks++; } });
+  expect(await unready.atlasSchedule.challenge.run()).toContain("请先准备完整快照");
+  expect(checks).toBe(2);
+}));
 
 const enginePrevious = "3.2";
 const engineCurrent = "3.3";

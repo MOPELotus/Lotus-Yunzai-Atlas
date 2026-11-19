@@ -1,10 +1,11 @@
 import { realpath } from "node:fs/promises";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
-  type AtlasSourceRefresh } from "./refresh-source.ts";
+  type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
+import { parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
@@ -43,6 +44,7 @@ function describeRefresh(result: AtlasSourceRefresh, targetVersion: string): str
 
 export interface AtlasMaintenanceOptions extends Pick<AtlasRefreshOptions, "manifest" | "request" | "signal"> {
   readonly dataOverride?: string;
+  readonly updateConfig?: unknown;
 }
 
 interface AtlasMaintenanceContext {
@@ -52,11 +54,12 @@ interface AtlasMaintenanceContext {
 
 export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOptions = {}) {
   const { signal, request, dataOverride, manifest = fetchAtlasManifest } = options;
+  const policy = parseAtlasUpdatePolicy(options.updateConfig);
   let updating = false;
 
-  async function run(kind: "check" | "update", argument: string, context: AtlasMaintenanceContext) {
-    if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以操作图鉴更新。";
-    if (argument) return `请直接发送 ${kind === "check" ? checkCommand : updateCommand}。`;
+  async function run(kind: "check" | "update", selections: readonly SourceSelection[]) {
+    if (signal?.aborted) return "图鉴维护已中止。";
+    if (!selections.length) return "图鉴配置未选中已核实的分类。";
     if (kind === "update" && dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     if (kind === "update") updating = true;
@@ -65,13 +68,15 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       const baseline = dataOverride ? await realpath(dataOverride).catch(() => undefined) : active?.root;
       if (!baseline) return "图鉴数据未初始化或无法验证，请先准备完整快照。";
 
+      const local = await validateAtlasCandidate(baseline, [], signal);
+      if (!local.ok) return "图鉴数据未初始化或无法验证，请先准备完整快照。";
       const listing = await manifest(signal).catch(() => undefined);
       if (signal?.aborted) return "图鉴维护已中止。";
       if (!listing) return "图鉴版本清单不可用，保留现有资料。";
       const release = publishedManifest(listing);
-      const local = await validateAtlasCandidate(baseline, [], signal);
       const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
       for (const { selection, title } of atlasSourceSelections) {
+        if (!selections.includes(selection)) continue;
         if (signal?.aborted) { lines.push("图鉴维护已中止。"); break; }
         const entry = atlasSourcePlan(selection, release, local).entries[0];
         if (!entry || entry.kind !== "versioned") continue;
@@ -95,7 +100,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
         lines.push(`${title} · ${summary}`);
       }
-      lines.push("其余分类尚待核对来源。");
+      if (selections.length === atlasSourceSelections.length) lines.push("其余分类尚待核对来源。");
       return lines.join("\n");
     } catch {
       return signal?.aborted ? "图鉴维护已中止。" : "无法核对图鉴快照，请稍后重试。";
@@ -104,8 +109,22 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     }
   }
 
+  function command(kind: "check" | "update", argument: string, context: AtlasMaintenanceContext) {
+    if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以操作图鉴更新。";
+    if (argument) return `请直接发送 ${kind === "check" ? checkCommand : updateCommand}。`;
+    return run(kind, policy.version.selections);
+  }
+
+  function scheduled(kind: AtlasScheduleKind) {
+    const { cron, issue, selections } = policy[kind];
+    return { cron, issue, run: () => cron ? run("update", selections) : Promise.resolve("图鉴自动更新未启用。") };
+  }
+
   return {
-    [checkCommand]: (argument: string, context: AtlasMaintenanceContext) => run("check", argument, context),
-    [updateCommand]: (argument: string, context: AtlasMaintenanceContext) => run("update", argument, context),
+    commands: {
+      [checkCommand]: (argument: string, context: AtlasMaintenanceContext) => command("check", argument, context),
+      [updateCommand]: (argument: string, context: AtlasMaintenanceContext) => command("update", argument, context),
+    },
+    atlasSchedule: { version: scheduled("version"), challenge: scheduled("challenge") },
   };
 }
