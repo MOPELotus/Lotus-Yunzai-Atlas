@@ -105,10 +105,11 @@ export function findNextShiyu<Entry extends { readonly id: string }, Facts exten
   return findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now);
 }
 
-export function findPreviousApocalypse<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+export function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  mode: typeof apocalypseMode | typeof shiyuMode, entries: readonly Entry[],
+  readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
-  return findAdjacentChallenge(apocalypseMode, "previous", entries, readFacts, now);
+  return findAdjacentChallenge(mode, "previous", entries, readFacts, now);
 }
 
 function validDate(value: unknown): string {

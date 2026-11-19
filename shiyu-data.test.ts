@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { findNextShiyu, readChallengeFacts, shiyuMode } from "./challenges.ts";
+import { findNextShiyu, findPreviousChallenge, readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { normalizeShiyu } from "./shiyu-data.ts";
 
 const entry = { game: "zzz", name: "剧变节点", id: "62061", path: "", rarity: "", version: "3.4.4" } as const;
@@ -40,19 +40,20 @@ test("式舆保留对应半场的原图、实值及第五防线独立房间，�
   });
 });
 
+const rotationRow = (id: string, begin: string, end: string, type: "live" | "export" | "other" = "live") => ({
+  id, facts: readChallengeFacts(shiyuMode, { list: {
+    zh: type === "other" ? "奇袭节点" : "剧变节点", sort: type === "other" ? 4 : 1,
+    ...(type === "export" ? { begin, end } : { live_begin: begin, live_end: end }),
+  } }),
+});
+
 test("式舆下期须从唯一当前轮换无缝衔接，不接受导出、其他节点或中途冲突", async () => {
-  const row = (id: string, begin: string, end: string, type: "live" | "export" | "other" = "live") => ({
-    id, facts: readChallengeFacts(shiyuMode, { list: {
-      zh: type === "other" ? "奇袭节点" : "剧变节点", sort: type === "other" ? 4 : 1,
-      ...(type === "export" ? { begin, end } : { live_begin: begin, live_end: end }),
-    } }),
-  });
-  const current = row("62061", "2026-11-13 04:00:00", "2026-11-27 03:59:59");
-  const next = row("62062", "2026-11-27 04:00:00", "2026-12-11 03:59:59");
-  const preview = row("620631", "2026-11-27 04:00:00", "2026-12-18 03:59:59", "export");
-  const other = row("61003", "2026-11-27 04:00:00", "2026-12-18 03:59:59", "other");
-  const late = row("future", "2026-12-10 04:00:00", "2026-12-18 03:59:59");
-  const choose = (...rows: ReturnType<typeof row>[]) =>
+  const current = rotationRow("62061", "2026-11-13 04:00:00", "2026-11-27 03:59:59");
+  const next = rotationRow("62062", "2026-11-27 04:00:00", "2026-12-11 03:59:59");
+  const preview = rotationRow("620631", "2026-11-27 04:00:00", "2026-12-18 03:59:59", "export");
+  const other = rotationRow("61003", "2026-11-27 04:00:00", "2026-12-18 03:59:59", "other");
+  const late = rotationRow("future", "2026-12-10 04:00:00", "2026-12-18 03:59:59");
+  const choose = (...rows: ReturnType<typeof rotationRow>[]) =>
     findNextShiyu(rows, async ({ facts }) => facts, Date.parse("2026-11-19T12:00:00+08:00"));
   expect((await choose(current, next, preview, other))?.entry.id).toBe("62062");
   expect(await choose(current, preview, other)).toBeUndefined();
@@ -61,4 +62,23 @@ test("式舆下期须从唯一当前轮换无缝衔接，不接受导出、其�
   expect(await choose(next, preview)).toBeUndefined();
   expect(await choose(current, next, { ...next, id: "dupe" })).toBeUndefined();
   expect(await choose(current, next, { ...current, id: "dupe-current" })).toBeUndefined();
+});
+
+test("式舆上期只认紧邻的常规剧变节点，完整保留实装结束的最后一秒", async () => {
+  const start = "2026-10-30 04:00:00";
+  const end = "2026-11-13 03:59:59";
+  const current = rotationRow("62061", "2026-11-13 04:00:00", "2026-11-27 03:59:59");
+  const previous = rotationRow("62060", start, end);
+  const exported = rotationRow("导出", start, end, "export");
+  const other = rotationRow("其他节点", start, end, "other");
+  const choose = async (rows: ReturnType<typeof rotationRow>[], time = "2026-11-20T12:00:00+08:00") =>
+    (await findPreviousChallenge(shiyuMode, rows, async ({ facts }) => facts, Date.parse(time)))?.entry.id;
+  const rows = [previous, current, exported, other];
+  expect(await choose(rows)).toBe("62060");
+  expect(await choose(rows, "2026-11-12T19:59:59.999Z")).toBeUndefined();
+  expect(await choose(rows, "2026-11-12T20:00:00.000Z")).toBe("62060");
+  expect(await choose([current, exported, other])).toBeUndefined();
+  expect(await choose([current, rotationRow("不连续", start, "2026-11-13 03:58:59")])).toBeUndefined();
+  expect(await choose([...rows, rotationRow("重叠", "2026-10-02 04:00:00", "2026-11-02 03:59:59")])).toBeUndefined();
+  expect(await choose([...rows, { ...previous, id: "重复上期" }])).toBeUndefined();
 });
