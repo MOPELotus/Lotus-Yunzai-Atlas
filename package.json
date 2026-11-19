@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": "./index.ts",
+  "dependencies": {
+    "@lotus-yunzai/skia": "workspace:*",
+    "skia-canvas": "3.0.8"
+  },
   "lotusYunzai": {
     "entry": "./index.ts",
     "games": ["genshin", "starrail", "zzz"]

@@ -4,7 +4,7 @@ import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
-import { traditionalAtlasApps } from "./traditional.ts";
+import { traditionalAtlasApps, type AtlasReply } from "./traditional.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment } from "./catalog.ts";
@@ -13,8 +13,8 @@ const games = new Map<string, Game>([
   ["原神", "gi"], ["星铁", "hsr"], ["星穹铁道", "hsr"], ["崩坏星穹铁道", "hsr"], ["崩铁", "hsr"],
   ["绝区零", "zzz"], ["绝区", "zzz"],
 ]);
-const catalog = createAtlasCatalog(Bun.env.LOTUS_ATLAS_DATA_DIR ||
-  fileURLToPath(new URL("../../data/atlas/data/", import.meta.url)));
+const dataDirectory = Bun.env.LOTUS_ATLAS_DATA_DIR || fileURLToPath(new URL("../../data/atlas/data/", import.meta.url));
+const catalog = createAtlasCatalog(dataDirectory);
 const missing = "图鉴数据不可用。请检查 LOTUS_ATLAS_DATA_DIR 指向的目录。";
 
 function searchTerms(argument: string, fixedGame?: Game) {
@@ -100,11 +100,31 @@ async function bangbooQuery(argument: string): Promise<string> {
   }
 }
 
-async function traditionalQuery(query: string, game?: Game, mode: TraditionalLookup = "search"): Promise<string | undefined> {
+async function characterBook(entry: AtlasEntry): Promise<AtlasReply> {
+  const role = await catalog.roleDetails(entry);
+  if (!role) return characterLine(entry, true);
+  try {
+    const { renderRoleBook } = await import("./role-render.ts");
+    const pages = await renderRoleBook(role, { assetRoot: dataDirectory });
+    const sections = pages.map(({ section }) => section).join(" → ");
+    const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
+    return { type: "forward", nodes: [title, ...pages.map(({ png }) => ({ type: "image" as const, file: png }))] };
+  } catch {
+    return `${await characterLine(entry, true)}\n图鉴图片暂不可用。`;
+  }
+}
+
+async function traditionalQuery(
+  query: string, game?: Game, mode: TraditionalLookup | "character" | "shortcut" = "search",
+): Promise<AtlasReply | undefined> {
   try {
     const result = await catalog.read();
-    const matches = findTraditionalEntries(result, query, game, mode);
+    const exact = mode === "character" || mode === "shortcut";
+    const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
+      mode === "character" ? kind === "character" : mode !== "shortcut" || kind !== "bangboo");
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装或邦布。" : undefined;
+    const first = matches[0]!;
+    if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
     const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
       switch (kind) {
         case "equipment": return equipmentLine(entry);
@@ -249,8 +269,8 @@ async function challengeQuery(argument: string): Promise<string> {
   }
 }
 
-export const apps = traditionalAtlasApps((argument, game) => {
-  if (game) return traditionalQuery(argument, game, "equipment");
+export const apps = traditionalAtlasApps((argument, kind, game) => {
+  if (kind !== "glued") return traditionalQuery(argument, game, kind);
   const { query, game: statedGame } = searchTerms(argument);
   return traditionalQuery(query, statedGame, "name");
 });

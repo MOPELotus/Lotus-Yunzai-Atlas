@@ -9,7 +9,9 @@ const gamePrefix = /^(?:#崩坏星穹铁道|#星穹铁道|#绝区零|#绝区|#�
 const reserved = /攻略|练度统计|(?:命座|星魂|影画|天赋)$/u;
 const operations = /^#?(?:Lotus|lotus|荷花)?(?:图鉴(?:状态|帮助|更新|检查更新|全量更新|重置)|(?:更新|检查更新|全量更新|重置|清空)图鉴)$/u;
 const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
-const command = new RegExp(`${glued.source}|${shortcut.source}`, "u");
+const roleShortcut = /^[#*%％][^\r\n]+(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
+const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
+const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
 
 export function parseGluedLookup(message: string): string | undefined {
   const input = message.trim();
@@ -29,14 +31,32 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   if (game) return { game, query };
 }
 
+export function parseRoleShortcut(message: string): { game: Game; query: string } | undefined {
+  const input = message.trim();
+  const prefix = gamePrefix.exec(input)?.[0];
+  if (!prefix) return;
+  const result = roleDetail.exec(input.slice(prefix.length));
+  const query = result?.[1]?.trim();
+  const suffix = result?.[2];
+  const game = prefixes[prefix];
+  if (!query || !game || reserved.test(query)) return;
+  if ((suffix === "命座" && game === "gi") || (suffix === "星魂" && game === "hsr") ||
+      (suffix === "影画" && game === "zzz") || suffix === "天赋") return { game, query };
+}
+
+type AtlasNode = string | { readonly type: "image"; readonly file: Uint8Array };
+export type AtlasReply = string | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
+type Lookup = "glued" | "shortcut" | "character";
+
 interface ShortcutEvent {
   readonly msg: string;
-  reply(value: string): unknown;
+  readonly forward?: (nodes: readonly AtlasNode[]) => Promise<boolean>;
+  reply(value: AtlasNode): unknown;
 }
 
 type PluginConstructor = new (options: { name: string; rule: { reg: RegExp; fnc: string }[] }) => { e?: ShortcutEvent };
 
-export function traditionalAtlasApps(findReply: (query: string, game?: Game) => Promise<string | undefined>) {
+export function traditionalAtlasApps(findReply: (query: string, kind: Lookup, game?: Game) => Promise<AtlasReply | undefined>) {
   return {
     // The host installs the V3 base before it enumerates the exported apps.
     get AtlasTraditionalCommands() {
@@ -49,16 +69,29 @@ export function traditionalAtlasApps(findReply: (query: string, game?: Game) => 
 
         async lookup(event: ShortcutEvent) {
           const query = parseGluedLookup(event.msg);
-          if (query) return this.send(event, query);
+          if (query) return this.send(event, await findReply(query, "glued"));
+          const role = parseRoleShortcut(event.msg);
+          if (role) return this.send(event, await findReply(role.query, "character", role.game));
           const target = parseEquipmentShortcut(event.msg);
           if (!target) return false;
-          return this.send(event, target.query, target.game);
+          return this.send(event, await findReply(target.query, "shortcut", target.game));
         }
 
-        async send(event: ShortcutEvent, query: string, game?: Game) {
-          const reply = await findReply(query, game);
+        async send(event: ShortcutEvent, reply: AtlasReply | undefined) {
           if (reply === undefined) return false;
-          await event.reply(reply);
+          if (typeof reply === "string") {
+            await event.reply(reply);
+            return;
+          }
+          if (event.forward) {
+            try {
+              if (await event.forward(reply.nodes)) return;
+            } catch {
+              await event.reply("合并转发结果未确认，请在聊天中核对。");
+              return;
+            }
+          }
+          for (const node of reply.nodes) await event.reply(node);
         }
       };
     },

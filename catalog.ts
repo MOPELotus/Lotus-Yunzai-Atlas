@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 import { compareKey, effectText, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
+import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
@@ -272,20 +273,24 @@ export function createAtlasCatalog(directory: string) {
     }
   }
 
-  async function readContent(entry: AtlasEntry, pageId: string): Promise<Record<string, unknown>> {
+  async function readItem(entry: AtlasEntry, pageId: string) {
     try {
       const root = await realpath(directory);
       const file = await realpath(resolve(root, entry.path));
       const local = relative(root, file);
-      if (isAbsolute(local) || local === ".." || local.startsWith(`..${sep}`)) return {};
+      if (isAbsolute(local) || local === ".." || local.startsWith(`..${sep}`)) return;
       const item = object(JSON.parse(await readFile(file, "utf8")));
       const meta = object(item.meta);
       if (meta.gameId !== entry.game || meta.pageId !== pageId || meta.recordId !== entry.id ||
-          meta.version !== entry.version) return {};
-      return object(item.content);
+          meta.version !== entry.version) return;
+      return { content: object(item.content), meta };
     } catch {
-      return {};
+      return undefined;
     }
+  }
+
+  async function readContent(entry: AtlasEntry, pageId: string): Promise<Record<string, unknown>> {
+    return (await readItem(entry, pageId))?.content ?? {};
   }
 
   return {
@@ -296,6 +301,13 @@ export function createAtlasCatalog(directory: string) {
       if (character.game !== "zzz") return character.rarity;
       const { rank } = object((await readContent(character, "character")).list);
       return rank === 2 ? "" : zzzRarity(rank);
+    },
+    async roleDetails(character: Character): Promise<RoleDetails | undefined> {
+      const item = await readItem(character, "character");
+      if (!item) return;
+      const { rank } = object(item.content.list);
+      const rarity = character.game === "zzz" ? rank === 2 ? "" : zzzRarity(rank) : character.rarity;
+      return normalizeRoleDetails(character, item.content, rarity, item.meta.images);
     },
     async equipmentFacts(entry: AtlasEntry) {
       const page = equipmentPages[entry.game];
