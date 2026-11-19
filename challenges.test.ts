@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
+import { apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, findNextFiction, findPreviousChallenge, hasChallengeRotation,
   onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
@@ -112,6 +112,23 @@ test("虚构上期沿中国服实装边界切换，覆盖中断时返回待核�
   expect(await select("2026-10-19T04:00:00+08:00")).toBe("2026");
   expect(await select("2026-11-30T04:00:00+08:00")).toBeUndefined();
   expect(await select("2026-10-19T04:00:00+08:00", [current, earlier])).toBeUndefined();
+});
+
+test("虚构下期仅预览官网公告与正式实装窗口一致的相邻记录", async () => {
+  const current = { ...row("2027", "2026-10-19 04:00:00", "2026-11-30 04:00:00"), name: "取象为文" };
+  const next = { ...row("2028", "2026-11-30 04:00:00", "2027-01-11 04:00:00"), name: "虚事成理" };
+  const undated = { ...row("2029"), name: "待核对" };
+  const records = [current, undated, next];
+  const select = async (entries = records, time = "2026-11-29T19:59:59Z") =>
+    (await findNextFiction(entries, async (entry) => readChallengeFacts(fictionMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select()).toBe("2028");
+  expect(await select(records, "2026-11-29T20:00:00Z")).toBeUndefined();
+  expect(await select([current, undated])).toBeUndefined();
+  expect(await select([current, { ...next, name: "同 ID 错标题" }])).toBeUndefined();
+  expect(await select([current, { ...next, list: { ...next.list, live_end: "2027-01-10 04:00:00" } }])).toBeUndefined();
+  expect(await select([current, next, { ...next, id: "重复候选" }])).toBeUndefined();
+  expect(await select([current, next, { ...undated, list: { ...undated.list,
+    live_begin: "2027-01-10 04:00:00", live_end: "2027-02-11 04:00:00" } }])).toBeUndefined();
 });
 
 test("混沌上期识别相邻实装窗口，忽略只有导出时间的记录", async () => {

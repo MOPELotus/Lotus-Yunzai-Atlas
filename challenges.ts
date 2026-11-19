@@ -82,7 +82,7 @@ export async function findCurrentChallenge<Entry extends { readonly id: string }
 
 async function findAdjacentChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
   mode: ChallengeMode, direction: "previous" | "next", entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now: number,
-): Promise<{ entry: Entry; facts: Facts } | undefined> {
+) {
   const rows = await Promise.all(entries.map(async (entry) => {
     const facts = await readFacts(entry);
     return { entry, facts, times: rotationTimes(mode, facts) };
@@ -96,20 +96,36 @@ async function findAdjacentChallenge<Entry extends { readonly id: string }, Fact
   if (adjacent.length !== 1 || !match?.times) return;
   const { begin, end } = match.times;
   if (rows.some((row) => row !== match && row.times && row.times.begin < end && begin < row.times.end)) return;
-  return { entry: match.entry, facts: match.facts };
+  return { current, adjacent: { entry: match.entry, facts: match.facts } };
 }
 
-export function findNextShiyu<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+export async function findNextShiyu<Entry extends { readonly id: string }, Facts extends RotationFacts>(
   entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
-  return findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now);
+  return (await findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now))?.adjacent;
 }
 
-export function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+export async function findNextFiction<Entry extends { readonly id: string; readonly name: string }, Facts extends RotationFacts>(
+  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+) {
+  const rotation = await findAdjacentChallenge(fictionMode, "next", entries, readFacts, now);
+  if (!rotation) return;
+  const { current, adjacent: next } = rotation;
+  // Official 4.6 and 4.7 announcements. The API uses an exclusive end at the next minute.
+  // https://hsr.hoyoverse.com/en-us/news/166468
+  // https://www.hoyolab.com/article/47394097
+  if (current.entry.id !== "2027" || current.entry.name !== "取象为文" ||
+    current.facts.window?.begin !== "2026-10-19 04:00:00" || current.facts.window.end !== "2026-11-30 04:00:00" ||
+    next.entry.id !== "2028" || next.entry.name !== "虚事成理" ||
+    next.facts.window?.begin !== "2026-11-30 04:00:00" || next.facts.window.end !== "2027-01-11 04:00:00") return;
+  return next;
+}
+
+export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
   mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode, entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
-  return findAdjacentChallenge(mode, "previous", entries, readFacts, now);
+  return (await findAdjacentChallenge(mode, "previous", entries, readFacts, now))?.adjacent;
 }
 
 function validDate(value: unknown): string {

@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
-  findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+  findNextFiction, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -213,12 +213,13 @@ async function onslaughtCard(entry: AtlasEntry): Promise<AtlasImage | undefined>
 }
 
 async function starrailChallengeCard(entry: AtlasEntry, result: Awaited<ReturnType<typeof catalog.read>>,
-  mode: StarrailChallengeMode, current = false): Promise<AtlasImage | undefined> {
-  const challenge = await catalog.starrailChallengeDetails(entry, result, mode, current);
+  mode: StarrailChallengeMode, period?: "current" | "next"): Promise<AtlasImage | undefined> {
+  const challenge = await catalog.starrailChallengeDetails(entry, result, mode, period === "current");
   if (!challenge) return;
   try {
     const { renderStarrailChallenge } = await import("./role-render.ts");
-    const { png } = await renderStarrailChallenge(challenge, { assetRoot: catalog.assetRoot(entry) });
+    const card = period === "next" ? { ...challenge, name: `下期${challenge.name}（预览）` } : challenge;
+    const { png } = await renderStarrailChallenge(card, { assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return undefined;
@@ -372,7 +373,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
   const previous = target === "上期" &&
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id || mode.id === shiyuMode.id);
-  const forecast = mode.id === shiyuMode.id && target === "下期";
+  const forecast = target === "下期" && (mode.id === shiyuMode.id || mode.id === fictionMode.id);
   const relative = previous || forecast;
   const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
@@ -408,7 +409,9 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
     if (currentRequested || relative) {
       if (result.stale || category.sampled) return unverifiedRotation;
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
-      const matched = forecast ? await findNextShiyu(category.entries, readFacts)
+      const matched = forecast
+        ? await (mode.id === fictionMode.id
+          ? findNextFiction(category.entries, readFacts) : findNextShiyu(category.entries, readFacts))
         : previous ? await findPreviousChallenge(mode, category.entries, readFacts)
         : await findCurrentChallenge(mode, category.entries, readFacts);
       if (!matched) return unverifiedRotation;
@@ -458,7 +461,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       }
     }
     if (mode.id === apocalypseMode.id || mode.id === arbitrationMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
-      const image = await starrailChallengeCard(entry, result, mode, currentRequested);
+      const image = await starrailChallengeCard(entry, result, mode, forecast ? "next" : currentRequested ? "current" : undefined);
       if (image) return image;
     }
     if (mode.id === shiyuMode.id) {
@@ -510,6 +513,7 @@ const atlas = {
     "#星铁上期末日幻影图鉴": "#星铁上期末日图鉴",
     "#星铁本期虚构叙事图鉴": "#星铁本期虚构图鉴",
     "#星铁上期虚构叙事图鉴": "#星铁上期虚构图鉴",
+    "#星铁下期虚构叙事图鉴": "#星铁下期虚构图鉴",
     "#星铁本期混沌回忆图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却之庭图鉴": "#星铁本期混沌图鉴",
@@ -566,6 +570,7 @@ const atlas = {
     "#星铁上期末日图鉴": () => challengeQuery("星铁 末日幻影 上期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
     "#星铁上期虚构图鉴": () => challengeQuery("星铁 虚构叙事 上期"),
+    "#星铁下期虚构图鉴": () => challengeQuery("星铁 虚构叙事 下期"),
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
     "#星铁上期混沌图鉴": () => challengeQuery("星铁 混沌回忆 上期"),
     "#星铁异相图鉴": () => challengeQuery("星铁 异相仲裁"),
