@@ -14,7 +14,7 @@ function digest(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export async function openAtlasPinnedCache(path: string) {
+export async function openAtlasCheckpointDirectory(path: string, acceptedName: RegExp) {
   if (!path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path)) throw new Error("请指定独立的本地图鉴下载目录。");
   const resolved = resolve(path);
   const directory = join(await realpath(dirname(resolved)), basename(resolved));
@@ -24,21 +24,21 @@ export async function openAtlasPinnedCache(path: string) {
   if (!(await lstat(directory)).isDirectory() || await realpath(directory) !== directory) {
     throw new Error("图鉴下载目录须为实体目录。");
   }
-  if ((await readdir(directory)).some((name) => !checkpointName.test(name) && !partialName.test(name))) {
+  if ((await readdir(directory)).some((name) => !acceptedName.test(name) && !partialName.test(name))) {
     throw new Error("图鉴下载目录须为空或已有图鉴下载检查点。");
   }
 
-  function checkpoint(sha256: string) {
-    const name = `${sha256}.blob`;
-    if (!checkpointName.test(name)) throw new Error("图鉴检查点的 SHA-256 无效。");
+  function checkpoint(name: string) {
+    if (basename(name) !== name || !acceptedName.test(name)) throw new Error("图鉴检查点文件名无效。");
     return join(directory, name);
   }
 
   return {
     directory,
-    async read(sha256: string, limit: number, signal?: AbortSignal): Promise<Buffer | undefined> {
+    async names() { return (await readdir(directory)).filter((name) => acceptedName.test(name)); },
+    async read(name: string, limit: number, signal?: AbortSignal): Promise<Buffer | undefined> {
       signal?.throwIfAborted();
-      const file = checkpoint(sha256);
+      const file = checkpoint(name);
       const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error) => {
         if (code(error) !== "ENOENT") throw error;
       });
@@ -55,16 +55,14 @@ export async function openAtlasPinnedCache(path: string) {
           if (!bytesRead) break;
           size += bytesRead;
         }
-        const result = bytes.subarray(0, size);
-        if (size === stats.size && digest(result) === sha256) return result;
+        if (size === stats.size) return bytes.subarray(0, size);
       } finally {
         await handle.close();
       }
     },
-    async write(sha256: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
+    async write(name: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
       signal?.throwIfAborted();
-      const file = checkpoint(sha256);
-      if (digest(bytes) !== sha256) throw new Error("图鉴下载检查点与登记的 SHA-256 不符。");
+      const file = checkpoint(name);
       const temporary = join(directory, `.partial-${randomUUID()}`);
       const handle = await open(temporary, "wx", 0o600);
       try {
@@ -87,6 +85,21 @@ export async function openAtlasPinnedCache(path: string) {
           if (code(error) !== "ENOENT") throw error;
         });
       }
+    },
+  };
+}
+
+export async function openAtlasPinnedCache(path: string) {
+  const cache = await openAtlasCheckpointDirectory(path, checkpointName);
+  return {
+    directory: cache.directory,
+    async read(sha256: string, limit: number, signal?: AbortSignal) {
+      const bytes = await cache.read(`${sha256}.blob`, limit, signal);
+      return bytes && digest(bytes) === sha256 ? bytes : undefined;
+    },
+    async write(sha256: string, bytes: Uint8Array, signal?: AbortSignal) {
+      if (digest(bytes) !== sha256) throw new Error("图鉴下载检查点与登记的 SHA-256 不符。");
+      await cache.write(`${sha256}.blob`, bytes, signal);
     },
   };
 }

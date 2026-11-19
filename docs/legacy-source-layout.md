@@ -19,3 +19,14 @@ bun plugins/atlas/legacy-coverage.ts /path/to/legacy-export /path/to/checkpoints
 星铁末日、异相、虚构的源详情子路径分别是 `boss`、`peak`、`story`，图库由对应记录的敌人关联补足。原始检查点必须留存字节。后续包装条目 JSON 时，须保留超出 JS 安全整数的原始数字词法，例如末日 3022 的 `3513447881416968543`。直接用 `JSON.parse` 和 `JSON.stringify` 会舍入这个值。
 
 `initialize-atlas.ts` 接收完整的 `data/` 与 `gallery/`；发布器将它们保存为 `snapshots/<版本>/data` 与同级 `gallery`，`current` 指向该版 `data`。覆盖报告只读，详情与原图有缺口时仍可输出报告供下一批补全。报告使用的检查点目录不能直接作为初始化来源。
+
+## 详情候选队列
+
+```sh
+bun plugins/atlas/legacy-detail-queue.ts /path/to/legacy-export /path/to/checkpoints
+bun plugins/atlas/capture-legacy-details.ts /path/to/legacy-export /path/to/checkpoints /path/to/detail-candidates 2 hsr/maze_boss/3020 hsr/maze_boss/3021
+```
+
+队列要求 29 个索引均通过固定 SHA-256 复核，旧导出的条目 ID 集合须逐类相符。详情的游戏版本取自固定索引和原站路径。只有星铁末日幻影中旧详情带精确 `id` 和 `name`、且名称与固定索引一致的未固定条目进入候选。3024 缺名称，保留人工核对。其他类别目前只报告已知路径和待核对状态。
+
+每次最多请求 8 份详情，`0` 仅复核现有候选。候选文件含原响应字节的 Base64、原 URL 和本次计算的 SHA-256。重复运行复用经 SHA-256、身份和结构复验的候选。若不同响应通过同一条目身份校验，保留各自的摘要并报告冲突。候选与独立固定检查点分开，覆盖报告和发布入口只使用独立核实的材料。

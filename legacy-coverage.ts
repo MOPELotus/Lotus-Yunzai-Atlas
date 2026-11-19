@@ -27,10 +27,17 @@ interface ArtworkReference extends DirectArtwork {
 }
 
 interface ExportRecord {
+  readonly name: string;
   readonly itemPath: string;
   readonly detailUrl?: string;
+  readonly exactDetailIdentity: boolean;
   readonly artwork: readonly ArtworkReference[];
   readonly placeholderReferences: number;
+}
+
+export function hasExactLegacyDetailIdentity(value: unknown, id: string, name: string) {
+  const detail = object(value);
+  return name.trim().length > 0 && /^[1-9]\d{0,9}$/u.test(id) && (detail.id === id || detail.id === Number(id)) && detail.name === name;
 }
 
 function coverage(expected: number, pinned: number, verified: number) {
@@ -55,7 +62,7 @@ function directArtwork(value: unknown, game: string): ArtworkReference {
   return { path: localPath, url: remoteUrl, sha256, bytes, fieldPath, originalValue };
 }
 
-async function readInventory(root: string, signal?: AbortSignal) {
+export async function readLegacyExportInventory(root: string, signal?: AbortSignal) {
   const data = await realpath(join(root, "data"));
   const validation = await validateAtlasCandidate(data, legacyAtlasSourcePages, signal);
   if (!validation.ok || validation.pages.length !== legacyAtlasSourcePages.length) {
@@ -72,9 +79,12 @@ async function readInventory(root: string, signal?: AbortSignal) {
     const records = new Map<string, ExportRecord>();
     for (const [id, row] of Object.entries(object(page.records))) {
       signal?.throwIfAborted();
-      const path = object(row).path;
-      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error(`旧导出条目路径无效（${game}/${pageId}/${id}）。`);
-      const meta = object(object(JSON.parse(await readFile(await candidateFile(data, path), "utf8"))).meta);
+      const { path, name } = object(row);
+      if (typeof name !== "string" || typeof path !== "string" || !path.startsWith("items/")) {
+        throw new Error(`旧导出条目路径无效（${game}/${pageId}/${id}）。`);
+      }
+      const item = object(JSON.parse(await readFile(await candidateFile(data, path), "utf8")));
+      const meta = object(item.meta);
       const detailDir = game === "hsr" ? hsrDetailDirs[pageId] ?? pageId : pageId;
       const detailUrl = meta.hasDetail === true ? `${atlasSourceOrigin}/${game}/${version}/zh/${detailDir}/${id}.json` : undefined;
       if (detailUrl && meta.detailSourceUrl !== detailUrl) throw new Error(`旧导出详情来源不同（${game}/${pageId}/${id}）。`);
@@ -98,7 +108,8 @@ async function readInventory(root: string, signal?: AbortSignal) {
         expectedByUrl.set(art.url, art);
         artwork.push(art);
       }
-      records.set(id, { itemPath: `data/${path}`, detailUrl, artwork, placeholderReferences });
+      const exactDetailIdentity = hasExactLegacyDetailIdentity(object(item.content).detail, id, name);
+      records.set(id, { name, itemPath: `data/${path}`, detailUrl, exactDetailIdentity, artwork, placeholderReferences });
     }
     pages.set(`${game}/${pageId}`, records);
   }
@@ -113,7 +124,7 @@ async function readInventory(root: string, signal?: AbortSignal) {
 export async function reportLegacyAtlasCoverage(exportRoot: string, cache: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
   if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的原响应检查点目录。");
-  const inventory = await readInventory(exportRoot, signal);
+  const inventory = await readLegacyExportInventory(exportRoot, signal);
   const indexes = await acquireLegacyAtlasIndexes(cache, { maxRequests: 0, signal });
   const pinnedDetails = new Set<string>();
   const verifiedDetails = new Set<string>();
