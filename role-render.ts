@@ -4,8 +4,9 @@ import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
-import { gameNames } from "./catalog.ts";
+import { gameNames, type Game } from "./catalog.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
+import type { WeaponDetails } from "./weapon-data.ts";
 
 export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
@@ -234,23 +235,19 @@ function makeLayout(texture?: Image) {
   return { wrap, text, heading, statRow, material, levelBlocks };
 }
 
-async function roleArtwork(role: RoleDetails, assetRoot: string | undefined) {
+async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
   const images = new Map<string, Image>();
   if (!assetRoot) return images;
   const root = await realpath(assetRoot).catch(() => undefined);
   if (!root) return images;
   const roots = basename(root) === "data" ? [root, dirname(root)] : [root];
-  const paths = new Set([
-    role.overview.icon, role.overview.artwork, ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)),
-    ...role.ranks.map(({ artwork }) => artwork), ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork)),
-  ]);
-  for (const path of paths) {
-    if (!path?.startsWith(`gallery/${role.game}/`) || !/\.(?:png|webp|jpe?g)$/iu.test(path) ||
+  for (const path of new Set(paths)) {
+    if (!path?.startsWith(`gallery/${game}/`) || !/\.(?:png|webp|jpe?g)$/iu.test(path) ||
         !path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part))) continue;
     for (const base of roots) {
       try {
         const resolved = await realpath(join(base, path));
-        if (!resolved.startsWith(join(base, "gallery", role.game) + sep)) continue;
+        if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
         const file = await open(resolved, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
         try {
           const stat = await file.stat();
@@ -277,13 +274,14 @@ function measurePage(head: number, panels: readonly Block[][]) {
 }
 
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
-  const { mode = "auto", scale = 2 } = options;
-  if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
   const backdrop = backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
   const [images, background, texture] = await Promise.all([
-    roleArtwork(role, options.assetRoot), themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
+    galleryImages(role.game, [role.overview.icon, role.overview.artwork,
+      ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
+      ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
+    themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
@@ -292,9 +290,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon);
   const portrait = image(role.overview.artwork);
-  const titleX = icon ? 152 : margin + 20;
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
-  const head = Math.max(header, 118 + title.length * 39);
   const overview: Block[] = [];
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
   if (role.overview.description) overview.push(text(role.overview.description));
@@ -323,7 +319,37 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     ...items.map((item) => material(item.name || item.id || "材料", item.count, image(item.artwork))),
   ]) });
 
-  const game = gameNames[role.game];
+  return renderAtlasPages(pages, title, role.game, role.version, icon, background, options);
+}
+
+export async function renderGenshinWeapon(weapon: WeaponDetails, options: RoleRenderOptions = {}) {
+  const [images, background, texture] = await Promise.all([
+    galleryImages("gi", [weapon.artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, heading, text, statRow } = makeLayout(texture);
+  const icon = weapon.artwork ? images.get(weapon.artwork) : undefined;
+  const title = wrap(weapon.name, icon ? 620 : contentWidth, 33);
+  const overview = weapon.description ? [text(weapon.description)] : [];
+  for (let start = 0; start < weapon.stats.length; start += 3) {
+    overview.push(statRow(weapon.stats.slice(start, start + 3)));
+  }
+  const cards = weapon.refinements.map(({ rank, name, description }) => [
+    heading(name ? `精${rank} · ${name}` : `精${rank}`), ...(description ? [text(description)] : []),
+  ]);
+  // The original equipment card joins its first refinement to the overview, then rounds each remaining card.
+  const panels = [[...overview, ...(cards.shift() ?? [])], ...cards].filter((panel) => panel.length);
+  if (weapon.story) panels.push([heading("武器故事"), text(weapon.story)]);
+  const [page] = await renderAtlasPages([{ section: "武器", panels }], title, "gi", weapon.version, icon, background, options);
+  return page!;
+}
+
+async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
+  background: Image | undefined, { mode = "auto", scale = 2 }: RoleRenderOptions) {
+  if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
+  const game = gameNames[gameId];
+  const titleX = icon ? 152 : margin + 20;
+  const head = Math.max(header, 118 + title.length * 39);
   const output = [];
   for (const [index, { section, panels }] of pages.entries()) {
     const { heights, height } = measurePage(head, panels);
@@ -354,7 +380,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       paintLines(ctx, title, titleX, 30, 33, 39, white);
       const page = `${index + 1}/${pages.length}`;
       paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
-      paintLines(ctx, [role.version ? `资料版本 ${role.version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
+      paintLines(ctx, [version ? `资料版本 ${version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
 
       let y = head;
       for (const [panel, blocks] of panels.entries()) {

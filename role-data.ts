@@ -1,5 +1,5 @@
 import type { Character, Game } from "./catalog.ts";
-import { effectText, label, object } from "./source-values.ts";
+import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 
 export interface RoleText {
   readonly label?: string;
@@ -120,20 +120,6 @@ function text(value: unknown, params?: unknown): string | undefined {
   const clean = label(value).replace(/<IconMap:([\w]+)>/gu, (_, key: string) => `〔${label(zenlessButtons[key]) || key}〕`)
     .replace(/<\/?(?:b|i)>/giu, "");
   return effectText(clean, Array.isArray(params) ? params : undefined, true) || undefined;
-}
-
-function artworkFrom(images: unknown, game: Game): Artwork {
-  const fields = new Map<string, string>();
-  for (const image of values(images)) {
-    const { status, placeholder } = image;
-    const path = label(image.localPath);
-    const field = label(image.fieldPath);
-    if (status === "downloaded" && placeholder === false && !fields.has(field) && field &&
-        path.startsWith(`gallery/${game}/`) &&
-        path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part)) &&
-        /\.(?:webp|png|jpe?g)$/iu.test(path)) fields.set(field, path);
-  }
-  return (...keys) => keys.map((key) => fields.get(key)).find((path) => path !== undefined);
 }
 
 function skillGroup(title: string, cards: RoleSkillCard[]): RoleSkillGroup[] {
@@ -478,7 +464,7 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
-  const artwork = artworkFrom(images, game);
+  const artwork = galleryArtwork(images, game);
   const icon = artwork("detail.icon", "icon");
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);

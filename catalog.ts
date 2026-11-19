@@ -5,6 +5,7 @@ import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challe
 import { compareKey, effectText, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
+import { normalizeGenshinWeapon } from "./weapon-data.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
@@ -308,6 +309,11 @@ export function createAtlasCatalog(directory: string) {
       const { rank } = object(item.content.list);
       const rarity = character.game === "zzz" ? rank === 2 ? "" : zzzRarity(rank) : character.rarity;
       return normalizeRoleDetails(character, item.content, rarity, item.meta.images);
+    },
+    async weaponDetails(entry: AtlasEntry) {
+      if (entry.game !== "gi") return;
+      const item = await readItem(entry, equipmentPages.gi.id);
+      if (item) return normalizeGenshinWeapon(entry, item.content, item.meta.images);
     },
     async equipmentFacts(entry: AtlasEntry) {
       const page = equipmentPages[entry.game];

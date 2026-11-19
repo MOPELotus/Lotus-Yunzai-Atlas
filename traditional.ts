@@ -44,8 +44,9 @@ export function parseRoleShortcut(message: string): { game: Game; query: string 
       (suffix === "影画" && game === "zzz") || suffix === "天赋") return { game, query };
 }
 
-type AtlasNode = string | { readonly type: "image"; readonly file: Uint8Array };
-export type AtlasReply = string | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
+export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
+type AtlasNode = string | AtlasImage;
+export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
 type Lookup = "glued" | "shortcut" | "character";
 
 interface ShortcutEvent {
@@ -79,7 +80,7 @@ export function traditionalAtlasApps(findReply: (query: string, kind: Lookup, ga
 
         async send(event: ShortcutEvent, reply: AtlasReply | undefined) {
           if (reply === undefined) return false;
-          if (typeof reply === "string") {
+          if (typeof reply === "string" || reply.type === "image") {
             await event.reply(reply);
             return;
           }

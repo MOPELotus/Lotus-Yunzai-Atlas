@@ -4,7 +4,7 @@ import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
-import { traditionalAtlasApps, type AtlasReply } from "./traditional.ts";
+import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment } from "./catalog.ts";
@@ -49,7 +49,7 @@ async function bangbooLine(item: AtlasEntry): Promise<string> {
   return ["绝区零", "邦布", item.name, await catalog.bangbooRarity(item) || "等级待核对", `ID ${item.id}`].join(" · ");
 }
 
-async function equipmentQuery(argument: string, command: string, fixedGame?: Game): Promise<string> {
+async function equipmentQuery(argument: string, command: string, fixedGame?: Game): Promise<string | AtlasImage> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
   if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的装备。`;
   if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}名称或 ID`;
@@ -57,6 +57,10 @@ async function equipmentQuery(argument: string, command: string, fixedGame?: Gam
     const result = await catalog.read();
     const matches = findEquipment(result, query, game);
     if (!matches.length) return "未找到匹配的武器、光锥或音擎。";
+    if (matches.length === 1) {
+      const image = await weaponCard(matches[0]!);
+      if (image) return image;
+    }
     const lines = await Promise.all(matches.slice(0, 8).map(equipmentLine));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
@@ -114,6 +118,18 @@ async function characterBook(entry: AtlasEntry): Promise<AtlasReply> {
   }
 }
 
+async function weaponCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
+  const details = await catalog.weaponDetails(entry);
+  if (!details) return;
+  try {
+    const { renderGenshinWeapon } = await import("./role-render.ts");
+    const { png } = await renderGenshinWeapon(details, { assetRoot: dataDirectory });
+    return { type: "image", file: png };
+  } catch {
+    return undefined;
+  }
+}
+
 async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "character" | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
@@ -125,6 +141,10 @@ async function traditionalQuery(
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装或邦布。" : undefined;
     const first = matches[0]!;
     if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
+    if (matches.length === 1 && first.kind === "equipment") {
+      const image = await weaponCard(first.entry);
+      if (image) return image;
+    }
     const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
       switch (kind) {
         case "equipment": return equipmentLine(entry);

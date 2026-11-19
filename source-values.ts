@@ -13,6 +13,20 @@ export function compareKey(value: string): string {
   return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+export function galleryArtwork(images: unknown, game: string) {
+  const fields = new Map<string, string>();
+  for (const image of Array.isArray(images) ? images : Object.values(object(images))) {
+    const { status, placeholder, localPath, fieldPath } = object(image);
+    const path = label(localPath);
+    const field = label(fieldPath);
+    if (status === "downloaded" && placeholder === false && !fields.has(field) && field &&
+        path.startsWith(`gallery/${game}/`) &&
+        path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part)) &&
+        /\.(?:webp|png|jpe?g)$/iu.test(path)) fields.set(field, path);
+  }
+  return (...keys: string[]) => keys.map((key) => fields.get(key)).find((path) => path !== undefined);
+}
+
 export function effectText(
   value: unknown, parameters?: readonly unknown[], bareParameters = false,
 ): string {
