@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promise
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { candidateFile } from "./candidate-gallery.ts";
 import { readLegacyExportInventory } from "./legacy-coverage.ts";
+import { legacyGenshinAchievementPage, readLegacyAchievementArtwork, readPinnedAchievementImage } from "./legacy-achievement-art.ts";
 import { compareLegacyJsonEvidence, evidenceObject, legacyEvidenceType, serializeLegacyJsonEvidence, type EvidenceJson } from "./legacy-json-evidence.ts";
 import { legacyAtlasRecordSources } from "./legacy-record-source-profile.ts";
 import { legacyAtlasSourcePages, legacyIndexedOnlyPages } from "./legacy-source-profile.ts";
@@ -24,6 +25,8 @@ async function prepare(source: string, cache: string, signal?: AbortSignal) {
   if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的图鉴索引检查点目录。");
   const checkpoints = await openAtlasPinnedCache(cache);
   const inventory = await readLegacyExportInventory(source, signal);
+  const achievement = await readLegacyAchievementArtwork(inventory.pages.get(legacyGenshinAchievementPage)!, checkpoints, signal);
+  const achievementPins = new Map(achievement?.assets.map((asset) => [asset.path, asset]));
   const oldData = await realpath(join(source, "data"));
   const legacyMap = object(JSON.parse(await readFile(await candidateFile(oldData, "map.json"), "utf8")));
   const mapGames: Record<string, { game: unknown; locales: { zh: { locale: unknown; pages: Record<string, unknown> } } }> = {};
@@ -65,7 +68,11 @@ async function prepare(source: string, cache: string, signal?: AbortSignal) {
       for (const art of artwork) {
         if (imagePaths.has(art.path)) continue;
         const pin = pinnedArtwork.get(art.path);
-        if (pin && art.url === `${atlasSourceOrigin}${pin[0]}` && art.sha256 === pin[2] && art.bytes === pin[3] && !gallery.has(art.path)) {
+        const achievementPin = achievementPins.get(art.path);
+        if (achievementPin) {
+          const bytes = await readPinnedAchievementImage(achievementPin, checkpoints, signal);
+          if (bytes) gallery.set(art.path, bytes);
+        } else if (pin && art.url === `${atlasSourceOrigin}${pin[0]}` && art.sha256 === pin[2] && art.bytes === pin[3] && !gallery.has(art.path)) {
           const bytes = await checkpoints.read(art.sha256, art.bytes, signal);
           if (bytes?.length === art.bytes && isAtlasSourceWebp(bytes)) gallery.set(art.path, bytes);
         }

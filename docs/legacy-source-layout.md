@@ -6,7 +6,7 @@
 bun plugins/atlas/legacy-coverage.ts /path/to/legacy-export /path/to/checkpoints > coverage.json
 ```
 
-报告中的 `expected` 依据本地旧导出，`pinned` 统计已有独立固定来源和 SHA-256 的对象，`verified` 统计当前检查点已复核的原始字节，`missing` 为期望数减去已复核数。三个游戏固定版的公开索引回放可覆盖全部 29 类、6,055 个条目。2,989 份独立详情与 6,221 张独立原图是旧导出库存。已核实的公开回放目前覆盖其中 4 份详情和 31 张原图。单张原图可用于多类条目，总计按原图库路径、固定 URL 和哈希去重。
+报告中的 `expected` 依据本地旧导出，`pinned` 统计已有独立固定来源和 SHA-256 的对象，`verified` 统计当前检查点已复核的原始字节，`missing` 为期望数减去已复核数。三个游戏固定版的公开索引回放可覆盖全部 29 类、6,055 个条目。2,989 份独立详情与 6,221 张独立原图是旧导出库存。基准回放包含 4 份详情和 31 张原图，原神成就的已获原图会另计到同一报告。单张原图可用于多类条目，总计按原图库路径、固定 URL 和哈希去重。
 
 | 原材料 | 初始化所需目录 |
 | --- | --- |
@@ -51,4 +51,12 @@ bun plugins/atlas/prepare-indexed-only.ts /path/to/legacy-export /path/to/checkp
 
 省略最后一个参数时只输出计划。指定新目录时，将七类的原索引行写入 `preview/data/items/` 对应旧目录，同时生成运行时 `map.json` 和单独的 `status.json`。索引行通过固定摘要和旧导出的逐记录内容核对。包装保留对象顺序、数字原始写法和旧记录 ID，`content.detail` 写为 `null`。
 
-`status.json` 按分类记录字段类型和原图要求，并列出缺失路径、原 URL、SHA-256 与字节数。目前 75 张原神成就图缺独立检查点，其余六类没有图库要求。预览只登记实际复核通过的图库文件。`publishable` 固定为 `false`，本目录供离线查询验收。
+`status.json` 按分类记录字段类型和原图要求，并列出缺失路径、原 URL、SHA-256 与字节数。原神成就需 75 张原图，其余六类没有图库要求。预览只登记实际复核通过的图库文件。`publishable` 固定为 `false`，本目录供离线查询验收。
+
+## 原神成就原图
+
+```sh
+bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path/to/checkpoints 4
+```
+
+索引中的 `icon` 必须逐条对应旧图库的 75 个文件，整份路径、大小和 SHA-256 映射也须匹配已核对旧图库的固定摘要。下载限额为每次 0 至 8 张，`0` 只复核已有文件。CDN 图片路径不含版本，响应只有通过旧 WebP 大小、格式及 SHA-256 校验才会进入检查点。重新生成隔离预览即可使用本批原图。

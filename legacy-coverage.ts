@@ -3,8 +3,10 @@ import { join } from "node:path";
 import { acquireLegacyAtlasIndexes } from "./acquire-legacy-indexes.ts";
 import { acquireLegacyAtlasRecord } from "./acquire-legacy-record.ts";
 import { candidateFile } from "./candidate-gallery.ts";
+import { legacyGenshinAchievementPage, readLegacyAchievementArtwork, readPinnedAchievementImage } from "./legacy-achievement-art.ts";
 import { legacyAtlasRecordSources } from "./legacy-record-source-profile.ts";
 import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import { openAtlasPinnedCache } from "./pinned-source-cache.ts";
 import { atlasSourceOrigin } from "./source-transport.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
@@ -130,6 +132,12 @@ export async function reportLegacyAtlasCoverage(exportRoot: string, cache: strin
   const verifiedDetails = new Set<string>();
   const pinnedArtwork = new Set<string>();
   const verifiedArtwork = new Set<string>();
+  const checkpoints = await openAtlasPinnedCache(cache);
+  const achievement = await readLegacyAchievementArtwork(inventory.pages.get(legacyGenshinAchievementPage)!, checkpoints, signal);
+  for (const art of achievement?.assets ?? []) {
+    pinnedArtwork.add(art.path);
+    if (await readPinnedAchievementImage(art, checkpoints, signal)) verifiedArtwork.add(art.path);
+  }
   const mappedRecords = [];
   for (const [key, record] of Object.entries(legacyAtlasRecordSources)) {
     const { game, pageId, recordId, detail: [detailPath, detailSha256, bytes], artwork } = record;
