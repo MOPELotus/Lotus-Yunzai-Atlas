@@ -19,6 +19,20 @@ test("星见雅旧全名只指向绝区零的雅，保留原索引名与精确�
   expect(findTraditionalEntries(withExact, "星见雅", "zzz", "name").map(({ entry }) => entry)).toEqual([distinct]);
 });
 
+test("安比的全名和零号安比的旧写法分别只返回对应身份", () => {
+  const anby = { game: "zzz", id: "1011", name: "安比", version: "3.3", rarity: "A级", path: "items/1011.json" } as const;
+  const soldierZero = { ...anby, id: "1381", name: "零号·安比", rarity: "S级", path: "items/1381.json" };
+  const page = { game: "zzz", kind: "character", name: "角色", version: "3.3", sampled: false, entries: [anby, soldierZero] } as const;
+  const catalog = { pages: [page], stale: false };
+  for (const [query, entry] of [["安比", anby], ["安比·德玛拉", anby], ["安比德玛拉", anby],
+    ["零号·安比", soldierZero], ["零号安比", soldierZero]] as const) {
+    expect(findTraditionalEntries(catalog, query, "zzz", "name").map(({ entry }) => entry)).toEqual([entry]);
+    expect(findCharacters(catalog, query)).toEqual([entry]);
+  }
+  expect(findTraditionalEntries(catalog, "零号", "zzz", "name")).toEqual([]);
+  expect(findTraditionalEntries(catalog, "安比德玛拉", "hsr", "name")).toEqual([]);
+});
+
 test("角色索引保留同名条目，坏快照不替换已验证的索引", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-"));
   try {

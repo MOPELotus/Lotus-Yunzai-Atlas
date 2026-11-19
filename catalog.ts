@@ -126,18 +126,25 @@ function exactName(value: string): string {
   return value.trim().normalize("NFKC").toLowerCase();
 }
 
+const zzzCharacterAliases = new Map([
+  ["星见雅", { id: "1091", name: "雅" }],
+  ["安比·德玛拉", { id: "1011", name: "安比" }],
+  ["安比德玛拉", { id: "1011", name: "安比" }],
+  ["零号安比", { id: "1381", name: "零号·安比" }],
+]);
+
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
   const literal = exactName(query);
   const key = exact ? literal : compareKey(query);
   if (!key) return [];
-  const miyabiAlias = literal === "星见雅";
+  const aliasTarget = zzzCharacterAliases.get(literal);
   const matches = catalog.pages.flatMap((page) => {
     const kind = kinds.find((kind) => kind === page.kind);
     if (!kind || (game && page.game !== game)) return [];
     return page.entries.map((entry) => {
       const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key);
       // The old full name ranks below an exact record name and above a partial match.
-      const alias = miyabiAlias && kind === "character" && entry.game === "zzz" && entry.id === "1091" && entry.name === "雅";
+      const alias = kind === "character" && entry.game === "zzz" && aliasTarget?.id === entry.id && aliasTarget.name === entry.name;
       return { kind, entry, score: alias ? 2.5 : direct };
     });
   });

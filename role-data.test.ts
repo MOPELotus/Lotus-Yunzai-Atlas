@@ -108,6 +108,23 @@ test("星见雅保留原图册全名，索引短名和其他角色标题不变",
   expect(normalizeRoleDetails(miyabi, { detail: { partner_info: { full_name: "异名" } } }, "S级")?.overview.name).toBe("雅");
 });
 
+test("安比图册只使用对应角色快照中已核对的全名和原图", () => {
+  const anby = { ...entry("zzz"), id: "1011", name: "安比" };
+  const soldierZero = { ...anby, id: "1381", name: "零号·安比" };
+  const detail = (fullName: string, ultimate: string) => ({ detail: {
+    partner_info: { full_name: fullName },
+    skill: { chain: { description: [{ name: ultimate }] } },
+  } });
+  const art = (localPath: string) => [{ fieldPath: "detail.partner_info.role_icon", localPath, status: "downloaded", placeholder: false }];
+  const anbyDetails = normalizeRoleDetails(anby, detail("安比·德玛拉", "终结技：过载引擎"), "A级", art("gallery/zzz/IconRole01.webp"));
+  const zeroDetails = normalizeRoleDetails(soldierZero, detail("安比·德玛拉", "终结技：斩空掠电"), "S级", art("gallery/zzz/IconRole40.webp"));
+  expect(anbyDetails?.overview).toMatchObject({ name: "安比·德玛拉", artwork: "gallery/zzz/IconRole01.webp" });
+  expect(zeroDetails?.overview).toMatchObject({ name: "零号·安比", artwork: "gallery/zzz/IconRole40.webp" });
+  expect(anbyDetails?.skills[0]?.cards[0]?.name).toBe("终结技：过载引擎");
+  expect(zeroDetails?.skills[0]?.cards[0]?.name).toBe("终结技：斩空掠电");
+  expect(normalizeRoleDetails(anby, detail("零号·安比", ""), "A级")?.overview.name).toBe("安比");
+});
+
 test("角色总览优先采用明确登记的主图，独立保留头像与按旧序排列的可验证属性", () => {
   const detail = {
     base_hp: 1191.65, base_atk: 20, crit_rate: 0.05, crit_dmg: 0.5,

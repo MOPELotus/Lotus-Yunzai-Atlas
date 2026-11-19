@@ -460,13 +460,19 @@ function overviewStats(game: Game, detail: RecordValue) {
   return stats.length ? stats : undefined;
 }
 
+const zzzFullNames = new Map([
+  ["1091", { name: "雅", fullName: "星见雅" }],
+  ["1011", { name: "安比", fullName: "安比·德玛拉" }],
+]);
+
 export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
   const partner = object(detail.partner_info);
   const fullName = label(partner.full_name);
-  const title = game === "zzz" && id === "1091" && name === "雅" && fullName === "星见雅" ? fullName : name;
+  const verifiedName = game === "zzz" ? zzzFullNames.get(id) : undefined;
+  const title = verifiedName?.name === name && verifiedName.fullName === fullName ? fullName : name;
   const artwork = galleryArtwork(images, game);
   const icon = artwork("detail.icon", "icon");
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
