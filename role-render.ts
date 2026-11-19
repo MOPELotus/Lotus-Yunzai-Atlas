@@ -1,7 +1,6 @@
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game } from "./catalog.ts";
@@ -9,6 +8,7 @@ import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
 import { label, object } from "./source-values.ts";
+import { atlasThemeDirectories } from "./theme-directories.ts";
 
 export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
@@ -35,14 +35,15 @@ const backgrounds = [
 
 type Background = (typeof backgrounds)[number][1] | "sr";
 type ThemeAsset = `bg/bg-${Background}.webp` | "card-bg.png";
-const themeDirectory = Bun.env.LOTUS_ATLAS_THEME_DIR?.trim() || fileURLToPath(new URL("./assets/miao-theme/", import.meta.url));
+const themeDirectories = atlasThemeDirectories(import.meta.url, Bun.env.LOTUS_ATLAS_THEME_DIR);
 const themeImages = new Map<ThemeAsset, Promise<Image | undefined>>();
 let themeFonts: Promise<void> | undefined;
 
 async function loadThemeFonts(): Promise<void> {
   for (const [family, filename] of [["MiaoWiki", "HYWH-65W.ttf"], ["MiSans", "MiSans-VF.ttf"]] as const) {
-    const paths = [join(themeDirectory, "fonts", filename)];
-    if (family === "MiSans") paths.push(join(dirname(themeDirectory), "fonts", filename));
+    const paths = themeDirectories.flatMap((directory) => family === "MiSans"
+      ? [join(directory, "fonts", filename), join(dirname(directory), "fonts", filename)]
+      : [join(directory, "fonts", filename)]);
     for (const path of paths) {
       if (!await Bun.file(path).exists()) continue;
       FontLibrary.use(family, [path]);
@@ -51,11 +52,21 @@ async function loadThemeFonts(): Promise<void> {
   }
 }
 
+async function readThemeImage(asset: ThemeAsset): Promise<Image | undefined> {
+  for (const directory of themeDirectories) {
+    try {
+      const bytes = await Bun.file(join(directory, asset)).arrayBuffer();
+      return await loadImage(Buffer.from(bytes));
+    } catch {
+      // Try the original module fallback if the persistent directory has no readable copy.
+    }
+  }
+}
+
 function themeImage(asset: ThemeAsset): Promise<Image | undefined> {
   let image = themeImages.get(asset);
   if (!image) {
-    image = Bun.file(join(themeDirectory, asset)).arrayBuffer()
-      .then((bytes) => loadImage(Buffer.from(bytes))).catch(() => undefined);
+    image = readThemeImage(asset);
     themeImages.set(asset, image);
   }
   return image;
@@ -278,27 +289,29 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
 async function starRailPartImages(parts: readonly SetPart[]) {
   const images = new Map<string, Image>();
   if (!parts.length) return images;
-  try {
-    const root = await realpath(themeDirectory);
-    const directory = join(root, "relic-parts");
-    if (await realpath(directory) !== directory) return images;
-    const index = await localAsset(join(directory, "index.json"), 1_048_576);
-    if (!index) return images;
-    const references = object(JSON.parse(index.toString("utf8")));
-    for (const part of parts) {
-      if (!/^[1-9]\d*$/u.test(part.id)) continue;
-      const reference = object(references[`sr-${part.id}`]);
-      const file = label(reference.file);
-      if (label(reference.name) !== part.name || !/^sr-[1-9]\d*-[1-6]\.webp$/u.test(file)) continue;
-      try {
-        const bytes = await localAsset(join(directory, file), maxImageBytes);
-        if (bytes) images.set(part.id, await loadImage(bytes));
-      } catch {
-        // The named snapshot part remains available when its original image is absent.
+  for (const theme of themeDirectories) {
+    try {
+      const root = await realpath(theme);
+      const directory = join(root, "relic-parts");
+      if (await realpath(directory) !== directory) continue;
+      const index = await localAsset(join(directory, "index.json"), 1_048_576);
+      if (!index) continue;
+      const references = object(JSON.parse(index.toString("utf8")));
+      for (const part of parts) {
+        if (images.has(part.id) || !/^[1-9]\d*$/u.test(part.id)) continue;
+        const reference = object(references[`sr-${part.id}`]);
+        const file = label(reference.file);
+        if (label(reference.name) !== part.name || !/^sr-[1-9]\d*-[1-6]\.webp$/u.test(file)) continue;
+        try {
+          const bytes = await localAsset(join(directory, file), maxImageBytes);
+          if (bytes) images.set(part.id, await loadImage(bytes));
+        } catch {
+          // The named snapshot part remains available when its original image is absent.
+        }
       }
+    } catch {
+      // The operator may supply the original background without the optional part archive.
     }
-  } catch {
-    // The operator may supply the original background without the optional part archive.
   }
   return images;
 }
