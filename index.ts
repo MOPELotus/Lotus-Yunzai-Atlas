@@ -122,8 +122,8 @@ async function weaponCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
   const details = await catalog.weaponDetails(entry);
   if (!details) return;
   try {
-    const { renderGenshinWeapon } = await import("./role-render.ts");
-    const { png } = await renderGenshinWeapon(details, { assetRoot: dataDirectory });
+    const { renderWeapon } = await import("./role-render.ts");
+    const { png } = await renderWeapon(details, { assetRoot: dataDirectory });
     return { type: "image", file: png };
   } catch {
     return undefined;

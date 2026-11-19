@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, type AtlasEntry } from "./catalog.ts";
-import { normalizeGenshinWeapon } from "./weapon-data.ts";
+import { normalizeWeapon } from "./weapon-data.ts";
 
 const entry: AtlasEntry = { game: "gi", id: "11401", version: "sample", name: "武器样例", rarity: "四星", path: "items/weapon.json" };
 
@@ -29,7 +29,7 @@ test("原神武器详情保留实测等级、精炼顺序和已下载的图鉴�
     } };
     await writeFile(file, JSON.stringify({ meta, content }));
     const catalog = createAtlasCatalog(root);
-    expect(await catalog.weaponDetails(entry)).toEqual({ name: entry.name, version: entry.version,
+    expect(await catalog.weaponDetails(entry)).toEqual({ game: "gi", name: entry.name, version: entry.version,
       description: "样例描述。", story: "样例故事。", artwork: "gallery/gi/weapon.webp",
       stats: [{ label: "Lv1基础攻击力", value: "41" }, { label: "Lv90基础攻击力", value: "454" },
         { label: "Lv1元素充能效率", value: "13.3%" }, { label: "Lv90元素充能效率", value: "61.3%" },
@@ -47,7 +47,48 @@ test("原神武器详情保留实测等级、精炼顺序和已下载的图鉴�
 });
 
 test("缺少末次突破数值时不推定满级基础攻击，纯索引仍可返回文本", () => {
-  const partial = normalizeGenshinWeapon(entry, { detail: { stats_modifier: { atk: { base: 20, levels: { 1: 1, 90: 10 } } } } }, []);
+  const partial = normalizeWeapon(entry, { detail: { stats_modifier: { atk: { base: 20, levels: { 1: 1, 90: 10 } } } } }, []);
   expect(partial?.stats).toEqual([{ label: "Lv1基础攻击力", value: "20" }]);
-  expect(normalizeGenshinWeapon(entry, { list: { type: "WEAPON_SWORD_ONE_HAND" } }, [])).toBeUndefined();
+  expect(normalizeWeapon(entry, { list: { type: "WEAPON_SWORD_ONE_HAND" } }, [])).toBeUndefined();
+});
+
+test("光锥以真实晋阶上限计算属性，并按各叠影参数还原效果", () => {
+  const details = normalizeWeapon({ ...entry, game: "hsr" }, { detail: {
+    stats: [{ max_level: 20, base_hp: 40, base_attack: 20, base_defence: 12 },
+      { max_level: 80, base_hp: 480, base_hp_add: 4, base_attack: 160, base_attack_add: 2, base_defence: 100 }],
+    refinements: { name: "效果", desc: "提升<unbreak>#1[i]%</unbreak>，持续#2[i]回合。", level: {
+      1: { param_list: [0.12, 3] }, 5: { level: 5, param_list: [0.24, 3] },
+    } },
+  } }, [
+    { fieldPath: "derived.path", localPath: "gallery/hsr/path.webp", status: "downloaded", placeholder: false },
+    { fieldPath: "derived.lightConeMediumIcon", localPath: "gallery/hsr/cone.webp", status: "downloaded", placeholder: false },
+  ]);
+  expect(details?.artwork).toBe("gallery/hsr/cone.webp");
+  expect(details?.stats).toEqual([
+    { label: "Lv1生命", value: "40" }, { label: "Lv80生命", value: "796" },
+    { label: "Lv1攻击", value: "20" }, { label: "Lv80攻击", value: "318" },
+    { label: "Lv1防御", value: "12" },
+  ]);
+  expect(details?.refinements).toEqual([
+    { rank: 1, name: "效果", description: "提升12%，持续3回合。" },
+    { rank: 5, name: "效果", description: "提升24%，持续3回合。" },
+  ]);
+});
+
+test("音擎按等级和晋阶数据计算首末属性，改装保留自身效果", () => {
+  const details = normalizeWeapon({ ...entry, game: "zzz" }, { detail: {
+    desc: "样例说明。", base_property: { name: "基础攻击力", value: 48 },
+    rand_property: { name: "暴击率", format: "{0:0.#%}", value: 960 },
+    level: { 0: { rate: 0 }, 60: { rate: 94090 }, remaster: { rate: 1_000_000 } },
+    stars: { 0: { star_rate: 0, rand_rate: 0 }, 5: { star_rate: 44610, rand_rate: 15000 } },
+    talents: { 1: { name: "技能", desc: "冰属性伤害提升25%。" }, 5: { name: "技能", desc: "冰属性伤害提升50%。" } },
+  } }, []);
+  expect(details?.stats).toEqual([
+    { label: "Lv1基础攻击力", value: "48" }, { label: "Lv60基础攻击力", value: "714" },
+    { label: "Lv1暴击率", value: "9.6%" }, { label: "Lv60暴击率", value: "24%" },
+  ]);
+  expect(details?.refinements).toEqual([
+    { rank: 1, name: "技能", description: "冰属性伤害提升25%。" },
+    { rank: 5, name: "技能", description: "冰属性伤害提升50%。" },
+  ]);
 });

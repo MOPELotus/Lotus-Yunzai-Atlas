@@ -322,25 +322,28 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   return renderAtlasPages(pages, title, role.game, role.version, icon, background, options);
 }
 
-export async function renderGenshinWeapon(weapon: WeaponDetails, options: RoleRenderOptions = {}) {
+export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOptions = {}) {
+  const { game } = weapon;
   const [images, background, texture] = await Promise.all([
-    galleryImages("gi", [weapon.artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
+    galleryImages(game, [weapon.artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
     themeFonts ??= loadThemeFonts(),
   ]);
   const { wrap, heading, text, statRow } = makeLayout(texture);
   const icon = weapon.artwork ? images.get(weapon.artwork) : undefined;
   const title = wrap(weapon.name, icon ? 620 : contentWidth, 33);
-  const overview = weapon.description ? [text(weapon.description)] : [];
+  const overview = [text(weapon.description ?? "")];
   for (let start = 0; start < weapon.stats.length; start += 3) {
     overview.push(statRow(weapon.stats.slice(start, start + 3)));
   }
+  const section = { gi: "武器", hsr: "光锥", zzz: "音擎" }[game];
+  const grade = { gi: "精", hsr: "叠影", zzz: "改装等级 " }[game];
   const cards = weapon.refinements.map(({ rank, name, description }) => [
-    heading(name ? `精${rank} · ${name}` : `精${rank}`), ...(description ? [text(description)] : []),
+    heading(name ? `${grade}${rank} · ${name}` : `${grade}${rank}`), ...(description ? [text(description)] : []),
   ]);
   // The original equipment card joins its first refinement to the overview, then rounds each remaining card.
   const panels = [[...overview, ...(cards.shift() ?? [])], ...cards].filter((panel) => panel.length);
   if (weapon.story) panels.push([heading("武器故事"), text(weapon.story)]);
-  const [page] = await renderAtlasPages([{ section: "武器", panels }], title, "gi", weapon.version, icon, background, options);
+  const [page] = await renderAtlasPages([{ section, panels }], title, game, weapon.version, icon, background, options);
   return page!;
 }
 
