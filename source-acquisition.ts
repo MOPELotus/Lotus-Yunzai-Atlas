@@ -6,7 +6,7 @@ import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
-import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
+import { atlasSourceOrigin, isAtlasSourceWebp, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 const locale = "zh";
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
@@ -227,12 +227,6 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
     types.length === 1 && types[0] === String(list.type) && engineDetail(item, list);
 }
 
-function webp(bytes: Buffer): boolean {
-  return bytes.length >= 20 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.readUInt32LE(4) === bytes.length - 8 &&
-    bytes.toString("ascii", 8, 12) === "WEBP" && ["VP8 ", "VP8L", "VP8X"].includes(bytes.toString("ascii", 12, 16)) &&
-    bytes.readUInt32LE(16) <= bytes.length - 20;
-}
-
 async function readIcon(name: string, paths: readonly string[], category: SourcePage, target: string,
   signal: AbortSignal, request: AtlasSourceFetch) {
   const { game, folder } = pages[category];
@@ -241,7 +235,7 @@ async function readIcon(name: string, paths: readonly string[], category: Source
     const remoteUrl = `${atlasSourceOrigin}/assets/${game}/${path}.webp`;
     const bytes = await readAtlasSourceBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request);
     if (!bytes) continue;
-    if (!webp(bytes)) throw new Error(`${folder}来源图标不是有效的 WebP 文件。`);
+    if (!isAtlasSourceWebp(bytes)) throw new Error(`${folder}来源图标不是有效的 WebP 文件。`);
     await mkdir(dirname(join(target, localPath)), { recursive: true });
     await writeFile(join(target, localPath), bytes, { flag: "wx" });
     return { remoteUrl, localPath, sha256: createHash("sha256").update(bytes).digest("hex"),
