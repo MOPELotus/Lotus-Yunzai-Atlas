@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+import { abyssMode, challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
+  onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -181,7 +182,8 @@ async function challengeDetails(entry: AtlasEntry, mode: ChallengeMode, current:
   const lines = [challengeTitle(entry, mode), `快照版本 ${entry.version}`];
   if (current) lines.push("当前轮换 · 中国服（UTC+8）");
   if (window) {
-    const origin = window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
+    const origin = hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
+      : window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
     lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
   } else {
     lines.push("该条目缺少已知的起止时间。");
@@ -405,6 +407,18 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
+    if (mode.id === abyssMode.id) {
+      const abyss = await catalog.abyssDetails(entry, result, currentRequested);
+      if (abyss) {
+        try {
+          const { renderAbyss } = await import("./role-render.ts");
+          const { png } = await renderAbyss(abyss, { assetRoot: catalog.assetRoot(entry) });
+          return { type: "image", file: png };
+        } catch {
+          // The verified challenge summary remains usable without rendering.
+        }
+      }
+    }
     const lines = await challengeDetails(entry, mode, currentRequested, facts);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -446,6 +460,8 @@ export default {
     "#本期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     "#本期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     "#本期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
+    "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
+    "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

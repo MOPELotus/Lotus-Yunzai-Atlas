@@ -10,6 +10,7 @@ import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
+import type { AbyssDetails } from "./abyss-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -496,6 +497,39 @@ export async function renderTheater(theater: TheaterDetails, options: RoleRender
     if (act.subtitle) blocks.push(text(act.subtitle));
     if (act.description) blocks.push(text(act.description));
     addCards(act.enemies);
+  }
+  const icon = artwork ? images.get(artwork) : undefined;
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "gi", version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderAbyss(abyss: AbyssDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, scheduleConflict, effects, rooms } = abyss;
+  const enemies = rooms.flatMap((room) => room.sides.flatMap((side) => side.enemies));
+  const [images, background, texture] = await Promise.all([
+    galleryImages("gi", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const period = scheduleConflict ? `快照时间 ${range}（与实装公告冲突，待核对）`
+    : window?.from === "export" ? `导出时间 ${range}（轮换待核对）`
+      : range || "轮换时间待核对";
+  const blocks = [text(period), heading("环境与全局效果")];
+  for (const { title, description } of effects) blocks.push(heading(title), text(description));
+  const hpFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+  for (const room of rooms) {
+    blocks.push(heading(room.name), text([room.level ? `Lv${room.level}` : "", room.goal].filter(Boolean).join(" · ")));
+    for (const side of room.sides) {
+      blocks.push(heading(side.name));
+      if (!side.enemies.length) blocks.push(text("阵容待核对"));
+      for (const enemy of side.enemies) {
+        blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
+        if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
+        if (enemy.description) blocks.push(text(enemy.description));
+      }
+    }
   }
   const icon = artwork ? images.get(artwork) : undefined;
   const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),

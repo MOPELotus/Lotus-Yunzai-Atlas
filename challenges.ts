@@ -3,9 +3,10 @@ import { compareKey, effectText, label, object } from "./source-values.ts";
 
 export const onslaughtMode = { game: "gi", id: "leyline", name: "幽境危战", aliases: ["幽境", "危战", "地脉异常"] } as const;
 export const theaterMode = { game: "gi", id: "rolecombat", name: "幻想真境剧诗", aliases: ["幻想真境"] } as const;
+export const abyssMode = { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] } as const;
 
 export const challengeModes = [
-  { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] },
+  abyssMode,
   theaterMode,
   onslaughtMode,
   { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌"] },
@@ -32,6 +33,12 @@ interface ChallengeWindow {
 
 const datedRotations = new Set<ChallengeMode["id"]>(["tower", "rolecombat", "maze", "maze_extra", "maze_boss", "shiyu", "boss"]);
 
+export function hasChallengeScheduleConflict(mode: ChallengeMode, id: string, window: ChallengeWindow | undefined) {
+  // The official 7.2 notice places this blessing in the December 16 rotation.
+  // https://ys.mihoyo.com/main/news/detail/167205
+  return mode.id === "tower" && id === "126" && window?.from === "live" && window.begin === "2027-01-16 04:00:00";
+}
+
 export function hasChallengeRotation(mode: ChallengeMode): boolean {
   return datedRotations.has(mode.id);
 }
@@ -52,8 +59,7 @@ export async function findCurrentChallenge<Entry extends { readonly id: string }
     const begin = Date.parse(window.begin.replace(" ", "T") + "+08:00");
     const end = Date.parse(window.end.replace(" ", "T") + "+08:00") + (lastSecondIncluded ? 1_000 : 0);
     if (!(begin <= now && now < end)) continue;
-    // 7.2 calls this blessing the December 16 rotation. The January field in the export conflicts with it.
-    if (mode.id === "tower" && entry.id === "126" && window.begin === "2027-01-16 04:00:00") return;
+    if (hasChallengeScheduleConflict(mode, entry.id, window)) return;
     if (current) return;
     current = { entry, facts };
   }

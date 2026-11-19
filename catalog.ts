@@ -9,6 +9,7 @@ import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
 import { normalizeOnslaught } from "./onslaught-data.ts";
 import { normalizeTheater } from "./theater-data.ts";
+import { normalizeAbyss } from "./abyss-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -320,6 +321,27 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       artwork: galleryArtwork(item.meta.images, entry.game)() };
   }
 
+  function genshinRecords(entry: AtlasEntry, catalog: Catalog, kind: "character" | "monster") {
+    const root = entryRoots.get(entry);
+    return new Map((catalog.pages.find((page) => page.game === "gi" && page.kind === kind)?.entries ?? [])
+      .filter((record) => root && entryRoots.get(record) === root)
+      .map((record) => [record.id, record]));
+  }
+
+  function genshinEnemyLookup(entry: AtlasEntry, catalog: Catalog) {
+    const enemies = genshinRecords(entry, catalog, "monster");
+    const pending = new Map<string, Promise<MonsterDetails | undefined>>();
+    return (id: string, name: string) => {
+      const enemy = enemies.get(id);
+      if (!enemy || (name && enemy.name !== name)) return Promise.resolve(undefined);
+      const known = pending.get(id);
+      if (known) return known;
+      const details = monsterDetails(enemy);
+      pending.set(id, details);
+      return details;
+    };
+  }
+
   return {
     assetRoot(entry: AtlasEntry): string {
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
@@ -382,14 +404,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       if (entry.game !== "gi") return;
       const item = await readItem(entry, "rolecombat");
       if (!item) return;
-      const root = entryRoots.get(entry);
-      const related = (kind: "character" | "monster") => new Map(
-        (catalog.pages.find((page) => page.game === "gi" && page.kind === kind)?.entries ?? [])
-          .filter((record) => root && entryRoots.get(record) === root)
-          .map((record) => [record.id, record]),
-      );
-      const characters = related("character");
-      const enemies = related("monster");
+      const characters = genshinRecords(entry, catalog, "character");
       return normalizeTheater(entry, item.content, item.meta.images, {
         async character(id) {
           const character = characters.get(id);
@@ -397,11 +412,13 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
           const details = await readItem(character, "character");
           return { name: character.name, artwork: galleryArtwork(details?.meta.images, "gi")("icon", "detail.icon") };
         },
-        enemy(id, name) {
-          const enemy = enemies.get(id);
-          return enemy && (!name || enemy.name === name) ? monsterDetails(enemy) : Promise.resolve(undefined);
-        },
+        enemy: genshinEnemyLookup(entry, catalog),
       }, current);
+    },
+    async abyssDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
+      if (entry.game !== "gi") return;
+      const item = await readItem(entry, "tower");
+      if (item) return normalizeAbyss(entry, item.content, item.meta.images, genshinEnemyLookup(entry, catalog), current);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {
