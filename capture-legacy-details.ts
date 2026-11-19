@@ -32,7 +32,7 @@ function detailMatches(entry: LegacyDetailQueueEntry, bytes: Uint8Array): boolea
   }
 }
 
-function readEvidence(entry: LegacyDetailQueueEntry, bytes: Buffer | undefined) {
+function decodeEvidence(entry: LegacyDetailQueueEntry, bytes: Buffer | undefined) {
   if (!bytes) return;
   try {
     const data = object(JSON.parse(utf8.decode(bytes)));
@@ -41,10 +41,25 @@ function readEvidence(entry: LegacyDetailQueueEntry, bytes: Buffer | undefined) 
     const body = Buffer.from(bodyBase64, "base64");
     if (typeof sha256 !== "string" || body.length !== data.bytes || body.length > detailBytes || body.toString("base64") !== bodyBase64 ||
         hash(body) !== sha256 || !detailMatches(entry, body)) return;
-    return { sha256, bytes: body.length };
+    return { sha256, bytes: body.length, body };
   } catch {
     return;
   }
+}
+
+function checkpointPrefix(entry: LegacyDetailQueueEntry): string {
+  return `${hash(JSON.stringify([entry.key, entry.url, entry.name]))}.`;
+}
+
+export async function readLegacyDetailCandidate(entry: LegacyDetailQueueEntry, path: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const file = basename(path);
+  const directory = await realpath(dirname(path));
+  if (!candidateFilename.test(file) || !file.startsWith(checkpointPrefix(entry))) throw new Error("候选文件名与固定条目身份不符。");
+  const cache = await openAtlasCheckpointDirectory(directory, candidateFilename);
+  const candidate = decodeEvidence(entry, await cache.read(file, envelopeBytes, signal));
+  if (!candidate || file !== `${checkpointPrefix(entry)}${candidate.sha256}.candidate.json`) throw new Error("详情候选未通过原字节复核。");
+  return candidate;
 }
 
 /** Capture candidate bytes only. A locally computed digest does not establish independent source pinning. */
@@ -77,8 +92,10 @@ export async function captureLegacyDetails(exportRoot: string, indexCache: strin
   async function readCandidates(entry: LegacyDetailQueueEntry, prefix: string) {
     const candidates = [];
     for (const file of (await cache.names()).filter((file) => file.startsWith(prefix)).sort()) {
-      const evidence = readEvidence(entry, await cache.read(file, envelopeBytes, signal));
-      if (evidence && file === `${prefix}${evidence.sha256}.candidate.json`) candidates.push({ file, evidence });
+      const candidate = decodeEvidence(entry, await cache.read(file, envelopeBytes, signal));
+      if (candidate && file === `${prefix}${candidate.sha256}.candidate.json`) {
+        candidates.push({ file, evidence: { sha256: candidate.sha256, bytes: candidate.bytes } });
+      }
     }
     return candidates;
   }
@@ -86,7 +103,7 @@ export async function captureLegacyDetails(exportRoot: string, indexCache: strin
   const records = [];
   for (const entry of selected) {
     signal?.throwIfAborted();
-    const prefix = `${hash(JSON.stringify([entry.key, entry.url, entry.name]))}.`;
+    const prefix = checkpointPrefix(entry);
     let candidates = await readCandidates(entry, prefix);
     let state: "candidate-cached" | "candidate-captured" | "candidate-conflict" | "pending" | "request-failed" | "identity-mismatch" =
       candidates.length ? "candidate-cached" : "pending";

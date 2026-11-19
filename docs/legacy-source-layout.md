@@ -30,3 +30,14 @@ bun plugins/atlas/capture-legacy-details.ts /path/to/legacy-export /path/to/chec
 队列要求 29 个索引均通过固定 SHA-256 复核，旧导出的条目 ID 集合须逐类相符。详情的游戏版本取自固定索引和原站路径。只有星铁末日幻影中旧详情带精确 `id` 和 `name`、且名称与固定索引一致的未固定条目进入候选。3024 缺名称，保留人工核对。其他类别目前只报告已知路径和待核对状态。
 
 每次最多请求 8 份详情，`0` 仅复核现有候选。候选文件含原响应字节的 Base64、原 URL 和本次计算的 SHA-256。重复运行复用经 SHA-256、身份和结构复验的候选。若不同响应通过同一条目身份校验，保留各自的摘要并报告冲突。候选与独立固定检查点分开，覆盖报告和发布入口只使用独立核实的材料。
+
+## 候选与旧导出复核
+
+```sh
+bun plugins/atlas/review-legacy-details.ts /path/to/legacy-export /path/to/checkpoints hsr/maze_boss/3021 /path/to/record.candidate.json
+bun plugins/atlas/review-legacy-details.ts /path/to/legacy-export /path/to/checkpoints --indexed-only
+```
+
+详情复核报告独立旧详情摘要、候选原始响应 SHA-256 以及带 JSON Pointer 的差异。旧详情摘要对对象键排序，同时保留所有原数字词法。候选摘要来自校验并解码后的原始响应字节。末日 3020 与 3021 各有 9 个 `stage_name` 尾数差异，其旧值均符合 JS 整数舍入，状态为 `legacy-integer-rounding`，仍属候选。
+
+`--indexed-only` 比较旧 `content.list` 与已固定原索引行。三款游戏的成就以及星铁 `monstervalue`、`EliteGroup`、`HardLevelGroup` 和 `InfiniteEliteGroup` 都没有独立详情请求，这七类在核实的旧导出中共 3,066 条。复验报告按类显示实测相符行数，不计入独立详情覆盖。
