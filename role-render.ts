@@ -15,7 +15,7 @@ import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
 import type { ShiyuDetails } from "./shiyu-data.ts";
 import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
 import type { ZzzChallengeRoom } from "./zzz-challenge-data.ts";
-import { label, object } from "./source-values.ts";
+import { isAtlasGalleryPath, label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
 export interface RoleRenderOptions {
@@ -298,8 +298,7 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
   if (!root) return images;
   const roots = basename(root) === "data" ? [root, dirname(root)] : [root];
   for (const path of new Set(paths)) {
-    if (!path?.startsWith(`gallery/${game}/`) || !/\.(?:png|webp|jpe?g)$/iu.test(path) ||
-        !path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part))) continue;
+    if (!isAtlasGalleryPath(path, game)) continue;
     for (const base of roots) {
       try {
         const resolved = await realpath(join(base, path));

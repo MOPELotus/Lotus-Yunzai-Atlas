@@ -43,6 +43,11 @@ function targetVersion(manifest: unknown, game: Game): string | undefined {
   if (version(latest) && (game === "zzz" || !latest.includes("+")) && Array.isArray(available) && available.includes(latest)) return latest;
 }
 
+function publishedZzzVersion(manifest: unknown): string | undefined {
+  const { live, available } = object(object(manifest).zzz);
+  if (version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live)) return live;
+}
+
 function newer(target: string, local: string, game: Game): boolean {
   if (!version(local) || (game !== "zzz" && local.includes("+"))) return false;
   const [targetCore = "", targetBuild] = target.split("+");
@@ -89,19 +94,18 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       entries.push({ ...current, kind, action: "audit-rotation" });
       continue;
     }
-    entries.push(planVersionedPage(current, local, targetVersion(manifest, game)));
+    const target = game === "zzz" && pageId === "equipment" ? publishedZzzVersion(manifest) : targetVersion(manifest, game);
+    entries.push(planVersionedPage(current, local, target));
   }
   return buildPlan(entries);
 }
 
 /** ZZZ challenge acquisition uses the published build and verifies each source window separately. */
 export function planPublishedZzzRefresh(manifest: unknown, local: AtlasCandidateValidation, pageId: "boss" | "shiyu"): AtlasUpdatePlan {
-  const { live, available } = object(object(manifest).zzz);
-  const target = version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live) ? live : undefined;
   const scope = { game: "zzz", pageId } as const;
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
-  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, target)]);
+  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedZzzVersion(manifest))]);
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {

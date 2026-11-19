@@ -13,16 +13,23 @@ export function compareKey(value: string): string {
   return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+export const branchAndBladeIcon = "SuitBranch&BladeSong";
+
+export function isAtlasGalleryPath(path: string | undefined, game: string): path is string {
+  if (!path?.startsWith(`gallery/${game}/`) || !/\.(?:png|webp|jpe?g)$/iu.test(path)) return false;
+  if (game === "zzz" && path === `gallery/zzz/${branchAndBladeIcon}.webp`) return true;
+  return path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part));
+}
+
 export function galleryArtwork(images: unknown, game: string) {
   const fields = new Map<string, string>();
   for (const image of Array.isArray(images) ? images : Object.values(object(images))) {
     const { status, placeholder, localPath, fieldPath } = object(image);
     const path = label(localPath);
     const field = label(fieldPath);
-    if (status === "downloaded" && placeholder === false && !fields.has(field) && field &&
-        path.startsWith(`gallery/${game}/`) &&
-        path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part)) &&
-        /\.(?:webp|png|jpe?g)$/iu.test(path)) fields.set(field, path);
+    if (status === "downloaded" && placeholder === false && !fields.has(field) && field && isAtlasGalleryPath(path, game)) {
+      fields.set(field, path);
+    }
   }
   // A generic Atlas card uses the first downloaded image in source order.
   return (...keys: string[]) => keys.length ? keys.map((key) => fields.get(key)).find((path) => path !== undefined)

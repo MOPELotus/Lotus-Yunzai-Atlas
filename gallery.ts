@@ -2,11 +2,11 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import type { Game } from "./catalog.ts";
+import { isAtlasGalleryPath } from "./source-values.ts";
 
 export async function readAtlasGalleryImage(root: string, game: Game, path: string | undefined,
   maxBytes = 1024 * 1024): Promise<Uint8Array | undefined> {
-  if (!path?.startsWith(`gallery/${game}/`) || !/\.(?:png|webp|jpe?g)$/iu.test(path) ||
-      !path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part))) return;
+  if (!isAtlasGalleryPath(path, game)) return;
   const directory = await realpath(root).catch(() => undefined);
   if (!directory) return;
   const roots = basename(directory) === "data" ? [directory, dirname(directory)] : [directory];

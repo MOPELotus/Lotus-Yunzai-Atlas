@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
-import { createAtlasRuntimeCatalog, findBangboos, findEquipment } from "./catalog.ts";
+import { createAtlasRuntimeCatalog, findBangboos, findEquipment, findSets } from "./catalog.ts";
 import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
 import { refreshAtlasSource } from "./refresh-source.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
@@ -245,10 +245,86 @@ test("光锥详情、原图或命途图缺失时保留旧发布指针", () => fi
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
 
-test("刷新 CLI 接受四个已支持的游戏和分类组合", () => fixture(async (workspace) => {
+const discLive = "3.3";
+const discPrevious = "3.2";
+const discScope = { game: "zzz", pageId: "equipment" } as const;
+const discManifest = async () => ({ zzz: { live: discLive, latest: original, available: [discLive, original] } });
+const discIndex = (version: string) => `https://static.nanoka.cc/zzz/${version}/equipment.json`;
+const discDetail = (version: string, id: number) => `https://static.nanoka.cc/zzz/${version}/zh/equipment/${id}.json`;
+const discIcon = (id: number) => id === 32700 ? "SuitBranch&BladeSong" : `SuitFixture${id}`;
+const discAsset = (id: number) => `https://static.nanoka.cc/assets/zzz/${discIcon(id)}.webp`;
+function discSource(version: string, ids: readonly number[] = [31000]) {
+  const rows = ids.map((id) => ({
+    id, icon: `UI/Sprite/A1DynamicLoad/IconSuit/UnPacker/${discIcon(id)}.png`,
+    zh: { name: `测试驱动盘 ${id} `, desc2: "暴击率+8%。", desc4: "造成的伤害提高15%。" },
+  }));
+  return async (url: string) => {
+    if (url === discIndex(version)) return Response.json(Object.fromEntries(rows.map(({ id, icon, zh }) => [id, { icon, zh }])));
+    const row = rows.find(({ id }) => url === discDetail(version, id));
+    if (row) return Response.json({ id: row.id, icon: row.icon, icon2: row.icon, ...row.zh, story: "套装故事原文。" });
+    if (ids.some((id) => url === discAsset(id))) return new Response(new Uint8Array(webp));
+    throw new Error(`意外的驱动盘来源请求 ${url}`);
+  };
+}
+
+test("驱动盘按正式版单类更新，保留旧的三处原图引用和两页实际数据", () => fixture(async (workspace, root) => {
+  const donor = join(workspace, "drive-disc");
+  const scope = [{ ...discScope, version: discPrevious }];
+  await acquireAtlasSource(donor, scope, undefined, discSource(discPrevious));
+  expect((await applyAtlasCandidate(root, donor, scope)).status).toBe("published");
+  await rm(donor, { recursive: true });
+  const calls: string[] = [];
+  const collect = discSource(discLive, [31000, 32700]);
+  const request = async (url: string) => { calls.push(url); return collect(url); };
+  expect(await refreshAtlasSource(root, { selection: "zzz/equipment", manifest: discManifest, request }))
+    .toEqual({ status: "published", version: 2, directory: join(root, "snapshots/2/data") });
+  expect(calls).toEqual([discIndex(discLive), discDetail(discLive, 31000), discAsset(31000),
+    discDetail(discLive, 32700), discAsset(32700)]);
+  const catalog = createAtlasRuntimeCatalog(root);
+  const index = await catalog.read();
+  const [disc] = findSets(index, "32700", "zzz");
+  const artwork = "gallery/zzz/SuitBranch&BladeSong.webp";
+  expect(await catalog.setDetails(disc!)).toMatchObject({
+    name: "测试驱动盘 32700", version: discLive, parts: [], artwork, story: "套装故事原文。",
+    effects: [{ pieces: 2, text: "暴击率+8%。" }, { pieces: 4, text: "造成的伤害提高15%。" }],
+  });
+  const item = await Bun.file(join(catalog.assetRoot(disc!), disc!.path)).json();
+  expect(item.meta.images.map(({ fieldPath, localPath }: { fieldPath: string; localPath: string }) => [fieldPath, localPath]))
+    .toEqual([["icon", artwork], ["detail.icon", artwork], ["detail.icon2", artwork]]);
+  expect(findBangboos(index, "53001")[0]?.version).toBe(original);
+  calls.length = 0;
+  expect(await refreshAtlasSource(root, { selection: "zzz/equipment", manifest: discManifest, request }))
+    .toEqual({ status: "current", version: discLive });
+  expect(calls).toEqual([]);
+}));
+
+test("驱动盘来源未正式发布、缺原图或丢失既有资料时保留快照", () => fixture(async (workspace) => {
+  const root = join(workspace, "drive-disc");
+  await acquireAtlasSource(root, [{ ...discScope, version: "3.4" }], undefined, discSource("3.4"));
+  const unexpected = async () => { throw new Error("禁止请求详情"); };
+  expect(await refreshAtlasSource(root, { selection: "zzz/equipment", manifest: discManifest, request: unexpected }))
+    .toEqual({ status: "review", reason: "unproven-upgrade" });
+  expect(await refreshAtlasSource(root, { selection: "zzz/equipment", manifest: manifest(original), request: unexpected }))
+    .toEqual({ status: "review", reason: "manifest-unavailable" });
+  await rm(root, { recursive: true });
+  await acquireAtlasSource(root, [{ ...discScope, version: discPrevious }], undefined, discSource(discPrevious));
+  const run = (request: ReturnType<typeof discSource>) => refreshAtlasSource(root, { selection: "zzz/equipment", manifest: discManifest, request });
+  const collect = discSource(discLive);
+  await expect(run(async (url) => url === discAsset(31000) ? missing() : collect(url))).rejects.toThrow("图标缺失");
+  await expect(run(async (url) => {
+    const response = await collect(url);
+    if (url !== discDetail(discLive, 31000)) return response;
+    return Response.json({ ...await response.json(), icon2: "unknown", story: "" });
+  })).rejects.toThrow("详情与来源索引");
+  expect(await run(discSource(discLive, [34200]))).toMatchObject({ status: "invalid", issues: ["驱动盘 31000 缺少已有套装资料。"] });
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
+  expect(await readdir(workspace)).toEqual(["atlas", "drive-disc"]);
+}));
+
+test("刷新 CLI 接受已支持的游戏和分类组合", () => fixture(async (workspace) => {
   const script = join(import.meta.dir, "refresh-source.ts");
   const absent = join(workspace, "missing");
-  for (const selection of ["hsr/lightcone", "zzz/bangboo", "zzz/weapon", "gi/weapon"]) {
+  for (const selection of ["hsr/lightcone", "zzz/bangboo", "zzz/weapon", "gi/weapon", "zzz/equipment", "zzz/boss", "zzz/shiyu"]) {
     const command = Bun.spawnSync([process.execPath, script, absent, selection]);
     expect(command.exitCode).toBe(1);
     expect(JSON.parse(command.stdout.toString())).toEqual({ status: "review", reason: "local-unverified" });

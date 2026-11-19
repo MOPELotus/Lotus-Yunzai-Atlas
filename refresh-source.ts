@@ -14,6 +14,7 @@ const itemIcons = ["icon", "detail.icon"] as const;
 const sourcePages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "邦布", iconFields: itemIcons },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "音擎", iconFields: itemIcons },
+  "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
@@ -23,7 +24,7 @@ const sourcePages = {
 type SourceSelection = keyof typeof sourcePages;
 type SourcePage = typeof sourcePages[SourceSelection];
 const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone",
-  boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
+  equipment: "zzz/equipment", boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
 
 function isSourceSelection(value: unknown): value is SourceSelection {
   return typeof value === "string" && Object.hasOwn(sourcePages, value);
@@ -69,13 +70,15 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   return assets;
 }
 
-function regressions(title: string, before: Awaited<ReturnType<typeof pageAssets>>,
-  after: Awaited<ReturnType<typeof pageAssets>>, preserveRotation: boolean) {
+function regressions({ title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
+  after: Awaited<ReturnType<typeof pageAssets>>) {
+  const preserveRotation = pageId === "boss" || pageId === "shiyu";
   const issues: string[] = [];
   for (const [id, old] of before) {
     const next = after.get(id);
     if (!next) {
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
+      if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       continue;
     }
     if (preserveRotation && (old.name !== next.name || (old.window?.from === "live" &&
@@ -125,7 +128,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     const current = await readAtlasSnapshotVersion(directory);
     if (current !== baseline.version) return { status: "stale", current };
     const after = await pageAssets(join(source.directory, "data"), page, signal);
-    const issues = regressions(page.title, before, after, rotationPage);
+    const issues = regressions(page, before, after);
     if (issues.length) return { status: "invalid", issues };
     publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline);
     return publication;

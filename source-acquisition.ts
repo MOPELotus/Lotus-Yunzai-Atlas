@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { object } from "./source-values.ts";
+import { branchAndBladeIcon, effectText, object } from "./source-values.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
@@ -11,7 +11,9 @@ const locale = "zh";
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
 const weaponImages = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
+const driveDiscImages = "UI/Sprite/A1DynamicLoad/IconSuit/UnPacker";
 const bangbooIcon = new RegExp(`^${bangbooImages}/([A-Za-z0-9_-]{1,120})\\.png$`, "u");
+const driveDiscIcon = new RegExp(`^${driveDiscImages}/(Suit[A-Za-z0-9_-]{1,116}|${branchAndBladeIcon})\\.png$`, "u");
 const weaponIcon = /^Weapon_[A-Za-z0-9_-]{1,113}$/u;
 const genshinWeaponIcon = /^[A-Za-z0-9_]{1,120}$/u;
 const genshinWeaponTypes = new Set(["WEAPON_SWORD_ONE_HAND", "WEAPON_CLAYMORE", "WEAPON_POLE", "WEAPON_CATALYST", "WEAPON_BOW", "ITEM_TPS_WEAPON"]);
@@ -27,6 +29,7 @@ const lightconePaths = new Set(["Warrior", "Rogue", "Mage", "Shaman", "Warlock",
 const pages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
+  "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
@@ -104,6 +107,14 @@ function sourceIndex(category: SourcePage, value: unknown) {
   return entries.map(([id, value]) => {
     const list = object(value);
     const { zh, rank, icon, type } = list;
+    if (category === "zzz/equipment") {
+      const texts = object(zh);
+      const { name } = texts;
+      const iconName = typeof icon === "string" ? driveDiscIcon.exec(icon)?.[1] : undefined;
+      if (!/^[1-9]\d{0,9}$/u.test(id) || typeof name !== "string" || !name.trim() || !iconName ||
+          !effectText(texts.desc2) || !effectText(texts.desc4)) throw new Error("驱动盘来源索引条目结构无效。");
+      return { id, list, name: name.trim(), rarity: "未分类", iconName };
+    }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
     if (category === "hsr/lightcone") {
@@ -208,6 +219,11 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
   if (category === "gi/weapon") return genshinWeaponDetail(item, id, list);
+  if (category === "zzz/equipment") {
+    const { name: sourceName, desc2, desc4 } = object(list.zh);
+    return item.id === Number(id) && item.name === sourceName && item.desc2 === desc2 && item.desc4 === desc4 &&
+      item.icon === list.icon && item.icon2 === list.icon && Boolean(effectText(item.story));
+  }
   if (item.id !== Number(id) || item.rarity !== rank) return false;
   if (category === "zzz/bangboo") return true;
   const types = Object.keys(object(item.weapon_type));
@@ -248,8 +264,8 @@ export async function acquireAtlasSource(destination: string, requirements: read
   const category = `${scope?.game}/${scope?.pageId}`;
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
   if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
-      !versions.test(scope.version) || ((scope.game !== "zzz" || publishedChallenge) && scope.version.includes("+"))) {
-    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、音擎和正式版危局强袭战、式舆防卫战。");
+      !versions.test(scope.version) || ((scope.game !== "zzz" || publishedChallenge || category === "zzz/equipment") && scope.version.includes("+"))) {
+    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、音擎和正式版驱动盘、危局强袭战、式舆防卫战。");
   }
   const { version } = scope;
   const { game, pageId, folder, title, timeout: limit } = pages[category];
@@ -306,6 +322,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
         }
       } else {
         if (detail !== undefined && !detailMatches(category, detail, entry)) {
+          if (category === "zzz/equipment") throw new Error(`驱动盘详情与来源索引不符或缺少套装故事（${id}）。`);
           throw new Error(`${folder}详情与来源索引身份或等级不符（${id}）。`);
         }
         const { iconName, pathName } = entry;
@@ -322,16 +339,17 @@ export async function acquireAtlasSource(destination: string, requirements: read
         } else if (iconName) {
           const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
           const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
-          if (!icon && category === "zzz/weapon") throw new Error(`音擎来源图标缺失（${id}）。`);
+          if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error(`${folder}来源图标缺失（${id}）。`);
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
             throw new Error(`原神武器来源图标缺失（${id}）。`);
           }
           references.push(imageReference("icon", list.icon, icon));
           usedPlaceholder ||= !icon;
-          const detailIcon = object(detail).icon;
+          const { icon: detailIcon, icon2 } = object(detail);
           if (typeof detailIcon === "string" && (pageId === "weapon" || detailIcon === list.icon)) {
             references.push(imageReference("detail.icon", detailIcon, icon));
           }
+          if (category === "zzz/equipment") references.push(imageReference("detail.icon2", icon2, icon));
         }
       }
       const path = `${items}/${id}.json`;
