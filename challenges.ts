@@ -26,6 +26,28 @@ interface ChallengeWindow {
   readonly from: "live" | "export";
 }
 
+export function hasStarRailRotation(mode: ChallengeMode): boolean {
+  return mode.id === "maze" || mode.id === "maze_extra" || mode.id === "maze_boss";
+}
+
+export async function findCurrentStarRailChallenge<Entry, Facts extends { readonly window: ChallengeWindow | undefined }>(
+  mode: ChallengeMode, entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+): Promise<{ entry: Entry; facts: Facts } | undefined> {
+  if (!hasStarRailRotation(mode) || !Number.isFinite(now)) return;
+  let current: { entry: Entry; facts: Facts } | undefined;
+  for (const entry of entries) {
+    const facts = await readFacts(entry);
+    const { window } = facts;
+    if (window?.from !== "live") continue;
+    const begin = Date.parse(window.begin.replace(" ", "T") + "+08:00");
+    const end = Date.parse(window.end.replace(" ", "T") + "+08:00");
+    if (!(begin <= now && now < end)) continue;
+    if (current) return;
+    current = { entry, facts };
+  }
+  return current;
+}
+
 function validDate(value: unknown): string {
   const date = label(value);
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(date) || date < "2020-01-01") return "";

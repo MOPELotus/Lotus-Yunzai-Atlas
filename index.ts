@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { challengeModes, findChallengeMode } from "./challenges.ts";
+import { challengeModes, findChallengeMode, findCurrentStarRailChallenge, hasStarRailRotation } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -273,14 +273,17 @@ async function challengeQuery(argument: string): Promise<string> {
     return `${gameNames[game]}挑战图鉴：${names.join("、")}。请输入模式以查看记录。`;
   }
   const target = terms.join(" ");
-  if (/^(?:当前|本期|当期|上期|下期|第\s*\d+\s*期)$/u.test(target)) {
+  const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
+  const unverifiedRotation = `${mode.name}本期轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  if (currentRequested && !hasStarRailRotation(mode)) return unverifiedRotation;
+  if (/^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
 
   try {
     const result = await catalog.read();
     const category = result.pages.find((page) => page.game === game && page.challengeMode?.id === mode.id);
-    if (!category) return `快照中未收录${gameNames[game]}的${mode.name}资料。`;
+    if (!category) return currentRequested ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
 
     const pageMatch = /^第(\d+)页$/u.exec(target);
     if (!target || pageMatch) {
@@ -297,24 +300,34 @@ async function challengeQuery(argument: string): Promise<string> {
       ].join("\n");
     }
 
-    const key = compareKey(target);
-    const recordId = target.normalize("NFKC");
-    const idMatch = category.entries.find(({ id }) => id === recordId);
-    const matches = idMatch ? [idMatch] : category.entries.filter(({ name }) => key && compareKey(name) === key);
-    if (!matches.length) return "未找到挑战记录，请核对完整名称或记录 ID。";
-    if (matches.length > 1) {
-      return [`${mode.name}有 ${matches.length} 条同名记录，请用 ID 查询。`,
-        ...matches.slice(0, 12).map(({ name, id }) => `${name} · ID ${id}`),
-        ...(matches.length > 12 ? ["更多 ID 可在模式列表中查看。"] : []),
-      ].join("\n");
+    let entry: AtlasEntry | undefined;
+    let facts: Awaited<ReturnType<typeof catalog.challengeFacts>> | undefined;
+    if (currentRequested) {
+      if (result.stale || category.sampled) return unverifiedRotation;
+      const current = await findCurrentStarRailChallenge(mode, category.entries, (item) => catalog.challengeFacts(item, mode));
+      if (!current) return unverifiedRotation;
+      ({ entry, facts } = current);
+    } else {
+      const key = compareKey(target);
+      const recordId = target.normalize("NFKC");
+      const idMatch = category.entries.find(({ id }) => id === recordId);
+      const matches = idMatch ? [idMatch] : category.entries.filter(({ name }) => key && compareKey(name) === key);
+      if (!matches.length) return "未找到挑战记录，请核对完整名称或记录 ID。";
+      if (matches.length > 1) {
+        return [`${mode.name}有 ${matches.length} 条同名记录，请用 ID 查询。`,
+          ...matches.slice(0, 12).map(({ name, id }) => `${name} · ID ${id}`),
+          ...(matches.length > 12 ? ["更多 ID 可在模式列表中查看。"] : []),
+        ].join("\n");
+      }
+      [entry] = matches;
     }
 
-    const [entry] = matches;
     if (!entry) return "未找到挑战记录。";
-    const { window, sections } = await catalog.challengeFacts(entry, mode);
+    const { window, sections } = facts ?? await catalog.challengeFacts(entry, mode);
     const title = [gameNames[game], mode.name, entry.name !== entry.id ? entry.name : "", `记录 ID ${entry.id}`]
       .filter(Boolean).join(" · ");
     const lines = [title, `快照版本 ${entry.version}`];
+    if (currentRequested) lines.push("当前轮换 · 中国服（UTC+8）");
     if (window) {
       const origin = window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
       lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
