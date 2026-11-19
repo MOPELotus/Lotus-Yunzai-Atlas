@@ -69,6 +69,7 @@ interface Catalog {
 
 interface Snapshot extends Catalog {
   readonly map: Buffer;
+  readonly root: string;
 }
 
 function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPage {
@@ -178,14 +179,16 @@ function artifactName(list: Record<string, unknown>): string {
 }
 
 export function createAtlasCatalog(directory: string) {
-  const mapPath = resolve(directory, "map.json");
+  const configuredRoot = resolve(directory);
+  const entryRoots = new WeakMap<AtlasEntry, string>();
   let snapshot: Snapshot | undefined;
   let reading: Promise<Catalog> | undefined;
 
   async function read(): Promise<Catalog> {
     try {
-      const map = await readFile(mapPath);
-      if (!snapshot || snapshot.stale || !map.equals(snapshot.map)) {
+      const root = await realpath(configuredRoot);
+      const map = await readFile(resolve(root, "map.json"));
+      if (!snapshot || snapshot.stale || root !== snapshot.root || !map.equals(snapshot.map)) {
         const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
         let stale = false;
@@ -207,12 +210,15 @@ export function createAtlasCatalog(directory: string) {
 
             try {
               const page = readPage(game, kind, name, value);
+              for (const entry of page.entries) entryRoots.set(entry, root);
               if (kind === "set" && game === "gi") {
                 const entries: AtlasEntry[] = [];
                 for (const entry of page.entries) {
                   const name = artifactName(object((await readContent(entry, pageId)).list));
                   if (!name) throw new Error("圣遗物套装名称缺失或不一致。");
-                  entries.push({ ...entry, name });
+                  const artifact = { ...entry, name };
+                  entryRoots.set(artifact, root);
+                  entries.push(artifact);
                 }
                 pages.push({ ...page, entries });
               } else if (kind === "achievement") {
@@ -239,7 +245,7 @@ export function createAtlasCatalog(directory: string) {
           }
         }
         if (!pages.length) throw new Error("图鉴索引没有可查询的分类。");
-        snapshot = { map, pages, stale };
+        snapshot = { map, root, pages, stale };
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
@@ -250,7 +256,7 @@ export function createAtlasCatalog(directory: string) {
 
   async function readItem(entry: AtlasEntry, pageId: string) {
     try {
-      const root = await realpath(directory);
+      const root = entryRoots.get(entry) ?? await realpath(configuredRoot);
       const file = await realpath(resolve(root, entry.path));
       const local = relative(root, file);
       if (isAbsolute(local) || local === ".." || local.startsWith(`..${sep}`)) return;
@@ -269,6 +275,9 @@ export function createAtlasCatalog(directory: string) {
   }
 
   return {
+    assetRoot(entry: AtlasEntry): string {
+      return entryRoots.get(entry) ?? configuredRoot;
+    },
     read(): Promise<Catalog> {
       return reading ??= read().finally(() => { reading = undefined; });
     },

@@ -113,7 +113,7 @@ async function characterBook(entry: AtlasEntry): Promise<AtlasReply> {
   if (!role) return characterLine(entry, true);
   try {
     const { renderRoleBook } = await import("./role-render.ts");
-    const pages = await renderRoleBook(role, { assetRoot: dataDirectory });
+    const pages = await renderRoleBook(role, { assetRoot: catalog.assetRoot(entry) });
     const sections = pages.map(({ section }) => section).join(" → ");
     const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
     return { type: "forward", nodes: [title, ...pages.map(({ png }) => ({ type: "image" as const, file: png }))] };
@@ -127,7 +127,7 @@ async function weaponCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
   if (!details) return;
   try {
     const { renderWeapon } = await import("./role-render.ts");
-    const { png } = await renderWeapon(details, { assetRoot: dataDirectory });
+    const { png } = await renderWeapon(details, { assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return undefined;
@@ -139,7 +139,7 @@ async function setBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
   if (!set) return;
   try {
     const { renderSet } = await import("./role-render.ts");
-    const pages = await renderSet(set, { assetRoot: dataDirectory });
+    const pages = await renderSet(set, { assetRoot: catalog.assetRoot(entry) });
     const images: AtlasImage[] = pages.map(({ png }) => ({ type: "image", file: png }));
     if (images.length <= 1) return images[0];
     const sections = pages.map(({ section }) => section).join(" → ");

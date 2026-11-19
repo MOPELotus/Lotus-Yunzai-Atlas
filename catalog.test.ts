@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findSets } from "./catalog.ts";
@@ -67,6 +67,42 @@ test("绝区零使用详情的等级字段，拒绝旧版本或目录外的条�
     } finally {
       await rm(elsewhere, { recursive: true, force: true });
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("快照目录切换后，在途详情与图库沿用原索引的目录", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-switch-"));
+  try {
+    const character = {
+      version: "2", recordCount: 1,
+      records: { "1": { id: "1", name: "角色甲", path: "items/one.json" } },
+    };
+    const map = JSON.stringify({ games: { zzz: { locales: { zh: { pages: { character } } } } } });
+    const oldRoot = join(directory, "old", "data");
+    const newRoot = join(directory, "new", "data");
+    for (const [root, rank] of [[oldRoot, 3], [newRoot, 4]] as const) {
+      await mkdir(join(root, "items"), { recursive: true });
+      await writeFile(join(root, "map.json"), map);
+      await writeFile(join(root, "items", "one.json"), JSON.stringify({
+        meta: { gameId: "zzz", pageId: "character", recordId: "1", version: "2" },
+        content: { list: { rank } },
+      }));
+    }
+    const active = join(directory, "current");
+    const candidate = join(directory, "candidate");
+    await symlink(oldRoot, active, "dir");
+    const catalog = createAtlasCatalog(active);
+    const oldEntry = findCharacters(await catalog.read(), "角色甲")[0]!;
+    await symlink(newRoot, candidate, "dir");
+    await rename(candidate, active);
+    const newEntry = findCharacters(await catalog.read(), "角色甲")[0]!;
+    expect(newEntry).not.toBe(oldEntry);
+    expect(await catalog.characterRarity(oldEntry)).toBe("A级");
+    expect(await catalog.characterRarity(newEntry)).toBe("S级");
+    expect(catalog.assetRoot(oldEntry)).toBe(await realpath(oldRoot));
+    expect(catalog.assetRoot(newEntry)).toBe(await realpath(newRoot));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
