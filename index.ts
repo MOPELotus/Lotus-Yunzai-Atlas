@@ -7,6 +7,7 @@ import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, find
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
 import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
+import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findMonsters } from "./catalog.ts";
@@ -497,8 +498,9 @@ export const apps = traditionalAtlasApps((argument, kind, game) => {
   return traditionalQuery(query, statedGame, "name");
 });
 
-export default {
+const atlas = {
   aliases: {
+    ...atlasMaintenanceAliases,
     "图鉴": "#图鉴", "#荷花图鉴": "#图鉴", "荷花图鉴": "#图鉴", "#Lotus图鉴": "#图鉴", "Lotus图鉴": "#图鉴",
     "#lotus图鉴": "#图鉴", "lotus图鉴": "#图鉴",
     "图鉴状态": "#图鉴状态", "#荷花图鉴状态": "#图鉴状态", "荷花图鉴状态": "#图鉴状态",
@@ -600,3 +602,10 @@ export default {
     },
   },
 };
+
+export function createModule({ signal }: { readonly signal?: AbortSignal } = {}) {
+  const maintenance = createAtlasMaintenance(atlasRoot, { signal, dataOverride: Bun.env.LOTUS_ATLAS_DATA_DIR });
+  return { ...atlas, commands: { ...atlas.commands, ...maintenance } };
+}
+
+export default createModule();

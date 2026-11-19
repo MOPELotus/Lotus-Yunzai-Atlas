@@ -21,7 +21,7 @@ const sourcePages = {
   "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
 } as const;
-type SourceSelection = keyof typeof sourcePages;
+export type SourceSelection = keyof typeof sourcePages;
 type SourcePage = typeof sourcePages[SourceSelection];
 const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone",
   equipment: "zzz/equipment", boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
@@ -36,9 +36,11 @@ export interface AtlasRefreshOptions {
   readonly signal?: AbortSignal;
   readonly manifest?: typeof fetchAtlasManifest;
   readonly request?: Parameters<typeof acquireAtlasSource>[3];
+  readonly preserveRecords?: boolean;
+  readonly expected?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>;
 }
 
-type AtlasSourceRefresh = AtlasPublication
+export type AtlasSourceRefresh = AtlasPublication
   | { readonly status: "current"; readonly version: string }
   | { readonly status: "review"; readonly reason: "local-unverified" | "manifest-unavailable" | "unproven-upgrade" };
 
@@ -71,7 +73,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
 }
 
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
-  after: Awaited<ReturnType<typeof pageAssets>>) {
+  after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean) {
   const preserveRotation = pageId === "boss" || pageId === "shiyu";
   const issues: string[] = [];
   for (const [id, old] of before) {
@@ -80,6 +82,9 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
+      if (preserveRecords && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+        issues.push(`${title} ${id} 缺少已有条目。`);
+      }
       continue;
     }
     if (preserveRotation && (old.name !== next.name || (old.window?.from === "live" &&
@@ -94,6 +99,17 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
   return issues;
 }
 
+export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
+  local: Awaited<ReturnType<typeof validateAtlasCandidate>>) {
+  const { game, pageId } = sourcePages[selection];
+  if (!local.pages.some((page) => page.game === game && page.pageId === pageId)) local = { ...local, ok: false };
+  return pageId === "boss" || pageId === "shiyu" ? planPublishedZzzRefresh(listing, local, pageId)
+    : planAtlasUpdate(listing, local, [{ game, pageId }]);
+}
+
+export const atlasSourceSelections = Object.entries(sourcePages).map(([selection, { title }]) =>
+  ({ selection: selection as SourceSelection, title }));
+
 /** Refresh one supported page from the fixed source. */
 export async function refreshAtlasSource(root: string, options: AtlasRefreshOptions = {}): Promise<AtlasSourceRefresh> {
   const { signal, request, manifest = fetchAtlasManifest, pageId = "bangboo", selection = defaultSelections[pageId] } = options;
@@ -104,6 +120,9 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
   const directory = await realpath(root).catch(() => undefined);
   const baseline = directory && await discoverAtlasDataDirectory(directory).catch(() => undefined);
   if (!directory || !baseline) return { status: "review", reason: "local-unverified" };
+  if (options.expected && (options.expected.version !== baseline.version || options.expected.root !== baseline.root)) {
+    return { status: "stale", current: baseline.version };
+  }
   const local = await validateAtlasCandidate(baseline.root, scope, signal);
   if (!local.ok) return { status: "review", reason: "local-unverified" };
 
@@ -112,8 +131,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     return undefined;
   });
   signal?.throwIfAborted();
-  const rotationPage = page.pageId === "boss" || page.pageId === "shiyu";
-  const plan = rotationPage ? planPublishedZzzRefresh(listing, local, page.pageId) : planAtlasUpdate(listing, local, scope);
+  const plan = atlasSourcePlan(selection, listing, local);
   const entry = plan.entries[0];
   if (entry?.action === "review") return { status: "review", reason: entry.reason };
   if (entry?.kind !== "versioned") return { status: "review", reason: "manifest-unavailable" };
@@ -129,7 +147,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     const current = await readAtlasSnapshotVersion(directory);
     if (current !== baseline.version) return { status: "stale", current };
     const after = await pageAssets(join(source.directory, "data"), page, signal);
-    const issues = regressions(page, before, after);
+    const issues = regressions(page, before, after, options.preserveRecords === true);
     if (issues.length) return { status: "invalid", issues };
     publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline);
     return publication;

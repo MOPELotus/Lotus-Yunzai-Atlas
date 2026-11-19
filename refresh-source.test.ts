@@ -7,6 +7,7 @@ import { createAtlasRuntimeCatalog, findBangboos, findEquipment, findSets } from
 import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
 import { refreshAtlasSource } from "./refresh-source.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
+import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 
 const original = "3.4.4+20539349";
 const upgrade = "3.4.4+20539350";
@@ -52,6 +53,59 @@ test("邦布自动刷新按计划抓取较新构建并发布完整候选", () =>
   expect(catalog.assetRoot(old!)).toBe(join(root, "data"));
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
+
+test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正式源且保留完整快照", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-maintenance-"));
+  const root = join(work, "atlas");
+  const oldVersion = "3.3";
+  const live = "3.4";
+  const latest = "3.5.52";
+  try {
+    await acquireAtlasSource(root, scope(oldVersion), undefined, source(oldVersion));
+    let manifestCalls = 0;
+    let sourceCalls = 0;
+    let missingIcon = true;
+    const commands = createAtlasMaintenance(root, {
+      async manifest() { manifestCalls++; return { zzz: { live, latest, available: [live, latest] } }; },
+      async request(url) { sourceCalls++; expect(url).not.toContain(latest); return source(live, missingIcon ? "icon-missing" : "all")(url); },
+    });
+    const check = commands["#检查图鉴更新"];
+    const update = commands["#更新图鉴"];
+    expect(atlasMaintenanceAliases["荷花图鉴检查更新"]).toBe("#检查图鉴更新");
+    expect(atlasMaintenanceAliases["#Lotus图鉴更新"]).toBe("#更新图鉴");
+    expect(atlasMaintenanceAliases["#LOTUS图鉴更新"]).toBeUndefined();
+    expect(await check("", {})).toContain("只有 bot 主人");
+    expect(await update("", { atlasMaintenance: true, isDelegated: true })).toContain("只有 bot 主人");
+    expect(await update("zzz/bangboo", { atlasMaintenance: true })).toContain("请直接发送 #更新图鉴");
+    expect(manifestCalls).toBe(0);
+
+    const context = { atlasMaintenance: true } as const;
+    expect(await check("", context)).toContain(`邦布 · ${oldVersion} → ${live}，可准备候选`);
+    expect(manifestCalls).toBe(1);
+    expect(sourceCalls).toBe(0);
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    const pending = update("", context);
+    expect(await update("", context)).toContain("已有图鉴更新正在进行");
+    expect(await pending).toContain("邦布 · 候选校验未通过，保留现有资料");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    expect(manifestCalls).toBe(2);
+    expect(sourceCalls).toBeGreaterThan(0);
+
+    missingIcon = false;
+    expect(await update("", context)).toContain(`邦布 · 已更新至 ${live}`);
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    const after = sourceCalls;
+    expect(await update("", context)).toContain(`邦布 · 已是同一正式版本 ${live}`);
+    expect(sourceCalls).toBe(after);
+
+    const explicit = createAtlasMaintenance(root, { dataOverride: join(root, "data"), manifest: async () => ({ zzz: { live, available: [live] } }) });
+    expect(await explicit["#检查图鉴更新"]("", context)).toContain(`邦布 · ${oldVersion} → ${live}`);
+    expect(await explicit["#更新图鉴"]("", context)).toContain("当前使用显式图鉴数据目录");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
 
 const enginePrevious = "3.2";
 const engineCurrent = "3.3";
