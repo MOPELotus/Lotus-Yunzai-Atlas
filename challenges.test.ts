@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
+import { apocalypseMode, challengeModes, findChallengeMode, findCurrentChallenge, findPreviousApocalypse, hasChallengeRotation,
+  onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
   const mode = findChallengeMode("hsr", "混沌");
@@ -80,6 +81,24 @@ test("旧快照三类轮换使用中国服时间，结束边界排他并跳过�
   expect(await choose(chaos, chaosRows, "2026-12-13T19:59:59Z")).toBe("1036");
   expect(await choose(chaos, chaosRows, "2026-12-13T20:00:00Z")).toBe("1037");
   expect(await choose(shadow, shadowRows, "2026-12-28T04:00:00+08:00")).toBeUndefined();
+});
+
+test("末日上期只选择唯一的紧邻实装窗口", async () => {
+  const previous = row("3021", "2026-10-05 04:00:00", "2026-11-16 04:00:00");
+  const current = row("3022", "2026-11-16 04:00:00", "2026-12-28 04:00:00");
+  const exportOnly = { id: "导出窗", list: { begin: previous.list.live_begin, end: previous.list.live_end } };
+  const choose = async (rows: readonly typeof exportOnly[], time = "2026-11-20T12:00:00+08:00") =>
+    (await findPreviousApocalypse(rows, async (entry) => readChallengeFacts(apocalypseMode, entry), Date.parse(time)))?.entry.id;
+  const rows = [current, exportOnly, previous];
+  expect(await choose(rows)).toBe("3021");
+  expect(await choose(rows, "2026-11-15T19:59:59Z")).toBeUndefined();
+  expect(await choose(rows, "2026-11-15T20:00:00Z")).toBe("3021");
+  expect(await choose(rows, "2026-12-28T04:00:00+08:00")).toBeUndefined();
+  expect(await choose([current, exportOnly])).toBeUndefined();
+  expect(await choose([current, row("有空档", "2026-10-05 04:00:00", "2026-11-15 04:00:00")])).toBeUndefined();
+  expect(await choose([...rows, { ...previous, id: "并列前期" }])).toBeUndefined();
+  expect(await choose([...rows, { ...current, id: "并列当前" }])).toBeUndefined();
+  expect(await choose([...rows, row("与前期重叠", "2026-10-01 04:00:00", "2026-11-15 04:00:00")])).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {

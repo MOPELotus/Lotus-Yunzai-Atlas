@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
-  findNextShiyu, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+  findNextShiyu, findPreviousApocalypse, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -369,20 +369,22 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   }
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
+  const previousApocalypse = mode.id === apocalypseMode.id && target === "上期";
   const forecast = mode.id === shiyuMode.id && target === "下期";
-  const unverifiedRotation = `${mode.name}${forecast ? "下期" : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  const relative = previousApocalypse || forecast;
+  const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
   if (mode.id === arbitrationMode.id && /^(?:上期|下期)$/u.test(target)) {
     return `${mode.name}${target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   }
-  if (!forecast && /^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
+  if (!relative && /^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
 
   try {
     const result = await catalog.read();
     const category = result.pages.find((page) => page.game === game && page.challengeMode?.id === mode.id);
-    if (!category) return currentRequested || forecast ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
+    if (!category) return currentRequested || relative ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
 
     const pageMatch = /^第(\d+)页$/u.exec(target);
     if (!target || pageMatch) {
@@ -401,10 +403,11 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
 
     let entry: AtlasEntry | undefined;
     let facts: Awaited<ReturnType<typeof catalog.challengeFacts>> | undefined;
-    if (currentRequested || forecast) {
+    if (currentRequested || relative) {
       if (result.stale || category.sampled) return unverifiedRotation;
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
       const matched = forecast ? await findNextShiyu(category.entries, readFacts)
+        : previousApocalypse ? await findPreviousApocalypse(category.entries, readFacts)
         : await findCurrentChallenge(mode, category.entries, readFacts);
       if (!matched) return unverifiedRotation;
       ({ entry, facts } = matched);
@@ -501,6 +504,7 @@ export default {
     "图鉴状态": "#图鉴状态", "#荷花图鉴状态": "#图鉴状态", "荷花图鉴状态": "#图鉴状态",
     "#Lotus图鉴状态": "#图鉴状态", "Lotus图鉴状态": "#图鉴状态", "#lotus图鉴状态": "#图鉴状态", "lotus图鉴状态": "#图鉴状态",
     "#星铁本期末日幻影图鉴": "#星铁本期末日图鉴",
+    "#星铁上期末日幻影图鉴": "#星铁上期末日图鉴",
     "#星铁本期虚构叙事图鉴": "#星铁本期虚构图鉴",
     "#星铁本期混沌回忆图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却图鉴": "#星铁本期混沌图鉴",
@@ -548,6 +552,7 @@ export default {
     "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
+    "#星铁上期末日图鉴": () => challengeQuery("星铁 末日幻影 上期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
     "#星铁异相图鉴": () => challengeQuery("星铁 异相仲裁"),

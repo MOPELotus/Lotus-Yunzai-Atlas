@@ -80,23 +80,35 @@ export async function findCurrentChallenge<Entry extends { readonly id: string }
   return current;
 }
 
-export async function findNextShiyu<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+async function findAdjacentChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  mode: ChallengeMode, direction: "previous" | "next", entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now: number,
 ): Promise<{ entry: Entry; facts: Facts } | undefined> {
   const rows = await Promise.all(entries.map(async (entry) => {
     const facts = await readFacts(entry);
-    return { entry, facts, times: rotationTimes(shiyuMode, facts) };
+    return { entry, facts, times: rotationTimes(mode, facts) };
   }));
   const active = rows.filter(({ times }) => times && times.begin <= now && now < times.end);
   const [current] = active;
   if (active.length !== 1 || !current?.times) return;
-  const currentEnd = current.times.end;
-  const adjacent = rows.filter(({ times }) => times?.begin === currentEnd);
-  const [next] = adjacent;
-  if (adjacent.length !== 1 || !next?.times) return;
-  const { begin, end } = next.times;
-  if (rows.some((row) => row !== next && row.times && row.times.begin < end && begin < row.times.end)) return;
-  return { entry: next.entry, facts: next.facts };
+  const boundary = direction === "previous" ? current.times.begin : current.times.end;
+  const adjacent = rows.filter(({ times }) => (direction === "previous" ? times?.end : times?.begin) === boundary);
+  const [match] = adjacent;
+  if (adjacent.length !== 1 || !match?.times) return;
+  const { begin, end } = match.times;
+  if (rows.some((row) => row !== match && row.times && row.times.begin < end && begin < row.times.end)) return;
+  return { entry: match.entry, facts: match.facts };
+}
+
+export function findNextShiyu<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+) {
+  return findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now);
+}
+
+export function findPreviousApocalypse<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+) {
+  return findAdjacentChallenge(apocalypseMode, "previous", entries, readFacts, now);
 }
 
 function validDate(value: unknown): string {
