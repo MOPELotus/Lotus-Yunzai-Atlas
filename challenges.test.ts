@@ -101,6 +101,18 @@ test("末日上期只选择唯一的紧邻实装窗口", async () => {
   expect(await choose([...rows, row("与前期重叠", "2026-10-01 04:00:00", "2026-11-15 04:00:00")])).toBeUndefined();
 });
 
+test("末日下期只预览公告对应的领航冥茫记录", async () => {
+  const current = { ...row("3021", "2026-10-05 04:00:00", "2026-11-16 04:00:00"), name: "支配遗忘" };
+  const next = { ...row("3022", "2026-11-16 04:00:00", "2026-12-28 04:00:00"), name: "领航冥茫" };
+  const sameName = { ...row("3023", "2026-12-28 04:00:00", "2027-01-28 04:00:00"), name: next.name };
+  const rows = [sameName, current, next];
+  const select = async (time: string, entries = rows) =>
+    (await findAnnouncedChallengeNext(apocalypseMode, entries, async (entry) => readChallengeFacts(apocalypseMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select("2026-11-16T03:59:59.999+08:00")).toBe("3022");
+  expect(await select("2026-11-16T04:00:00+08:00")).toBeUndefined();
+  expect(await select("2026-11-16T03:59:59.999+08:00", [current, { ...next, id: "3023" }])).toBeUndefined();
+});
+
 test("虚构上期沿中国服实装边界切换，覆盖中断时返回待核对", async () => {
   const earlier = row("2025", "2026-08-03 04:00:00", "2026-09-14 04:00:00");
   const previous = row("2026", "2026-09-14 04:00:00", "2026-10-19 04:00:00");

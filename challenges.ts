@@ -117,6 +117,10 @@ const announcedRotations = {
     current: { id: "1036", name: "物竞天择", begin: "2026-11-02 04:00:00", end: "2026-12-14 04:00:00" },
     next: { id: "1037", name: "漆黑残响", begin: "2026-12-14 04:00:00", end: "2027-01-25 04:00:00" },
   },
+  maze_boss: {
+    current: { id: "3021", name: "支配遗忘", begin: "2026-10-05 04:00:00", end: "2026-11-16 04:00:00" },
+    next: { id: "3022", name: "领航冥茫", begin: "2026-11-16 04:00:00", end: "2026-12-28 04:00:00" },
+  },
   // Genshin 7.1 and 7.2 with the monthly reset rule from the original announcement.
   // https://ys.mihoyo.com/main/news/detail/166392
   // https://ys.mihoyo.com/main/news/detail/167205
@@ -128,7 +132,7 @@ const announcedRotations = {
 };
 
 export async function findAnnouncedChallengeNext<Entry extends { readonly id: string; readonly name: string }, Facts extends RotationFacts>(
-  mode: typeof chaosMode | typeof fictionMode | typeof theaterMode,
+  mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof theaterMode,
   entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
   const rotation = await findAdjacentChallenge(mode, "next", entries, readFacts, now);

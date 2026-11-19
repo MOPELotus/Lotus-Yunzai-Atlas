@@ -376,7 +376,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
     (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const forecast = target === "下期" &&
-    (mode.id === shiyuMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id || mode.id === theaterMode.id);
+    (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
+      mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const relative = previous || forecast;
   const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
@@ -515,6 +516,7 @@ const atlas = {
     "#Lotus图鉴状态": "#图鉴状态", "Lotus图鉴状态": "#图鉴状态", "#lotus图鉴状态": "#图鉴状态", "lotus图鉴状态": "#图鉴状态",
     "#星铁本期末日幻影图鉴": "#星铁本期末日图鉴",
     "#星铁上期末日幻影图鉴": "#星铁上期末日图鉴",
+    "#星铁下期末日幻影图鉴": "#星铁下期末日图鉴",
     "#星铁本期虚构叙事图鉴": "#星铁本期虚构图鉴",
     "#星铁上期虚构叙事图鉴": "#星铁上期虚构图鉴",
     "#星铁下期虚构叙事图鉴": "#星铁下期虚构图鉴",
@@ -583,6 +585,7 @@ const atlas = {
     "#上期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 上期"),
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     "#星铁上期末日图鉴": () => challengeQuery("星铁 末日幻影 上期"),
+    "#星铁下期末日图鉴": () => challengeQuery("星铁 末日幻影 下期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
     "#星铁上期虚构图鉴": () => challengeQuery("星铁 虚构叙事 上期"),
     "#星铁下期虚构图鉴": () => challengeQuery("星铁 虚构叙事 下期"),
