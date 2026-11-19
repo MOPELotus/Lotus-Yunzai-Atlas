@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedStarrailNext,
+import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
   findChallengeMode, findCurrentChallenge, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
   onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
@@ -375,7 +375,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const previous = target === "上期" &&
     (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
-  const forecast = target === "下期" && (mode.id === shiyuMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id);
+  const forecast = target === "下期" &&
+    (mode.id === shiyuMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id || mode.id === theaterMode.id);
   const relative = previous || forecast;
   const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
@@ -413,7 +414,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
       const matched = forecast
         ? await (mode.id === shiyuMode.id
-          ? findNextShiyu(category.entries, readFacts) : findAnnouncedStarrailNext(mode, category.entries, readFacts))
+          ? findNextShiyu(category.entries, readFacts) : findAnnouncedChallengeNext(mode, category.entries, readFacts))
         : previous ? await findPreviousChallenge(mode, category.entries, readFacts)
         : await findCurrentChallenge(mode, category.entries, readFacts);
       if (!matched) return unverifiedRotation;
@@ -443,7 +444,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       if (theater) {
         try {
           const { renderTheater } = await import("./role-render.ts");
-          const { png } = await renderTheater(theater, { assetRoot: catalog.assetRoot(entry) });
+          const card = forecast ? { ...theater, name: "下期幻想真境剧诗（预览）" } : theater;
+          const { png } = await renderTheater(card, { assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
           // The verified challenge summary remains usable without rendering.
@@ -572,6 +574,9 @@ const atlas = {
     "#上期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
     "#上期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
     "#上期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
+    "#下期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
+    "#下期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
+    "#下期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
     "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#上期深渊图鉴": () => challengeQuery("原神 深境螺旋 上期"),
