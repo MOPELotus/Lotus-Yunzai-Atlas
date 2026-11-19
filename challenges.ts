@@ -26,22 +26,30 @@ interface ChallengeWindow {
   readonly from: "live" | "export";
 }
 
-export function hasStarRailRotation(mode: ChallengeMode): boolean {
-  return mode.id === "maze" || mode.id === "maze_extra" || mode.id === "maze_boss";
+const datedRotations = new Set<ChallengeMode["id"]>(["tower", "rolecombat", "maze", "maze_extra", "maze_boss", "shiyu", "boss"]);
+
+export function hasChallengeRotation(mode: ChallengeMode): boolean {
+  return datedRotations.has(mode.id);
 }
 
-export async function findCurrentStarRailChallenge<Entry, Facts extends { readonly window: ChallengeWindow | undefined }>(
+export async function findCurrentChallenge<Entry extends { readonly id: string }, Facts extends {
+  readonly window: ChallengeWindow | undefined;
+  readonly rotationEligible: boolean;
+}>(
   mode: ChallengeMode, entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ): Promise<{ entry: Entry; facts: Facts } | undefined> {
-  if (!hasStarRailRotation(mode) || !Number.isFinite(now)) return;
+  if (!hasChallengeRotation(mode) || !Number.isFinite(now)) return;
+  const lastSecondIncluded = mode.game !== "hsr";
   let current: { entry: Entry; facts: Facts } | undefined;
   for (const entry of entries) {
     const facts = await readFacts(entry);
     const { window } = facts;
-    if (window?.from !== "live") continue;
+    if (!facts.rotationEligible || window?.from !== "live" || (lastSecondIncluded && !window.end.endsWith(":59"))) continue;
     const begin = Date.parse(window.begin.replace(" ", "T") + "+08:00");
-    const end = Date.parse(window.end.replace(" ", "T") + "+08:00");
+    const end = Date.parse(window.end.replace(" ", "T") + "+08:00") + (lastSecondIncluded ? 1_000 : 0);
     if (!(begin <= now && now < end)) continue;
+    // 7.2 calls this blessing the December 16 rotation. The January field in the export conflicts with it.
+    if (mode.id === "tower" && entry.id === "126" && window.begin === "2027-01-16 04:00:00") return;
     if (current) return;
     current = { entry, facts };
   }
@@ -128,8 +136,10 @@ function detailSections(mode: ChallengeMode, value: unknown): ChallengeSection[]
 }
 
 export function readChallengeFacts(mode: ChallengeMode, content: Record<string, unknown>) {
+  const list = object(content.list);
   return {
-    window: sourceWindow(object(content.list)),
+    window: sourceWindow(list),
+    rotationEligible: mode.id !== "shiyu" || (list.sort === 1 && list.zh === "剧变节点"),
     sections: detailSections(mode, content.detail),
   };
 }

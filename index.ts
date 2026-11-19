@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { challengeModes, findChallengeMode, findCurrentStarRailChallenge, hasStarRailRotation } from "./challenges.ts";
+import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -275,7 +275,7 @@ async function challengeQuery(argument: string): Promise<string> {
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
   const unverifiedRotation = `${mode.name}本期轮换时间待核对。请输入记录 ID 或名称查看资料。`;
-  if (currentRequested && !hasStarRailRotation(mode)) return unverifiedRotation;
+  if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
   if (/^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
@@ -304,7 +304,7 @@ async function challengeQuery(argument: string): Promise<string> {
     let facts: Awaited<ReturnType<typeof catalog.challengeFacts>> | undefined;
     if (currentRequested) {
       if (result.stale || category.sampled) return unverifiedRotation;
-      const current = await findCurrentStarRailChallenge(mode, category.entries, (item) => catalog.challengeFacts(item, mode));
+      const current = await findCurrentChallenge(mode, category.entries, (item) => catalog.challengeFacts(item, mode));
       if (!current) return unverifiedRotation;
       ({ entry, facts } = current);
     } else {
