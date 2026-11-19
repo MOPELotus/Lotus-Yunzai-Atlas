@@ -98,3 +98,60 @@ test("绝区零分组保留动作、倍率、两套核心等级、影画故事�
     { title: "核心技升级材料", items: [{ id: "10", count: 5 }] }]);
   expect(normalizeRoleDetails(entry("zzz"), { list: { rank: 4 } }, "S级")).toBeUndefined();
 });
+
+test("角色总览优先采用明确登记的主图，独立保留头像与按旧序排列的可验证属性", () => {
+  const detail = {
+    base_hp: 1191.65, base_atk: 20, crit_rate: 0.05, crit_dmg: 0.5,
+    stats_modifier: {
+      hp: { 1: 1, 90: 8.738 }, atk: { 1: 1 },
+      ascension: [{ fight_prop_base_hp: 4893.559, fight_prop_critical: 0.192 }],
+    },
+  };
+  const images = [
+    { fieldPath: "derived.avatarGacha", localPath: "https://example.invalid/gacha.webp", status: "downloaded", placeholder: false },
+    { fieldPath: "detail.derived.avatarGacha", localPath: "gallery/gi/unavailable.webp", status: "pending", placeholder: false },
+    { fieldPath: "detail.derived.avatarBust", localPath: "gallery/gi/role.webp", status: "downloaded", placeholder: false },
+    { fieldPath: "detail.icon", localPath: "gallery/gi/icon.webp", status: "downloaded", placeholder: false },
+  ];
+  const role = normalizeRoleDetails(entry("gi"), { detail }, "五星", images);
+  expect(role?.overview.artwork).toBe("gallery/gi/role.webp");
+  expect(role?.overview.icon).toBe("gallery/gi/icon.webp");
+  expect(role?.overview.stats).toEqual([
+    { label: "Lv1生命", value: "1,192" }, { label: "Lv90生命", value: "15,306" }, { label: "Lv1攻击", value: "20" },
+    { label: "暴击率", value: "24.2%" }, { label: "暴击伤害", value: "50%" },
+  ]);
+  const iconOnly = normalizeRoleDetails(entry("gi"), { detail }, "五星", images.filter(({ fieldPath }) => fieldPath !== "detail.derived.avatarBust"));
+  expect(iconOnly?.overview.artwork).toBe(iconOnly?.overview.icon);
+});
+
+test("星铁只从首尾晋阶和有效增长值整理总览属性", () => {
+  const first = { hp_base: 147.84, attack_base: 92.4, defence_base: 66 };
+  const last = { hp_base: 502.656, hp_add: 7.392, attack_base: 314.16, attack_add: "4.62",
+    speed_base: 100, critical_chance: 0.05, critical_damage: 0.5 };
+  const role = normalizeRoleDetails(entry("hsr"), { detail: { stats: { 0: first, 6: last } } }, "五星");
+  expect(role?.overview.stats).toEqual([
+    { label: "Lv1生命", value: "148" }, { label: "Lv80生命", value: "1,087" }, { label: "Lv1攻击", value: "92" },
+    { label: "Lv1防御", value: "66" }, { label: "速度", value: "100" },
+    { label: "暴击率", value: "5%" }, { label: "暴击伤害", value: "50%" },
+  ]);
+  const partial = normalizeRoleDetails(entry("hsr"), { detail: { stats: { 1: first, 4: last } } }, "五星");
+  expect(partial?.overview.stats).toBeUndefined();
+});
+
+test("绝区零读取实际等级上限、晋阶增益和基础攻击附加值", () => {
+  const role = normalizeRoleDetails(entry("zzz"), { detail: {
+    stats: { hp_max: 617, hp_growth: 837238, attack: 135, attack_growth: 82578, defence: 49, defence_growth: 66203,
+      break_stun: 93, crit: 500, crit_damage: 5000 },
+    level: {
+      1: { level_min: 0, level_max: 10, hp_max: 0, attack: 0, defence: 0 },
+      6: { level_min: 50, level_max: 60, hp_max: 2117, attack: 241, defence: 167 },
+    },
+    extra_level: { 1: { max_level: 15, extra: { 12101: { value: 0 } } }, 2: { max_level: 60, extra: { 12101: { value: 75 } } } },
+  } }, "S级");
+  expect(role?.overview.stats).toEqual([
+    { label: "Lv1生命", value: "617" }, { label: "Lv60生命", value: "7,674" },
+    { label: "Lv1攻击", value: "135" }, { label: "Lv60攻击", value: "938" },
+    { label: "Lv1防御", value: "49" }, { label: "Lv60防御", value: "607" },
+    { label: "冲击力", value: "93" }, { label: "暴击率", value: "5%" }, { label: "暴击伤害", value: "50%" },
+  ]);
+});

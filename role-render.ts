@@ -121,6 +121,24 @@ function makeLayout() {
     } };
   }
 
+  function statRow(stats: readonly { label: string; value: string }[]): Block {
+    const column = contentWidth / 3;
+    const labelSize = 16;
+    const valueSize = 23;
+    const cells = stats.map(({ label, value }) => ({
+      labels: wrap(label, column - 16, labelSize),
+      values: wrap(value, column - 16, valueSize),
+    }));
+    const height = Math.max(90, ...cells.map(({ labels, values }) => 24 + labels.length * 24 + values.length * 30));
+    return { height, paint(ctx, top) {
+      for (const [index, { labels, values }] of cells.entries()) {
+        const x = margin + 24 + index * column;
+        paintLines(ctx, labels, x, top + 12, labelSize, 24, muted);
+        paintLines(ctx, values, x, top + 16 + labels.length * 24, valueSize, 30, gold);
+      }
+    } };
+  }
+
   function levelBlocks(levels: NonNullable<RoleSkillCard["levels"]>): Block[] {
     const result: Block[] = [];
     const titles = levels.map(({ level, sourceId }, _, all) => all.filter((entry) => entry.level === level).length > 1 && sourceId
@@ -174,7 +192,7 @@ function makeLayout() {
     return result;
   }
 
-  return { wrap, text, heading, row, levelBlocks };
+  return { wrap, text, heading, statRow, levelBlocks };
 }
 
 async function roleArtwork(role: RoleDetails, assetRoot: string | undefined) {
@@ -184,7 +202,7 @@ async function roleArtwork(role: RoleDetails, assetRoot: string | undefined) {
   if (!root) return images;
   const roots = basename(root) === "data" ? [root, dirname(root)] : [root];
   const paths = new Set([
-    role.overview.artwork, ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)),
+    role.overview.icon, role.overview.artwork, ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)),
     ...role.ranks.map(({ artwork }) => artwork), ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork)),
   ]);
   for (const path of paths) {
@@ -220,21 +238,22 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const images = await roleArtwork(role, options.assetRoot);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
   const layout = makeLayout();
-  const { wrap, heading, text, row, levelBlocks } = layout;
+  const { wrap, heading, text, statRow, levelBlocks } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
+  const icon = image(role.overview.icon);
   const portrait = image(role.overview.artwork);
-  const overview: Block[][] = [];
-  if (portrait) overview.push([{ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) }]);
-  const description = role.overview.description;
-  const facts = role.overview.facts.map(({ label, value }) => `${label}　${value}`);
-  const overviewText = [...(description ? [text(description)] : []), ...(role.overview.rarity ? [text(role.overview.rarity, gold)] : [])];
-  for (let start = 0; start < facts.length; start += 3) {
-    const values = facts.slice(start, start + 3);
-    overviewText.push(row(values, values.map(() => contentWidth / 3)));
+  const overview: Block[] = [];
+  if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
+  if (role.overview.description) overview.push(text(role.overview.description));
+  const facts = role.overview.facts.map(({ label, value }) => `${label}：${value}`);
+  if (role.overview.rarity) facts.unshift(`稀有度：${role.overview.rarity}`);
+  if (facts.length) overview.push(text(facts.join(" · "), gold));
+  const stats = role.overview.stats ?? [];
+  for (let start = 0; start < stats.length; start += 3) {
+    overview.push(statRow(stats.slice(start, start + 3)));
   }
-  if (overviewText.length) overview.push(overviewText);
 
-  const pages: Page[] = [{ section: "角色总览", panels: overview }];
+  const pages: Page[] = [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
   const skillPanels = role.skills.filter(({ cards }) => cards.length).flatMap(({ title, cards }) => [
     [heading(title, undefined, true)],
     ...cards.map((card) => [heading(card.name, image(card.artwork)), ...(card.description ? [text(card.description)] : []),
@@ -252,8 +271,9 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   ]) });
 
   const game = gameNames[role.game];
-  const title = wrap(role.overview.name, 620, 32, true);
-  const element = role.overview.facts.find(({ label }) => label === "属性")?.value ?? "";
+  const titleX = icon ? 152 : margin + 20;
+  const title = wrap(role.overview.name, width - margin - 10 - titleX, 32, true);
+  const element = role.overview.facts.find(({ label }) => /^(?:属性|神之眼|元素)$/u.test(label))?.value ?? "";
   const accent = accents.find(([pattern]) => pattern.test(element))?.[1] ?? "#41495d";
   const head = Math.max(header, 118 + title.length * 37);
   const output = [];
@@ -272,24 +292,24 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       ctx.fillRect(0, 0, width, height);
 
       rounded(ctx, margin, 12, inner, head - 32, 12, "rgba(13,17,29,.60)");
-      rounded(ctx, 33, 28, 102, 102, 51, "rgba(225,201,160,.12)");
-      if (portrait) {
+      if (icon) {
+        rounded(ctx, 33, 28, 102, 102, 51, "rgba(225,201,160,.12)");
         ctx.save();
         ctx.beginPath();
         ctx.arc(84, 79, 50, 0, Math.PI * 2);
         ctx.clip();
-        contain(ctx, portrait, 33, 28, 102, 102);
+        contain(ctx, icon, 33, 28, 102, 102);
         ctx.restore();
+        ctx.strokeStyle = gold;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(84, 79, 51, 0, Math.PI * 2);
+        ctx.stroke();
       }
-      ctx.strokeStyle = gold;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(84, 79, 51, 0, Math.PI * 2);
-      ctx.stroke();
-      paintLines(ctx, title, 152, 30, 32, 37, white, true);
+      paintLines(ctx, title, titleX, 30, 32, 37, white, true);
       const page = `${index + 1}/${pages.length}`;
-      paintLines(ctx, [`${game} · ${section} · ${page}`], 154, 42 + title.length * 37, 18, 27, gold);
-      if (role.version) paintLines(ctx, [`资料版本 ${role.version}`], 154, 72 + title.length * 37, 14, 21, muted);
+      paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 42 + title.length * 37, 18, 27, gold);
+      if (role.version) paintLines(ctx, [`资料版本 ${role.version}`], titleX + 2, 72 + title.length * 37, 14, 21, muted);
 
       let y = head;
       for (const [panel, blocks] of panels.entries()) {

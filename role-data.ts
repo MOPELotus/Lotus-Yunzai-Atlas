@@ -56,7 +56,9 @@ export interface RoleDetails {
     readonly rarity: string;
     readonly description?: string;
     readonly artwork?: string;
+    readonly icon?: string;
     readonly facts: readonly { label: string; value: string }[];
+    readonly stats?: readonly { label: string; value: string }[];
   };
   readonly skills: readonly RoleSkillGroup[];
   readonly ranks: readonly RoleRank[];
@@ -80,6 +82,17 @@ const zenlessButtons: Readonly<Record<string, string>> = {
   Icon_SpecialReady: "强化特殊技", Icon_SpecialReady_Rp: "强化特殊技", Icon_UltimateReady: "终结技",
   Icon_Switch: "切换", Icon_QTE: "快速支援", Icon_Chain: "连携技", Icon_Assist: "支援技", Icon_CoreSkill: "核心技",
 };
+const focusFields = {
+  gi: ["derived.avatarGacha", "detail.derived.avatarGacha", "derived.avatarBust", "detail.derived.avatarBust",
+    "derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.gacha", "gacha", "detail.bust", "bust",
+    "detail.portrait", "portrait"],
+  hsr: ["derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.portrait", "portrait"],
+  zzz: ["derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.portrait", "portrait", "detail.partner_info.role_icon"],
+} as const;
+
+const wholeStat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const decimalStat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+const percentStat = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 1 });
 
 function rows(value: unknown): [string, RecordValue][] {
   return Object.entries(object(Array.isArray(value) ? { ...value } : value))
@@ -370,16 +383,108 @@ function overviewFacts(game: Game, detail: RecordValue): RoleDetails["overview"]
   });
 }
 
+function number(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+type Stat = readonly [label: string, value: number | undefined, format?: Intl.NumberFormat];
+type LevelStats = (typeof levelStats)[number];
+const levelStats = ["生命", "攻击", "防御"] as const;
+
+function levelPairs(high: number | undefined, calculate: (stat: LevelStats, high: boolean) => number | undefined): Stat[] {
+  return levelStats.flatMap((stat) => [
+    [`Lv1${stat}`, calculate(stat, false)] as const,
+    ...(high === undefined ? [] : [[`Lv${high}${stat}`, calculate(stat, true)] as const]),
+  ]);
+}
+
+function genshinStats(detail: RecordValue): Stat[] {
+  const modifiers = object(detail.stats_modifier);
+  const ascension = values(modifiers.ascension).at(-1);
+  const fields = { 生命: ["hp", "base_hp", "fight_prop_base_hp"], 攻击: ["atk", "base_atk", "fight_prop_base_attack"],
+    防御: ["def", "base_def", "fight_prop_base_defense"] } as const;
+  const leveled = levelPairs(ascension ? 90 : undefined, (stat, high) => {
+    const [curve, baseField, bonus] = fields[stat];
+    const base = number(detail[baseField]);
+    const factor = number(object(modifiers[curve])[high ? "90" : "1"]);
+    if (base === undefined || factor === undefined) return;
+    return base * factor + (high ? number(ascension?.[bonus]) ?? 0 : 0);
+  });
+  function critical(baseField: string, bonusField: string) {
+    const base = number(detail[baseField]);
+    if (base !== undefined) return base + (number(ascension?.[bonusField]) ?? 0);
+  }
+  return [...leveled, ["暴击率", critical("crit_rate", "fight_prop_critical"), percentStat],
+    ["暴击伤害", critical("crit_dmg", "fight_prop_critical_hurt"), percentStat]];
+}
+
+function starRailStats(detail: RecordValue): Stat[] {
+  const stages = new Map(rows(detail.stats));
+  const first = stages.get("0");
+  // This source indexes the standard Lv80 final promotion as stage 6.
+  const last = stages.get("6");
+  const fields = { 生命: "hp", 攻击: "attack", 防御: "defence" } as const;
+  const leveled = levelPairs(last ? 80 : undefined, (stat, high) => {
+    const field = fields[stat];
+    const base = number((high ? last : first)?.[`${field}_base`]);
+    if (!high || base === undefined) return base;
+    const growth = number(last?.[`${field}_add`]);
+    if (growth !== undefined) return base + growth * 79;
+  });
+  const stats = last ?? first;
+  return [...leveled, ["速度", number(stats?.speed_base), decimalStat],
+    ["暴击率", number(stats?.critical_chance), percentStat], ["暴击伤害", number(stats?.critical_damage), percentStat]];
+}
+
+function zenlessStats(detail: RecordValue): Stat[] {
+  const stats = object(detail.stats);
+  const boundaries = values(detail.level).flatMap((row) => {
+    const min = number(row.level_min);
+    const max = integer(row.level_max);
+    return min !== undefined && max !== undefined && min < max ? [{ row, min, max }] : [];
+  });
+  const low = boundaries.find(({ min, max }) => min <= 1 && max >= 1);
+  const high = boundaries.reduce<(typeof boundaries)[number] | undefined>((current, candidate) =>
+    current === undefined || candidate.max > current.max ? candidate : current, undefined);
+  const fields = { 生命: ["hp_max", "hp_growth"], 攻击: ["attack", "attack_growth"], 防御: ["defence", "defence_growth"] } as const;
+  const extras = values(detail.extra_level);
+  const leveled = levelPairs(high?.max, (stat, atHigh) => {
+    const stage = atHigh ? high : low;
+    const level = atHigh ? stage?.max : 1;
+    const [field, growthField] = fields[stat];
+    const base = number(stats[field]);
+    const promotion = number(stage?.row[field]);
+    const growth = level === 1 ? 0 : number(stats[growthField]);
+    if (base === undefined || promotion === undefined || growth === undefined || level === undefined) return;
+    const extra = stat === "攻击" ? extras.find((row) => (integer(row.max_level) ?? 0) >= level) : undefined;
+    const attack = number(object(object(extra?.extra)["12101"]).value) ?? 0;
+    return base + growth / 10_000 * (level - 1) + promotion + attack;
+  });
+  const critical = number(stats.crit);
+  const criticalDamage = number(stats.crit_dmg ?? stats.crit_damage);
+  return [...leveled, ["冲击力", number(stats.break_stun), decimalStat],
+    ["暴击率", critical === undefined ? undefined : critical / 10_000, percentStat],
+    ["暴击伤害", criticalDamage === undefined ? undefined : criticalDamage / 10_000, percentStat]];
+}
+
+function overviewStats(game: Game, detail: RecordValue) {
+  const rows = game === "gi" ? genshinStats(detail) : game === "hsr" ? starRailStats(detail) : zenlessStats(detail);
+  const stats = rows.flatMap(([label, value, format = wholeStat]) =>
+    value !== undefined && Number.isFinite(value) ? [{ label, value: format.format(value) }] : []);
+  return stats.length ? stats : undefined;
+}
+
 export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
   const artwork = artworkFrom(images, game);
+  const icon = artwork("detail.icon", "icon");
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name, rarity, description: text(detail.desc) ?? text(object(detail.partner_info).profile_desc) ?? text(object(content.list).desc),
-      artwork: artwork("derived.avatarDrawCard", "detail.partner_info.role_icon", "detail.icon", "icon"), facts: overviewFacts(game, detail) },
+      artwork: artwork(...focusFields[game]) ?? icon, icon, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };
 }
