@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAtlasRuntimeCatalog, findBangboos } from "./catalog.ts";
+import { createAtlasRuntimeCatalog, findBangboos, findEquipment } from "./catalog.ts";
 import { publishAtlasCandidate } from "./publish-candidate.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 
@@ -125,4 +125,77 @@ test("抓取拒绝无关范围，并在来源身份、图标或连接错误时�
   await expect(acquireAtlasSource(candidate, scope, undefined, async (url) => url === iconUrl
     ? new Response(null, { status: 503 }) : source(url))).rejects.toThrow("HTTP 503");
   expect((await acquireAtlasSource(candidate, scope, undefined, request)).imageCount).toBe(1);
+}));
+
+const weaponScope = [{ game: "zzz", pageId: "weapon", version, recordCount: 3 }] as const;
+const weaponListUrl = `https://static.nanoka.cc/zzz/${version}/weapon.json`;
+const weaponDetail = (id: number) => `https://static.nanoka.cc/zzz/${version}/zh/weapon/${id}.json`;
+const weaponIcon = (name: string) => `https://static.nanoka.cc/assets/zzz/${name}.webp`;
+const weaponIconPrefix = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
+const weapons = [
+  { id: 12001, zh: "音擎甲", icon: "Weapon_B_Fixture", rank: 2, type: 1 },
+  { id: 13001, zh: "音擎乙", icon: "Weapon_A_Fixture", rank: 3, type: 4 },
+  { id: 14001, zh: "音擎丙", icon: "Weapon_S_Fixture", rank: 4, type: 7 },
+] as const;
+
+function engineDetail({ id, zh, icon, rank, type }: typeof weapons[number]) {
+  return { id, name: zh, code_name: icon, icon: `${weaponIconPrefix}/${icon}.png`, rarity: rank,
+    weapon_type: { [type]: { name: "样例专精" } }, desc: "样例技能。", materials: "10:7200,101010:2",
+    base_property: { name: "基础攻击力", value: 32 }, level: { 0: { rate: 0 } }, stars: { 0: { star_rate: 0 } },
+    talents: { 1: { name: "样例效果", desc: "效果说明。" } } };
+}
+
+function weaponSource(url: string) {
+  if (url === weaponListUrl) return Response.json(Object.fromEntries(weapons.map(({ id, ...row }) => [id, row])));
+  for (const item of weapons) {
+    if (url === weaponDetail(item.id)) return Response.json(engineDetail(item));
+    if (url === weaponIcon(item.icon)) return new Response(new Uint8Array(webp));
+  }
+  throw new Error(`unexpected URL ${url}`);
+}
+
+test("抓取各等级音擎，发布后保留详情字段和两个图标引用", () => fixture(async (root) => {
+  const candidate = join(root, "snapshots", "1");
+  await mkdir(join(root, "snapshots"));
+  const [first] = weapons;
+  const requests: string[] = [];
+  const result = await acquireAtlasSource(candidate, weaponScope, undefined, async (url) => {
+    requests.push(url);
+    if (url === weaponIcon(first.icon)) return new Response(null, { status: 404 });
+    if (url === weaponIcon(`${weaponIconPrefix}/${first.icon}`)) return weaponSource(weaponIcon(first.icon));
+    return weaponSource(url);
+  });
+  expect(result).toMatchObject({ pages: weaponScope, imageCount: 3, missingImageCount: 0 });
+  expect(requests).toEqual([weaponListUrl, weaponDetail(first.id), weaponIcon(first.icon),
+    weaponIcon(`${weaponIconPrefix}/${first.icon}`), ...weapons.slice(1).flatMap(({ id, icon }) => [weaponDetail(id), weaponIcon(icon)])]);
+  expect(await publishAtlasCandidate(root, null, 1, weaponScope)).toMatchObject({ status: "published" });
+  const catalog = createAtlasRuntimeCatalog(root);
+  const index = await catalog.read();
+  for (const [position, item] of weapons.entries()) {
+    const { id, zh, icon } = item;
+    const [entry] = findEquipment(index, zh, "zzz");
+    expect(entry).toMatchObject({ id: String(id), name: zh, rarity: ["B级", "A级", "S级"][position] });
+    const data = await Bun.file(join(candidate, "data", entry!.path)).json();
+    const localPath = `gallery/zzz/${icon}.webp`;
+    expect(data).toMatchObject({ meta: { images: [
+      { fieldPath: "icon", originalValue: icon, status: "downloaded", localPath },
+      { fieldPath: "detail.icon", originalValue: `${weaponIconPrefix}/${icon}.png`, status: "downloaded", localPath },
+    ] }, content: { detail: engineDetail(item) } });
+    expect(await catalog.weaponDetails(entry!)).toMatchObject({ artwork: localPath, description: "样例技能。",
+      stats: [{ label: "Lv1基础攻击力", value: "32" }], refinements: [{ rank: 1, name: "样例效果", description: "效果说明。" }] });
+  }
+}));
+
+test("音擎详情或图标不完整时清理候选，允许重新抓取", () => fixture(async (root) => {
+  const candidate = join(root, "candidate");
+  const [{ id, icon }] = weapons;
+  const missing = () => new Response(null, { status: 404 });
+  await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponDetail(id)
+    ? missing() : weaponSource(url))).rejects.toThrow("HTTP 404");
+  await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponDetail(id)
+    ? Response.json({ ...engineDetail(weapons[0]), icon: `${weaponIconPrefix}/Weapon_wrong.png` })
+    : weaponSource(url))).rejects.toThrow("身份或等级不符");
+  await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponIcon(icon) ||
+    url === weaponIcon(`${weaponIconPrefix}/${icon}`) ? missing() : weaponSource(url))).rejects.toThrow("音擎来源图标缺失");
+  expect((await acquireAtlasSource(candidate, weaponScope, undefined, async (url) => weaponSource(url))).imageCount).toBe(3);
 }));

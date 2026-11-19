@@ -5,12 +5,18 @@ import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
 const origin = "https://static.nanoka.cc";
-const pageId = "bangboo";
 const game = "zzz";
 const locale = "zh";
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
-const imageFolder = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
-const imagePattern = new RegExp(`^${imageFolder}/([A-Za-z0-9_-]{1,120})\\.png$`, "u");
+const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
+const weaponImages = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
+const bangbooIcon = new RegExp(`^${bangbooImages}/([A-Za-z0-9_-]{1,120})\\.png$`, "u");
+const weaponIcon = /^Weapon_[A-Za-z0-9_-]{1,113}$/u;
+const pages = {
+  bangboo: { title: "Bangboo", folder: "邦布", images: bangbooImages },
+  weapon: { title: "Weapon", folder: "音擎", images: weaponImages },
+} as const;
+type SourcePage = keyof typeof pages;
 const maxRecords = 256;
 const maxJsonBytes = 1024 * 1024;
 const maxIconBytes = 2 * 1024 * 1024;
@@ -68,22 +74,35 @@ async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value)}\n`, { flag: "wx" });
 }
 
-function bangbooIndex(value: unknown) {
+function sourceIndex(pageId: SourcePage, value: unknown) {
   const entries = Object.entries(object(value));
-  if (entries.length === 0 || entries.length > maxRecords) throw new Error("邦布索引条目数无效。");
+  const { folder } = pages[pageId];
+  if (entries.length === 0 || entries.length > maxRecords) throw new Error(`${folder}索引条目数无效。`);
   return entries.map(([id, value]) => {
     const list = object(value);
-    const { zh, rank, icon } = list;
-    const iconName = typeof icon === "string" ? imagePattern.exec(icon)?.[1] : undefined;
-    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim() || (rank !== 3 && rank !== 4) ||
-        (icon !== "" && !iconName)) throw new Error("邦布来源索引条目结构无效。");
+    const { zh, rank, icon, type } = list;
+    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim() || typeof icon !== "string" ||
+        (rank !== 3 && rank !== 4 && !(pageId === "weapon" && rank === 2))) throw new Error(`${folder}来源索引条目结构无效。`);
+    if (pageId === "weapon") {
+      if (!weaponIcon.test(icon) || typeof type !== "number" || !Number.isInteger(type) || type < 1 || type > 7) {
+        throw new Error("音擎来源索引条目结构无效。");
+      }
+      return { id, list, name: zh.trim(), rank, iconName: icon };
+    }
+    const iconName = bangbooIcon.exec(icon)?.[1];
+    if (icon !== "" && !iconName) throw new Error("邦布来源索引条目结构无效。");
     return { id, list, name: zh.trim(), rank, iconName };
   });
 }
 
-function detailMatches(detail: unknown, id: string, name: string, rank: number) {
+function detailMatches(pageId: SourcePage, detail: unknown, entry: ReturnType<typeof sourceIndex>[number]) {
+  const { id, name, rank, iconName, list } = entry;
   const item = object(detail);
-  return item.id === Number(id) && typeof item.name === "string" && item.name.trim() === name && item.rarity === rank;
+  if (item.id !== Number(id) || typeof item.name !== "string" || item.name.trim() !== name || item.rarity !== rank) return false;
+  if (pageId === "bangboo") return true;
+  const types = Object.keys(object(item.weapon_type));
+  return item.code_name === iconName && item.icon === `${weaponImages}/${iconName}.png` &&
+    types.length === 1 && types[0] === String(list.type);
 }
 
 function webp(bytes: Buffer): boolean {
@@ -92,13 +111,13 @@ function webp(bytes: Buffer): boolean {
     bytes.readUInt32LE(16) <= bytes.length - 20;
 }
 
-async function readIcon(name: string, target: string, signal: AbortSignal, request: SourceFetch) {
+async function readIcon(name: string, pageId: SourcePage, target: string, signal: AbortSignal, request: SourceFetch) {
   const localPath = `gallery/${game}/${name}.webp`;
-  for (const path of [name, `${imageFolder}/${name}`]) {
+  for (const path of [name, `${pages[pageId].images}/${name}`]) {
     const remoteUrl = `${origin}/assets/${game}/${path}.webp`;
     const bytes = await responseBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request);
     if (!bytes) continue;
-    if (!webp(bytes)) throw new Error("邦布来源图标不是有效的 WebP 文件。");
+    if (!webp(bytes)) throw new Error(`${pages[pageId].folder}来源图标不是有效的 WebP 文件。`);
     await mkdir(join(target, "gallery", game), { recursive: true });
     await writeFile(join(target, localPath), bytes, { flag: "wx" });
     return { remoteUrl, localPath, sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -110,11 +129,12 @@ async function readIcon(name: string, target: string, signal: AbortSignal, reque
 export async function acquireAtlasSource(destination: string, requirements: readonly AtlasCandidatePage[],
   signal?: AbortSignal, request: SourceFetch = fetch): Promise<AtlasAcquiredSource> {
   const scope = requirements[0];
-  if (requirements.length !== 1 || scope?.game !== game || scope.pageId !== pageId ||
+  if (requirements.length !== 1 || scope?.game !== game || (scope.pageId !== "bangboo" && scope.pageId !== "weapon") ||
       typeof scope.version !== "string" || !versions.test(scope.version)) {
-    throw new Error("当前只支持按指定版本抓取绝区零邦布分类。");
+    throw new Error("当前只支持按指定版本抓取绝区零邦布或音擎分类。");
   }
-  const version = scope.version;
+  const { pageId, version } = scope;
+  const { folder, title } = pages[pageId];
   const timeout = AbortSignal.timeout(180_000);
   const active = signal ? AbortSignal.any([signal, timeout]) : timeout;
   active.throwIfAborted();
@@ -126,32 +146,39 @@ export async function acquireAtlasSource(destination: string, requirements: read
   try {
     const sourcePath = `${version}/${pageId}.json`;
     const sourceUrl = `${origin}/${game}/${sourcePath}`;
-    const entries = bangbooIndex(await sourceJson(sourceUrl, false, active, request));
-    if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error("邦布来源条目数与计划不符。");
+    const entries = sourceIndex(pageId, await sourceJson(sourceUrl, false, active, request));
+    if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
     const images = new Map<string, Awaited<ReturnType<typeof readIcon>>>();
     let usedPlaceholder = false;
-    for (const { id, name, rank, iconName, list } of entries) {
+    for (const entry of entries) {
+      const { id, name, rank, iconName, list } = entry;
       const detailUrl = `${origin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
-      const detail = await sourceJson(detailUrl, true, active, request);
-      if (detail !== undefined && !detailMatches(detail, id, name, rank)) throw new Error("邦布详情与来源索引身份或等级不符。");
+      const detail = await sourceJson(detailUrl, pageId === "bangboo", active, request);
+      if (detail !== undefined && !detailMatches(pageId, detail, entry)) {
+        throw new Error(`${folder}详情与来源索引身份或等级不符（${id}）。`);
+      }
       const hasDetail = detail !== undefined;
       const detailSourceUrl = hasDetail ? detailUrl : null;
       const references = [];
       if (iconName) {
-        if (!images.has(iconName)) images.set(iconName, await readIcon(iconName, target, active, request));
+        if (!images.has(iconName)) images.set(iconName, await readIcon(iconName, pageId, target, active, request));
         const icon = images.get(iconName);
+        if (!icon && pageId === "weapon") throw new Error(`音擎来源图标缺失（${id}）。`);
         references.push({ fieldPath: "icon", originalValue: list.icon, ...(icon
           ? { ...icon, status: "downloaded", placeholder: false }
           : { status: "placeholder", placeholder: true, placeholderReason: "remote_missing", remoteUrl: null,
             localPath: placeholderPath, contentType: "image/svg+xml", bytes: Buffer.byteLength(placeholder),
             sha256: createHash("sha256").update(placeholder).digest("hex") }) });
         usedPlaceholder ||= !icon;
-        if (object(detail).icon === list.icon) references.push({ ...references[0], fieldPath: "detail.icon" });
+        const detailIcon = object(detail).icon;
+        if (typeof detailIcon === "string" && (pageId === "weapon" || detailIcon === list.icon)) {
+          references.push({ ...references[0], fieldPath: "detail.icon", originalValue: detailIcon });
+        }
       }
       const path = `${items}/${id}.json`;
-      const rarity = rank === 4 ? "S级" : "A级";
+      const rarity = rank === 4 ? "S级" : rank === 3 ? "A级" : "B级";
       const metadata = { sourceUrl, sourcePath, sourceLocale: null, localeMode: "embedded", detailSourceUrl };
       await writeJson(join(data, path), { meta: { ...metadata, gameId: game, pageId, locale,
         recordId: id, name, version, rarity, hasDetail, images: references }, content: { list, detail: detail ?? null } });
@@ -161,7 +188,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
       await mkdir(join(target, "gallery", "_placeholder"), { recursive: true });
       await writeFile(join(target, placeholderPath), placeholder, { flag: "wx" });
     }
-    const page = { id: pageId, title: "Bangboo", folder: "邦布", sourceUrl, sourcePath, sourceLocale: null,
+    const page = { id: pageId, title, folder, sourceUrl, sourcePath, sourceLocale: null,
       localeMode: "embedded", version, recordCount: entries.length, totalRecordCount: entries.length, sampled: false, records };
     await writeJson(join(data, "map.json"), {
       meta: { source: "https://nanoka.cc/", locales: [locale], imageDownloads: true,
