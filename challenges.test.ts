@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { apocalypseMode, challengeModes, chaosMode, fictionMode, findAnnouncedStarrailNext, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
-  onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
+  onslaughtMode, readChallengeFacts, theaterMode, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
   const mode = findChallengeMode("hsr", "混沌");
@@ -155,6 +155,19 @@ test("混沌下期只返回与公告相符的漆黑残响预览", async () => {
   expect(await select(records, "2026-12-13T20:00:00Z")).toBeUndefined();
   expect(await select([current, { ...next, list: { ...next.list, live_end: "2027-01-26 04:00:00" } }])).toBeUndefined();
   expect(await select([current, undated])).toBeUndefined();
+});
+
+test("幻想剧诗上期在中国服秒级轮换边界切换", async () => {
+  const previous = row("30", "2026-10-01 04:00:00", "2026-11-01 03:59:59");
+  const current = row("31", "2026-11-01 04:00:00", "2026-12-01 03:59:59");
+  const exportOnly = { id: "32", list: { begin: "2026-12-01 04:00:00", end: "2027-01-01 03:59:59" } };
+  const records = [current, exportOnly, previous];
+  const select = async (time: string) =>
+    (await findPreviousChallenge(theaterMode, records, async (entry) => readChallengeFacts(theaterMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select("2026-11-01T03:59:59.999+08:00")).toBeUndefined();
+  expect(await select("2026-11-01T04:00:00+08:00")).toBe("30");
+  expect(await select("2026-12-01T03:59:59.999+08:00")).toBe("30");
+  expect(await select("2026-12-01T04:00:00+08:00")).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {

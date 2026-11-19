@@ -131,7 +131,7 @@ export async function findAnnouncedStarrailNext<Entry extends { readonly id: str
 }
 
 export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode, entries: readonly Entry[],
+  mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode | typeof theaterMode, entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
   return (await findAdjacentChallenge(mode, "previous", entries, readFacts, now))?.adjacent;
