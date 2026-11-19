@@ -6,12 +6,13 @@ export const theaterMode = { game: "gi", id: "rolecombat", name: "幻想真境�
 export const abyssMode = { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] } as const;
 export const apocalypseMode = { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] } as const;
 export const fictionMode = { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] } as const;
+export const chaosMode = { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌", "忘却", "忘却之庭"] } as const;
 
 export const challengeModes = [
   abyssMode,
   theaterMode,
   onslaughtMode,
-  { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌"] },
+  chaosMode,
   apocalypseMode,
   fictionMode,
   { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: [] },

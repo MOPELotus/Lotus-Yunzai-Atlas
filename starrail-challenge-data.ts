@@ -1,5 +1,5 @@
 import type { AtlasEntry } from "./catalog.ts";
-import { apocalypseMode, fictionMode, readChallengeFacts } from "./challenges.ts";
+import { apocalypseMode, chaosMode, fictionMode, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
 
 interface StarrailEffect {
@@ -19,7 +19,7 @@ interface StarrailSide {
   readonly enemies: readonly (StarrailEnemy & { readonly level?: number })[];
 }
 
-export type StarrailChallengeMode = typeof apocalypseMode | typeof fictionMode;
+export type StarrailChallengeMode = typeof apocalypseMode | typeof chaosMode | typeof fictionMode;
 
 export interface StarrailChallengeDetails {
   readonly name: string;
@@ -30,6 +30,7 @@ export interface StarrailChallengeDetails {
   readonly optional: readonly StarrailEffect[];
   readonly rooms: readonly {
     readonly name: string;
+    readonly description?: string;
     readonly goals: readonly string[];
     readonly sides: readonly StarrailSide[];
   }[];
@@ -57,20 +58,33 @@ function effect(value: unknown): StarrailEffect {
   return { name: effectText(name), description: gameText(desc, param) };
 }
 
+function goalText(value: unknown, reportMissing: boolean) {
+  const { name, param } = object(value);
+  const text = gameText(name, param);
+  if (text || !reportMissing || typeof name !== "string") return text;
+  return effectText(name.replace(/#\d+(?:\[[a-z0-9]+\])?%?/giu, "（数值待核对）"));
+}
+
 export async function normalizeStarrailChallenge(entry: AtlasEntry, mode: StarrailChallengeMode, content: Record<string, unknown>, images: unknown,
   enemy: (id: string) => Promise<StarrailEnemy | undefined>, current = false): Promise<StarrailChallengeDetails | undefined> {
   if (entry.game !== "hsr") return;
   const detail = object(content.detail);
   const hasIdentity = positiveInteger(detail.id);
   if (hasIdentity && String(hasIdentity) !== entry.id) return;
-  const levels = rows(detail.level).map(object).filter((row) => positiveInteger(row.id));
+  const chaos = mode.id === chaosMode.id;
+  const levels = rows(chaos ? content.detail : detail.level).map(object).filter((row) => positiveInteger(row.id));
   if (!levels.length) return;
   const names = new Map(levels.map((level) => [level.id, effectText(level.name)]));
   const fiction = mode.id === fictionMode.id;
   const buff = effect(detail.buff);
-  const effects = fiction
-    ? [buff, ...rows(detail.sub_option).map(effect)].filter(({ name, description }) => name || description)
-    : [{ ...buff, name: buff.name || "末法余烬" }];
+  const descriptions = chaos ? levels.map(({ desc, param }) => gameText(desc, param)) : [];
+  const normal = descriptions.filter((_, index) => !levels[index]?.pre_id);
+  const [first = ""] = normal;
+  const sameDescription = normal.every((description) => description === first) ? first : "";
+  let effects: StarrailEffect[];
+  if (chaos) effects = sameDescription ? [{ name: "常规关卡", description: sameDescription }] : [];
+  else if (fiction) effects = [buff, ...rows(detail.sub_option).map(effect)].filter(({ name, description }) => name || description);
+  else effects = [{ ...buff, name: buff.name || "末法余烬" }];
   const optionalValues = fiction ? rows(detail.option) : [detail.buff_list1, detail.buff_list2, detail.buff_list3].flatMap(rows);
   const buffs = optionalValues.map(effect).filter(({ name }) => name);
   const optional = [...new Map(buffs.map((row) => [JSON.stringify(row), row])).values()];
@@ -103,22 +117,19 @@ export async function normalizeStarrailChallenge(entry: AtlasEntry, mode: Starra
     return { name, weaknesses, enemies };
   }
 
-  const rooms = await Promise.all(levels.map(async (level) => {
+  const rooms = await Promise.all(levels.map(async (level, index) => {
     const preId = positiveInteger(level.pre_id);
     const ownName = names.get(level.id) || `关卡 ID ${level.id}`;
     const sideData = preId
       ? [["星启模式", level.event_id_list, level.damage_type]] as const
       : [["上半", level.event_id_list1, level.damage_type1], ["下半", level.event_id_list2, level.damage_type2]] as const;
     const sides = await Promise.all(sideData.map(([name, stages, elements]) => readSide(name, stages, elements)));
-    const goals = rows(level.challenge).flatMap((value) => {
-      const { name, param } = object(value);
-      const text = gameText(name, param);
-      return text ? [text] : [];
-    });
-    const special = object(level.challenge_special);
-    const additionalGoal = gameText(special.name, special.param);
+    const goals = rows(level.challenge).map((value) => goalText(value, chaos)).filter(Boolean);
+    const additionalGoal = goalText(level.challenge_special, chaos);
     if (additionalGoal) goals.push(`额外目标 ${additionalGoal}`);
-    return { name: preId ? `${names.get(preId) || ownName} · 星启模式` : ownName, goals, sides };
+    const description = descriptions[index];
+    return { name: preId ? `${names.get(preId) || ownName} · 星启模式` : ownName,
+      description: preId || description !== sameDescription ? description : undefined, goals, sides };
   }));
   const name = entry.name === entry.id ? `记录 ID ${entry.id}` : entry.name;
   return {

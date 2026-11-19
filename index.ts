@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, challengeModes, fictionMode, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
+import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
   onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
@@ -419,7 +419,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
-    if (mode.id === apocalypseMode.id || mode.id === fictionMode.id) {
+    if (mode.id === apocalypseMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
       const challenge = await catalog.starrailChallengeDetails(entry, result, mode, currentRequested);
       if (challenge) {
         try {
@@ -453,6 +453,9 @@ export default {
     "#Lotus图鉴状态": "#图鉴状态", "Lotus图鉴状态": "#图鉴状态", "#lotus图鉴状态": "#图鉴状态", "lotus图鉴状态": "#图鉴状态",
     "#星铁本期末日幻影图鉴": "#星铁本期末日图鉴",
     "#星铁本期虚构叙事图鉴": "#星铁本期虚构图鉴",
+    "#星铁本期混沌回忆图鉴": "#星铁本期混沌图鉴",
+    "#星铁本期忘却图鉴": "#星铁本期混沌图鉴",
+    "#星铁本期忘却之庭图鉴": "#星铁本期混沌图鉴",
   },
   commands: {
     async "#图鉴"(argument: string) {
@@ -478,6 +481,7 @@ export default {
     "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
+    "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

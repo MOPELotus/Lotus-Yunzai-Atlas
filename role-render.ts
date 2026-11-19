@@ -548,11 +548,14 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
   const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
-  const blocks = [text(period), heading("环境与全局效果")];
-  if (!effects.length) blocks.push(text("增益说明待核对"));
-  for (const effect of effects) {
-    if (effect.name) blocks.push(heading(effect.name));
-    blocks.push(text(effect.description || "增益说明待核对"));
+  const blocks = [text(period)];
+  if (effects.length || rooms.every(({ description }) => !description)) {
+    blocks.push(heading("环境与全局效果"));
+    if (!effects.length) blocks.push(text("增益说明待核对"));
+    for (const effect of effects) {
+      if (effect.name) blocks.push(heading(effect.name));
+      blocks.push(text(effect.description || "增益说明待核对"));
+    }
   }
   if (optional.length) {
     blocks.push(heading("可选增益"));
@@ -563,6 +566,7 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
       ? [`${side.name === "星启模式" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
     blocks.push(heading(room.name));
     if (weaknesses.length || room.goals.length) blocks.push(text([...weaknesses, ...room.goals].join(" · ")));
+    if (room.description) blocks.push(text(room.description));
     for (const side of room.sides) {
       blocks.push(heading(side.name));
       if (!side.enemies.length) blocks.push(text("阵容待核对"));
