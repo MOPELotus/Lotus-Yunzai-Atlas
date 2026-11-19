@@ -1,0 +1,73 @@
+import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
+import { parseEquipmentShortcut, parseGluedLookup } from "./traditional.ts";
+
+test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
+  for (const [game, query, commands] of [
+    ["gi", "西风剑", ["#西风剑图鉴", "#原神西风剑图鉴"]],
+    ["hsr", "锋镝", ["*锋镝图鉴", "#星铁锋镝图鉴", "#星穹铁道锋镝图鉴", "#崩坏星穹铁道锋镝图鉴"]],
+    ["zzz", "深海访客", ["%深海访客图鉴", "％深海访客图鉴", "#绝区零深海访客图鉴"]],
+  ] as const) {
+    for (const command of commands) expect(parseEquipmentShortcut(command)).toEqual({ game, query });
+  }
+  for (const command of ["#图鉴", "#星铁图鉴", "#西风剑攻略图鉴", "#芙宁娜练度统计图鉴", "#芙宁娜命座图鉴",
+    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#123图鉴", "#１２３图鉴"]) {
+    expect(parseEquipmentShortcut(command)).toBeUndefined();
+  }
+});
+
+test("旧显式入口接受紧连名称，预留状态、维护和帮助指令", () => {
+  for (const command of ["#图鉴西风剑", "图鉴西风剑", "#Lotus图鉴西风剑", "lotus图鉴西风剑", "荷花图鉴西风剑"]) {
+    expect(parseGluedLookup(command)).toBe("西风剑");
+  }
+  for (const command of ["#荷花图鉴状态", "Lotus图鉴帮助", "#图鉴更新", "荷花图鉴检查更新", "图鉴全量更新", "#图鉴重置",
+    "#更新图鉴", "#Lotus检查图鉴更新", "#全量更新图鉴", "#荷花重置图鉴", "#lotus清空图鉴"]) {
+    expect(parseGluedLookup(command)).toBeUndefined();
+    expect(parseEquipmentShortcut(command)).toBeUndefined();
+  }
+});
+
+function page(...records: { id: string; name: string }[]) {
+  return { version: "1", recordCount: records.length, records: Object.fromEntries(records.map((entry) =>
+    [entry.id, { ...entry, path: `items/${entry.id}.json` }])) };
+}
+
+test("显式旧搜索择优且保留同名结果，装备捷径只认指定游戏的完整名称", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-traditional-"));
+  try {
+    await mkdir(join(root, "items"));
+    await writeFile(join(root, "items/202.json"), JSON.stringify({
+      meta: { gameId: "gi", pageId: "artifact", recordId: "202", version: "1" },
+      content: { list: { set: { two: { name: { zh: "西风剑" } } } } },
+    }));
+    await writeFile(join(root, "map.json"), JSON.stringify({
+      games: {
+        gi: { locales: { zh: { pages: {
+          character: page({ id: "10", name: "西风剑客" }),
+          weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" }),
+          artifact: page({ id: "202", name: "索引名应由详情修正" }),
+        } } } },
+        hsr: { locales: { zh: { pages: { lightcone: page({ id: "300", name: "西风剑" }) } } } },
+        zzz: { locales: { zh: { pages: { bangboo: page({ id: "400", name: "企鹅布" }) } } } },
+      },
+    }));
+    const snapshot = await createAtlasCatalog(root).read();
+    const hits = (query: string, game?: Game, mode?: TraditionalLookup) =>
+      findTraditionalEntries(snapshot, query, game, mode).map(({ entry, kind }) => [entry.game, kind, entry.id]);
+    expect(hits("西风剑")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"], ["hsr", "equipment", "300"]]);
+    expect(hits("100")).toEqual([["gi", "equipment", "100"]]);
+    expect(hits("西风剑客")).toEqual([["gi", "character", "10"]]);
+    expect(hits("企鹅布")).toEqual([["zzz", "bangboo", "400"]]);
+    expect(hits("西风剑", "hsr", "equipment")).toEqual([["hsr", "equipment", "300"]]);
+    expect(hits("西风剑", "gi", "equipment")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"]]);
+    for (const name of ["西风", "100", "西风剑客", "企鹅布", "余响旧曲"]) expect(hits(name, "gi", "equipment")).toEqual([]);
+    expect(hits("余响 · 旧曲", "gi", "equipment")).toEqual([["gi", "equipment", "101"]]);
+    expect(hits("西风", undefined, "name")).toEqual([]);
+    expect(hits("西风剑客", undefined, "name")).toEqual([["gi", "character", "10"]]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

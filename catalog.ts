@@ -100,15 +100,31 @@ function score(entry: AtlasEntry, key: string): number {
   return name.includes(key) ? 1 : 0;
 }
 
-function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): AtlasEntry[] {
-  const key = compareKey(query);
+function exactName(value: string): string {
+  return value.trim().normalize("NFKC").toLowerCase();
+}
+
+function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
+  const key = exact ? exactName(query) : compareKey(query);
   if (!key) return [];
-  const matches = catalog.pages
-    .filter((page) => page.kind === kind && (!game || page.game === game))
-    .flatMap((page) => page.entries.map((entry) => ({ entry, score: score(entry, key) })))
-    .filter((match) => match.score > 0);
-  const best = Math.max(...matches.map((match) => match.score));
-  return matches.filter((match) => match.score === best).map(({ entry }) => entry);
+  const matches = catalog.pages.flatMap((page) => {
+    const kind = kinds.find((kind) => kind === page.kind);
+    if (!kind || (game && page.game !== game)) return [];
+    return page.entries.map((entry) => ({ kind, entry, score: exact ? Number(exactName(entry.name) === key) : score(entry, key) }));
+  });
+  const best = matches.reduce((best, match) => Math.max(best, match.score), 0);
+  return best > 0 ? matches.filter((match) => match.score === best) : [];
+}
+
+function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): AtlasEntry[] {
+  return findMatches(catalog, [kind], query, game).map(({ entry }) => entry);
+}
+
+export type TraditionalLookup = "search" | "name" | "equipment";
+
+export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
+  const kinds = mode === "equipment" ? ["equipment", "set"] as const : ["character", "equipment", "set", "bangboo"] as const;
+  return findMatches(catalog, kinds, query, game, mode !== "search");
 }
 
 export function findCharacters(catalog: Catalog, query: string, game?: Game): Character[] {

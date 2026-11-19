@@ -2,13 +2,16 @@ import { fileURLToPath } from "node:url";
 import { challengeModes, findChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
-import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, gameNames, type Game } from "./catalog.ts";
+import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
+  gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
+import { traditionalAtlasApps } from "./traditional.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment } from "./catalog.ts";
 
 const games = new Map<string, Game>([
-  ["原神", "gi"], ["星铁", "hsr"], ["星穹铁道", "hsr"], ["绝区零", "zzz"],
+  ["原神", "gi"], ["星铁", "hsr"], ["星穹铁道", "hsr"], ["崩坏星穹铁道", "hsr"], ["崩铁", "hsr"],
+  ["绝区零", "zzz"], ["绝区", "zzz"],
 ]);
 const catalog = createAtlasCatalog(Bun.env.LOTUS_ATLAS_DATA_DIR ||
   fileURLToPath(new URL("../../data/atlas/data/", import.meta.url)));
@@ -22,6 +25,30 @@ function searchTerms(argument: string, fixedGame?: Game) {
     mismatched: Boolean(fixedGame && statedGame && fixedGame !== statedGame) };
 }
 
+async function equipmentLine(item: AtlasEntry): Promise<string> {
+  const { category, rarity, scope } = await catalog.equipmentFacts(item);
+  return [gameNames[item.game], category, item.name, rarity || "等级待核对",
+    scope || "适用范围待核对", `ID ${item.id}`].join(" · ");
+}
+
+async function setLines(item: AtlasEntry, showEffects: boolean): Promise<string> {
+  const { category, effects } = await catalog.setFacts(item);
+  const header = [gameNames[item.game], category, item.name, `ID ${item.id}`].join(" · ");
+  if (!showEffects) return header;
+  return [header, ...(effects.length ? effects.map(({ pieces, text }) =>
+    `${pieces}件套 · ${text || "效果待核对"}`) : ["套装效果待核对"])].join("\n");
+}
+
+async function characterLine(character: AtlasEntry, showCategory = false): Promise<string> {
+  const rarity = await catalog.characterRarity(character);
+  const rank = rarity || (character.game === "zzz" ? "等级待核对" : "");
+  return [gameNames[character.game], showCategory ? "角色" : "", character.name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
+}
+
+async function bangbooLine(item: AtlasEntry): Promise<string> {
+  return ["绝区零", "邦布", item.name, await catalog.bangbooRarity(item) || "等级待核对", `ID ${item.id}`].join(" · ");
+}
+
 async function equipmentQuery(argument: string, command: string, fixedGame?: Game): Promise<string> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
   if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的装备。`;
@@ -30,11 +57,7 @@ async function equipmentQuery(argument: string, command: string, fixedGame?: Gam
     const result = await catalog.read();
     const matches = findEquipment(result, query, game);
     if (!matches.length) return "未找到匹配的武器、光锥或音擎。";
-    const lines = await Promise.all(matches.slice(0, 8).map(async (item) => {
-      const { category, rarity, scope } = await catalog.equipmentFacts(item);
-      return [gameNames[item.game], category, item.name, rarity || "等级待核对",
-        scope || "适用范围待核对", `ID ${item.id}`].join(" · ");
-    }));
+    const lines = await Promise.all(matches.slice(0, 8).map(equipmentLine));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -51,13 +74,7 @@ async function setsQuery(argument: string, command: string, fixedGame?: Game): P
     const result = await catalog.read();
     const matches = findSets(result, query, game);
     if (!matches.length) return "未找到匹配的套装。";
-    const lines = await Promise.all(matches.slice(0, 8).map(async (item) => {
-      const { category, effects } = await catalog.setFacts(item);
-      const header = [gameNames[item.game], category, item.name, `ID ${item.id}`].join(" · ");
-      if (matches.length > 1) return header;
-      return [header, ...(effects.length ? effects.map(({ pieces, text }) =>
-        `${pieces}件套 · ${text || "效果待核对"}`) : ["套装效果待核对"])].join("\n");
-    }));
+    const lines = await Promise.all(matches.slice(0, 8).map((item) => setLines(item, matches.length === 1)));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的套装名。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -74,13 +91,33 @@ async function bangbooQuery(argument: string): Promise<string> {
     const result = await catalog.read();
     const matches = findBangboos(result, query);
     if (!matches.length) return "未找到匹配的邦布。";
-    const lines = await Promise.all(matches.slice(0, 8).map(async (item) =>
-      ["绝区零", "邦布", item.name, await catalog.bangbooRarity(item) || "等级待核对", `ID ${item.id}`].join(" · ")));
+    const lines = await Promise.all(matches.slice(0, 8).map(bangbooLine));
     if (matches.length > lines.length) lines.push("结果较多，请补充更完整的邦布名。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
   } catch {
     return missing;
+  }
+}
+
+async function traditionalQuery(query: string, game?: Game, mode: TraditionalLookup = "search"): Promise<string | undefined> {
+  try {
+    const result = await catalog.read();
+    const matches = findTraditionalEntries(result, query, game, mode);
+    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装或邦布。" : undefined;
+    const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
+      switch (kind) {
+        case "equipment": return equipmentLine(entry);
+        case "set": return setLines(entry, matches.length === 1);
+        case "character": return characterLine(entry, true);
+        case "bangboo": return bangbooLine(entry);
+      }
+    }));
+    if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
+    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    return lines.join("\n");
+  } catch {
+    return mode === "search" ? missing : undefined;
   }
 }
 
@@ -212,8 +249,25 @@ async function challengeQuery(argument: string): Promise<string> {
   }
 }
 
+export const apps = traditionalAtlasApps((argument, game) => {
+  if (game) return traditionalQuery(argument, game, "equipment");
+  const { query, game: statedGame } = searchTerms(argument);
+  return traditionalQuery(query, statedGame, "name");
+});
+
 export default {
+  aliases: {
+    "图鉴": "#图鉴", "#荷花图鉴": "#图鉴", "荷花图鉴": "#图鉴", "#Lotus图鉴": "#图鉴", "Lotus图鉴": "#图鉴",
+    "#lotus图鉴": "#图鉴", "lotus图鉴": "#图鉴",
+    "图鉴状态": "#图鉴状态", "#荷花图鉴状态": "#图鉴状态", "荷花图鉴状态": "#图鉴状态",
+    "#Lotus图鉴状态": "#图鉴状态", "Lotus图鉴状态": "#图鉴状态", "#lotus图鉴状态": "#图鉴状态", "lotus图鉴状态": "#图鉴状态",
+  },
   commands: {
+    async "#图鉴"(argument: string) {
+      const { game, query } = searchTerms(argument);
+      if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
+      return await traditionalQuery(query, game) ?? missing;
+    },
     "#武器图鉴": (argument: string) => equipmentQuery(argument, "#武器图鉴"),
     "#光锥图鉴": (argument: string) => equipmentQuery(argument, "#光锥图鉴", "hsr"),
     "#音擎图鉴": (argument: string) => equipmentQuery(argument, "#音擎图鉴", "zzz"),
@@ -248,11 +302,7 @@ export default {
         const result = await catalog.read();
         const matches = findCharacters(result, query, game);
         if (!matches.length) return "未找到匹配的角色。";
-        const lines = await Promise.all(matches.slice(0, 8).map(async (character) => {
-          const rarity = await catalog.characterRarity(character);
-          const rank = rarity || (character.game === "zzz" ? "等级待核对" : "");
-          return [gameNames[character.game], character.name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
-        }));
+        const lines = await Promise.all(matches.slice(0, 8).map((character) => characterLine(character)));
         if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的角色名。");
         if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
         return lines.join("\n");
