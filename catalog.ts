@@ -15,6 +15,7 @@ import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
+import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
@@ -125,17 +126,6 @@ function score(entry: AtlasEntry, key: string): number {
 function exactName(value: string): string {
   return value.trim().normalize("NFKC").toLowerCase();
 }
-
-const zzzCharacterAliases = new Map([
-  ["星见雅", { id: "1091", name: "雅" }],
-  ["安比·德玛拉", { id: "1011", name: "安比" }],
-  ["安比德玛拉", { id: "1011", name: "安比" }],
-  ["零号安比", { id: "1381", name: "零号·安比" }],
-  ["猫宫又奈", { id: "1021", name: "猫又" }],
-  ["猫宫 又奈", { id: "1021", name: "猫又" }],
-  ["妮可·德玛拉", { id: "1031", name: "妮可" }],
-  ["妮可德玛拉", { id: "1031", name: "妮可" }],
-]);
 
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
   const literal = exactName(query);

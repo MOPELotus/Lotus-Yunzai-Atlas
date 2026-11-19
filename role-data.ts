@@ -1,5 +1,6 @@
 import type { Character, Game } from "./catalog.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
+import { zzzFullNames } from "./zzz-role-names.ts";
 
 export interface RoleText {
   readonly label?: string;
@@ -459,13 +460,6 @@ function overviewStats(game: Game, detail: RecordValue) {
     value !== undefined && Number.isFinite(value) ? [{ label, value: format.format(value) }] : []);
   return stats.length ? stats : undefined;
 }
-
-const zzzFullNames = new Map([
-  ["1091", { name: "雅", fullName: "星见雅" }],
-  ["1011", { name: "安比", fullName: "安比·德玛拉" }],
-  ["1021", { name: "猫又", fullName: "猫宫又奈" }],
-  ["1031", { name: "妮可", fullName: "妮可·德玛拉" }],
-]);
 
 export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
   const { game, id, version, name } = character;
