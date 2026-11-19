@@ -1,11 +1,12 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
+import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
   findNextShiyu, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
 import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
+import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findMonsters } from "./catalog.ts";
@@ -210,6 +211,19 @@ async function onslaughtCard(entry: AtlasEntry): Promise<AtlasImage | undefined>
   }
 }
 
+async function starrailChallengeCard(entry: AtlasEntry, result: Awaited<ReturnType<typeof catalog.read>>,
+  mode: StarrailChallengeMode, current = false): Promise<AtlasImage | undefined> {
+  const challenge = await catalog.starrailChallengeDetails(entry, result, mode, current);
+  if (!challenge) return;
+  try {
+    const { renderStarrailChallenge } = await import("./role-render.ts");
+    const { png } = await renderStarrailChallenge(challenge, { assetRoot: catalog.assetRoot(entry) });
+    return { type: "image", file: png };
+  } catch {
+    return undefined;
+  }
+}
+
 async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
   const title = monsterLine(entry);
   const monster = await catalog.monsterDetails(entry);
@@ -231,6 +245,19 @@ async function traditionalQuery(
     const exact = mode === "character" || mode === "shortcut";
     const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
       mode !== "character" || kind === "character");
+    if (!matches.length && mode === "shortcut" && game === "hsr") {
+      const key = query.normalize("NFKC").toLowerCase();
+      const entries = result.pages.find(({ challengeMode }) => challengeMode?.id === arbitrationMode.id)?.entries ?? [];
+      const named = entries.filter(({ name, id }) => name !== id && name.normalize("NFKC").toLowerCase() === key);
+      if (named.length > 1) return ["异相仲裁存在同名资料，请使用 #挑战图鉴 星铁 异相仲裁 记录 ID。",
+        ...named.map(({ name, id }) => `${name} · ID ${id}`)].join("\n");
+      const [entry] = named;
+      if (entry) {
+        const image = await starrailChallengeCard(entry, result, arbitrationMode);
+        if (image) return image;
+        return (await challengeDetails(entry, arbitrationMode, false)).join("\n");
+      }
+    }
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
     const first = matches[0]!;
     if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
@@ -346,6 +373,9 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const forecast = mode.id === shiyuMode.id && target === "下期";
   const unverifiedRotation = `${mode.name}${forecast ? "下期" : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
+  if (mode.id === arbitrationMode.id && /^(?:上期|下期)$/u.test(target)) {
+    return `${mode.name}${target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  }
   if (!forecast && /^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
@@ -423,17 +453,9 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
-    if (mode.id === apocalypseMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
-      const challenge = await catalog.starrailChallengeDetails(entry, result, mode, currentRequested);
-      if (challenge) {
-        try {
-          const { renderStarrailChallenge } = await import("./role-render.ts");
-          const { png } = await renderStarrailChallenge(challenge, { assetRoot: catalog.assetRoot(entry) });
-          return { type: "image", file: png };
-        } catch {
-          // The verified challenge summary remains usable without rendering.
-        }
-      }
+    if (mode.id === apocalypseMode.id || mode.id === arbitrationMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
+      const image = await starrailChallengeCard(entry, result, mode, currentRequested);
+      if (image) return image;
     }
     if (mode.id === shiyuMode.id) {
       const shiyu = await catalog.shiyuDetails(entry, result, forecast ? "next" : currentRequested ? "current" : undefined);
@@ -484,6 +506,14 @@ export default {
     "#星铁本期混沌回忆图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却之庭图鉴": "#星铁本期混沌图鉴",
+    "#星铁异相仲裁图鉴": "#星铁异相图鉴",
+    "#星铁本期异相仲裁图鉴": "#星铁本期异相图鉴",
+    "#星铁当期异相图鉴": "#星铁本期异相图鉴",
+    "#星铁当期异相仲裁图鉴": "#星铁本期异相图鉴",
+    "#星铁上期异相仲裁图鉴": "#星铁上期异相图鉴",
+    "#星铁下期异相仲裁图鉴": "#星铁下期异相图鉴",
+    "#星铁下期异相": "#星铁下期异相图鉴",
+    "#星铁下期异相仲裁": "#星铁下期异相图鉴",
     "#绝区零本期防卫图鉴": "#绝区零本期防卫战图鉴",
     "#绝区零本期式舆图鉴": "#绝区零本期防卫战图鉴",
     "#绝区零本期式舆防卫图鉴": "#绝区零本期防卫战图鉴",
@@ -521,6 +551,10 @@ export default {
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
+    "#星铁异相图鉴": () => challengeQuery("星铁 异相仲裁"),
+    "#星铁本期异相图鉴": () => challengeQuery("星铁 异相仲裁 本期"),
+    "#星铁上期异相图鉴": () => challengeQuery("星铁 异相仲裁 上期"),
+    "#星铁下期异相图鉴": () => challengeQuery("星铁 异相仲裁 下期"),
     "#绝区零本期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 本期"),
     "#绝区零下期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 下期"),
     "#绝区零本期危局图鉴": () => challengeQuery("绝区零 危局强袭战 本期"),

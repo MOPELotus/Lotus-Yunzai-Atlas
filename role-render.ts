@@ -560,16 +560,19 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
       blocks.push(text(effect.description || "增益说明待核对"));
     }
   }
-  if (optional.length) {
+  const addOptional = (buffs: typeof optional) => {
+    if (!buffs.length) return;
     blocks.push(heading("可选增益"));
-    for (const buff of optional) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));
-  }
+    for (const buff of buffs) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));
+  };
+  addOptional(optional);
   for (const room of rooms) {
     const weaknesses = room.sides.flatMap((side) => side.weaknesses.length
-      ? [`${side.name === "星启模式" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
+      ? [`${side.name === "星启模式" || side.name === "敌人" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
     blocks.push(heading(room.name));
     if (weaknesses.length || room.goals.length) blocks.push(text([...weaknesses, ...room.goals].join(" · ")));
     if (room.description) blocks.push(text(room.description));
+    if (room.optional) addOptional(room.optional);
     for (const side of room.sides) {
       blocks.push(heading(side.name));
       if (!side.enemies.length) blocks.push(text("阵容待核对"));

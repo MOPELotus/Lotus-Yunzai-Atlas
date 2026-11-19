@@ -9,6 +9,7 @@ export const fictionMode = { game: "hsr", id: "maze_extra", name: "虚构叙事"
 export const chaosMode = { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌", "忘却", "忘却之庭"] } as const;
 export const shiyuMode = { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫", "防卫战", "式舆", "式舆防卫"] } as const;
 export const deadlyAssaultMode = { game: "zzz", id: "boss", name: "危局强袭战", aliases: ["危局", "强袭", "强袭战"] } as const;
+export const arbitrationMode = { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: ["异相"] } as const;
 
 export const challengeModes = [
   abyssMode,
@@ -17,7 +18,7 @@ export const challengeModes = [
   chaosMode,
   apocalypseMode,
   fictionMode,
-  { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: [] },
+  arbitrationMode,
   shiyuMode,
   deadlyAssaultMode,
 ] as const satisfies readonly { game: Game; id: string; name: string; aliases: readonly string[] }[];
