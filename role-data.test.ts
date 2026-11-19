@@ -125,6 +125,17 @@ test("安比图册只使用对应角色快照中已核对的全名和原图", ()
   expect(normalizeRoleDetails(anby, detail("零号·安比", ""), "A级")?.overview.name).toBe("安比");
 });
 
+test("猫又与妮可使用已核对的原图册全名", () => {
+  const neko = { ...entry("zzz"), id: "1021", name: "猫又" };
+  const nicole = { ...neko, id: "1031", name: "妮可" };
+  const nekoData = { detail: { partner_info: { full_name: "猫宫又奈" } } };
+  const nicoleData = { detail: { partner_info: { full_name: "妮可·德玛拉" } } };
+  expect(normalizeRoleDetails(neko, nekoData, "S级")?.overview.name).toBe("猫宫又奈");
+  expect(normalizeRoleDetails(nicole, nicoleData, "A级")?.overview.name).toBe("妮可·德玛拉");
+  expect(normalizeRoleDetails(neko, nicoleData, "S级")?.overview.name).toBe("猫又");
+  expect(normalizeRoleDetails(nicole, nekoData, "A级")?.overview.name).toBe("妮可");
+});
+
 test("角色总览优先采用明确登记的主图，独立保留头像与按旧序排列的可验证属性", () => {
   const detail = {
     base_hp: 1191.65, base_atk: 20, crit_rate: 0.05, crit_dmg: 0.5,

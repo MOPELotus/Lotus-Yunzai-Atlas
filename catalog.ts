@@ -131,6 +131,10 @@ const zzzCharacterAliases = new Map([
   ["安比·德玛拉", { id: "1011", name: "安比" }],
   ["安比德玛拉", { id: "1011", name: "安比" }],
   ["零号安比", { id: "1381", name: "零号·安比" }],
+  ["猫宫又奈", { id: "1021", name: "猫又" }],
+  ["猫宫 又奈", { id: "1021", name: "猫又" }],
+  ["妮可·德玛拉", { id: "1031", name: "妮可" }],
+  ["妮可德玛拉", { id: "1031", name: "妮可" }],
 ]);
 
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {

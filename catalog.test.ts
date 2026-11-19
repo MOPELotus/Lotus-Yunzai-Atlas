@@ -33,6 +33,21 @@ test("安比的全名和零号安比的旧写法分别只返回对应身份", ()
   expect(findTraditionalEntries(catalog, "安比德玛拉", "hsr", "name")).toEqual([]);
 });
 
+test("猫又与妮可的旧全名和书写变体只匹配对应角色", () => {
+  const neko = { game: "zzz", id: "1021", name: "猫又", version: "3.3", rarity: "S级", path: "items/1021.json" } as const;
+  const nicole = { ...neko, id: "1031", name: "妮可", rarity: "A级", path: "items/1031.json" };
+  const page = { game: "zzz", kind: "character", name: "角色", version: "3.3", sampled: false, entries: [neko, nicole] } as const;
+  const catalog = { pages: [page], stale: false };
+  for (const [queries, entry] of [[["猫又", "猫宫又奈", "猫宫 又奈"], neko], [["妮可", "妮可·德玛拉", "妮可德玛拉"], nicole]] as const) {
+    for (const query of queries) {
+      expect(findTraditionalEntries(catalog, query, "zzz", "name").map(({ entry }) => entry)).toEqual([entry]);
+      expect(findCharacters(catalog, query)).toEqual([entry]);
+    }
+  }
+  expect(findTraditionalEntries(catalog, "猫宫", "zzz", "name")).toEqual([]);
+  expect(findTraditionalEntries(catalog, "妮可·德玛拉", "gi", "name")).toEqual([]);
+});
+
 test("角色索引保留同名条目，坏快照不替换已验证的索引", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-"));
   try {
