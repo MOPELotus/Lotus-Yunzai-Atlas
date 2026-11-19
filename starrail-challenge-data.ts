@@ -1,35 +1,37 @@
 import type { AtlasEntry } from "./catalog.ts";
-import { apocalypseMode, readChallengeFacts } from "./challenges.ts";
+import { apocalypseMode, fictionMode, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
 
-interface ApocalypseEffect {
+interface StarrailEffect {
   readonly name: string;
   readonly description: string;
 }
 
-interface ApocalypseEnemy {
+interface StarrailEnemy {
   readonly name: string;
   readonly artwork?: string;
   readonly description?: string;
 }
 
-interface ApocalypseSide {
+interface StarrailSide {
   readonly name: string;
   readonly weaknesses: readonly string[];
-  readonly enemies: readonly (ApocalypseEnemy & { readonly level?: number })[];
+  readonly enemies: readonly (StarrailEnemy & { readonly level?: number })[];
 }
 
-export interface ApocalypseDetails {
+export type StarrailChallengeMode = typeof apocalypseMode | typeof fictionMode;
+
+export interface StarrailChallengeDetails {
   readonly name: string;
   readonly artwork?: string;
   readonly version: string;
   readonly window: ReturnType<typeof readChallengeFacts>["window"];
-  readonly effect: ApocalypseEffect;
-  readonly optional: readonly ApocalypseEffect[];
+  readonly effects: readonly StarrailEffect[];
+  readonly optional: readonly StarrailEffect[];
   readonly rooms: readonly {
     readonly name: string;
     readonly goals: readonly string[];
-    readonly sides: readonly ApocalypseSide[];
+    readonly sides: readonly StarrailSide[];
   }[];
 }
 
@@ -50,13 +52,13 @@ function gameText(value: unknown, parameters: unknown) {
   return effectText(value, Array.isArray(parameters) ? parameters : [parameters], true);
 }
 
-function effect(value: unknown): ApocalypseEffect {
+function effect(value: unknown): StarrailEffect {
   const { name, desc, param } = object(value);
   return { name: effectText(name), description: gameText(desc, param) };
 }
 
-export async function normalizeApocalypse(entry: AtlasEntry, content: Record<string, unknown>, images: unknown,
-  enemy: (id: string) => Promise<ApocalypseEnemy | undefined>, current = false): Promise<ApocalypseDetails | undefined> {
+export async function normalizeStarrailChallenge(entry: AtlasEntry, mode: StarrailChallengeMode, content: Record<string, unknown>, images: unknown,
+  enemy: (id: string) => Promise<StarrailEnemy | undefined>, current = false): Promise<StarrailChallengeDetails | undefined> {
   if (entry.game !== "hsr") return;
   const detail = object(content.detail);
   const hasIdentity = positiveInteger(detail.id);
@@ -64,11 +66,16 @@ export async function normalizeApocalypse(entry: AtlasEntry, content: Record<str
   const levels = rows(detail.level).map(object).filter((row) => positiveInteger(row.id));
   if (!levels.length) return;
   const names = new Map(levels.map((level) => [level.id, effectText(level.name)]));
-  const buffs = [detail.buff_list1, detail.buff_list2, detail.buff_list3]
-    .flatMap(rows).map(effect).filter(({ name }) => name);
+  const fiction = mode.id === fictionMode.id;
+  const buff = effect(detail.buff);
+  const effects = fiction
+    ? [buff, ...rows(detail.sub_option).map(effect)].filter(({ name, description }) => name || description)
+    : [{ ...buff, name: buff.name || "末法余烬" }];
+  const optionalValues = fiction ? rows(detail.option) : [detail.buff_list1, detail.buff_list2, detail.buff_list3].flatMap(rows);
+  const buffs = optionalValues.map(effect).filter(({ name }) => name);
   const optional = [...new Map(buffs.map((row) => [JSON.stringify(row), row])).values()];
 
-  async function readSide(name: string, stageList: unknown, damageTypes: unknown): Promise<ApocalypseSide> {
+  async function readSide(name: string, stageList: unknown, damageTypes: unknown): Promise<StarrailSide> {
     const weaknesses = rows(damageTypes).flatMap((value) => {
       if (typeof value !== "string") return [];
       return [elements.get(value) ?? `属性 ${value}（待核对）`];
@@ -115,11 +122,11 @@ export async function normalizeApocalypse(entry: AtlasEntry, content: Record<str
   }));
   const name = entry.name === entry.id ? `记录 ID ${entry.id}` : entry.name;
   return {
-    name: [current ? "当期末日幻影" : apocalypseMode.name, name].join(" · "),
+    name: [current ? `当期${mode.name}` : mode.name, name].join(" · "),
     artwork: galleryArtwork(images, "hsr")(),
     version: entry.version,
-    window: readChallengeFacts(apocalypseMode, content).window,
-    effect: effect(detail.buff),
+    window: readChallengeFacts(mode, content).window,
+    effects,
     optional,
     rooms,
   };

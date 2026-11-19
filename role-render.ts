@@ -11,7 +11,7 @@ import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
 import type { AbyssDetails } from "./abyss-data.ts";
-import type { ApocalypseDetails } from "./apocalypse-data.ts";
+import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -538,8 +538,8 @@ export async function renderAbyss(abyss: AbyssDetails, options: RoleRenderOption
   return page!;
 }
 
-export async function renderApocalypse(apocalypse: ApocalypseDetails, options: RoleRenderOptions = {}) {
-  const { name, version, artwork, window, effect, optional, rooms } = apocalypse;
+export async function renderStarrailChallenge(challenge: StarrailChallengeDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, effects, optional, rooms } = challenge;
   const enemies = rooms.flatMap((room) => room.sides.flatMap((side) => side.enemies));
   const [images, background, texture] = await Promise.all([
     galleryImages("hsr", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
@@ -548,8 +548,12 @@ export async function renderApocalypse(apocalypse: ApocalypseDetails, options: R
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
   const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
-  const blocks = [text(period), heading("环境与全局效果"), heading(effect.name || "末法余烬"),
-    text(effect.description || "增益说明待核对")];
+  const blocks = [text(period), heading("环境与全局效果")];
+  if (!effects.length) blocks.push(text("增益说明待核对"));
+  for (const effect of effects) {
+    if (effect.name) blocks.push(heading(effect.name));
+    blocks.push(text(effect.description || "增益说明待核对"));
+  }
   if (optional.length) {
     blocks.push(heading("可选增益"));
     for (const buff of optional) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));

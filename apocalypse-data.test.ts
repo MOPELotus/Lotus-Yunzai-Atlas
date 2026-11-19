@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog } from "./catalog.ts";
+import { apocalypseMode } from "./challenges.ts";
 
 test("末日长卡保留同版本增益参数、星启和实际阵容，只接受登记的难度变体", async () => {
   const root = await mkdtemp(join(tmpdir(), "lotus-apocalypse-"));
@@ -54,9 +55,9 @@ test("末日长卡保留同版本增益参数、星启和实际阵容，只接�
     const snapshot = await catalog.read();
     const entry = snapshot.pages.find((page) => page.challengeMode?.id === "maze_boss")?.entries[0];
     expect(entry).toBeDefined();
-    const result = await catalog.apocalypseDetails(entry!, snapshot, true);
+    const result = await catalog.starrailChallengeDetails(entry!, snapshot, apocalypseMode, true);
     expect(result?.window).toEqual({ from: "live", begin: "2026-11-16 04:00:00", end: "2026-12-28 04:00:00" });
-    expect(result?.effect.description).toBe("战技伤害提高25%，欢愉伤害提高15%。");
+    expect(result?.effects[0]?.description).toBe("战技伤害提高25%，欢愉伤害提高15%。");
     expect(result?.optional).toEqual([{ name: "破竹之势", description: "伤害提高30%。" }]);
     expect(result?.rooms[0]?.goals).toEqual(["获得6600分"]);
     expect(result?.rooms[0]?.sides[0]).toEqual({

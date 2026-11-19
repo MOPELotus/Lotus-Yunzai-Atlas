@@ -10,7 +10,7 @@ import { normalizeSet, setEffects } from "./set-data.ts";
 import { normalizeOnslaught } from "./onslaught-data.ts";
 import { normalizeTheater } from "./theater-data.ts";
 import { normalizeAbyss } from "./abyss-data.ts";
-import { normalizeApocalypse } from "./apocalypse-data.ts";
+import { normalizeStarrailChallenge, type StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -445,10 +445,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       const item = await readItem(entry, "tower");
       if (item) return normalizeAbyss(entry, item.content, item.meta.images, genshinEnemyLookup(entry, catalog), current);
     },
-    async apocalypseDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
+    async starrailChallengeDetails(entry: AtlasEntry, catalog: Catalog, mode: StarrailChallengeMode, current = false) {
       if (entry.game !== "hsr") return;
-      const item = await readItem(entry, "maze_boss");
-      if (item) return normalizeApocalypse(entry, item.content, item.meta.images, starrailEnemyLookup(entry, catalog), current);
+      const item = await readItem(entry, mode.id);
+      if (item) return normalizeStarrailChallenge(entry, mode, item.content, item.meta.images, starrailEnemyLookup(entry, catalog), current);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {
