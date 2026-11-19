@@ -91,7 +91,7 @@ async function setsQuery(argument: string, command: string, fixedGame?: Game): P
   }
 }
 
-async function bangbooQuery(argument: string): Promise<string> {
+async function bangbooQuery(argument: string): Promise<AtlasReply> {
   const { query, mismatched } = searchTerms(argument, "zzz");
   if (mismatched) return "#邦布图鉴用于查询绝区零的邦布。";
   if (!query) return "用法：#邦布图鉴 名称或 ID";
@@ -99,6 +99,10 @@ async function bangbooQuery(argument: string): Promise<string> {
     const result = await catalog.read();
     const matches = findBangboos(result, query);
     if (!matches.length) return "未找到匹配的邦布。";
+    if (matches.length === 1) {
+      const book = await bangbooBook(matches[0]!);
+      if (book) return book;
+    }
     const lines = await Promise.all(matches.slice(0, 8).map(bangbooLine));
     if (matches.length > lines.length) lines.push("结果较多，请补充更完整的邦布名。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
@@ -139,11 +143,25 @@ async function setBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
   if (!set) return;
   try {
     const { renderSet } = await import("./role-render.ts");
-    const pages = await renderSet(set, { assetRoot: catalog.assetRoot(entry) });
-    const images: AtlasImage[] = pages.map(({ png }) => ({ type: "image", file: png }));
-    if (images.length <= 1) return images[0];
-    const sections = pages.map(({ section }) => section).join(" → ");
-    return { type: "forward", nodes: [`${set.name}完整图鉴\n${sections}\n共 ${pages.length} 页`, ...images] };
+    return detailBook(set.name, await renderSet(set, { assetRoot: catalog.assetRoot(entry) }));
+  } catch {
+    return undefined;
+  }
+}
+
+function detailBook(name: string, pages: readonly { section: string; png: Uint8Array }[]): AtlasReply | undefined {
+  const images: AtlasImage[] = pages.map(({ png }) => ({ type: "image", file: png }));
+  if (images.length <= 1) return images[0];
+  const sections = pages.map(({ section }) => section).join(" → ");
+  return { type: "forward", nodes: [`${name}完整图鉴\n${sections}\n共 ${pages.length} 页`, ...images] };
+}
+
+async function bangbooBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
+  const bangboo = await catalog.bangbooDetails(entry);
+  if (!bangboo) return;
+  try {
+    const { renderBangboo } = await import("./role-render.ts");
+    return detailBook(bangboo.name, await renderBangboo(bangboo, { assetRoot: catalog.assetRoot(entry) }));
   } catch {
     return undefined;
   }
@@ -156,7 +174,7 @@ async function traditionalQuery(
     const result = await catalog.read();
     const exact = mode === "character" || mode === "shortcut";
     const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
-      mode === "character" ? kind === "character" : mode !== "shortcut" || kind !== "bangboo");
+      mode !== "character" || kind === "character");
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装或邦布。" : undefined;
     const first = matches[0]!;
     if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
@@ -166,6 +184,10 @@ async function traditionalQuery(
     }
     if (matches.length === 1 && first.kind === "set") {
       const book = await setBook(first.entry);
+      if (book) return book;
+    }
+    if (matches.length === 1 && first.kind === "bangboo") {
+      const book = await bangbooBook(first.entry);
       if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {

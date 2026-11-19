@@ -7,6 +7,7 @@ import { readAchievementCategories, type AchievementCategory } from "./achieveme
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
+import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
@@ -346,6 +347,11 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
     async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
       const content = await readContent(entry, mode.id);
       return readChallengeFacts(mode, content);
+    },
+    async bangbooDetails(entry: AtlasEntry) {
+      if (entry.game !== "zzz") return;
+      const item = await readItem(entry, bangbooPage.id);
+      if (item) return normalizeBangbooDetails(entry, item.content, item.meta.images);
     },
     async bangbooRarity(entry: AtlasEntry): Promise<string> {
       if (entry.game !== "zzz") return "";

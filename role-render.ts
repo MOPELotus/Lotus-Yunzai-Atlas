@@ -4,6 +4,7 @@ import { basename, dirname, join, sep } from "node:path";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game } from "./catalog.ts";
+import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
@@ -123,14 +124,13 @@ function makeLayout(texture?: Image) {
     });
   }
 
-  function text(value: string, color = white, size = 19): Block {
+  function text(value: string, color = white, size = 19, lineHeight = size + 10): Block {
     const lines = wrap(value, contentWidth, size);
-    const lineHeight = size + 10;
     return { height: lines.length * lineHeight + 20, paint: (ctx, top) =>
       paintLines(ctx, lines, margin + 20, top + 10, size, lineHeight, color) };
   }
 
-  function heading(value: string, artwork?: Image, small = false): Block {
+  function heading(value: string, artwork?: Image, small = false, subtitle?: string): Block {
     const size = small ? 21 : 26;
     const lineHeight = size + 8;
     const lines = wrap(value, inner - (artwork ? 124 : 40), size);
@@ -140,7 +140,9 @@ function makeLayout(texture?: Image) {
         rounded(ctx, 40, top + 11, 62, 62, 31, "rgba(255,255,255,0.10)");
         contain(ctx, artwork, 49, top + 20, 44, 44);
       }
-      paintLines(ctx, lines, artwork ? 122 : 44, top + (small ? 12 : 14), size, lineHeight, gold);
+      const x = artwork ? 122 : 44;
+      paintLines(ctx, lines, x, top + (small ? 12 : 14), size, lineHeight, gold);
+      if (subtitle) paintLines(ctx, [subtitle], x, top + 19 + lines.length * lineHeight, 14, 21, muted);
     } };
   }
 
@@ -245,7 +247,7 @@ function makeLayout(texture?: Image) {
     return result;
   }
 
-  return { wrap, text, heading, statRow, material, levelBlocks };
+  return { wrap, text, heading, row, statRow, material, levelBlocks };
 }
 
 async function localAsset(path: string, maxBytes: number): Promise<Buffer | undefined> {
@@ -435,11 +437,46 @@ export async function renderSet(set: SetDetails, options: RoleRenderOptions = {}
   return renderAtlasPages(pages, title, set.game, set.version, icon, background, options);
 }
 
+export async function renderBangboo(bangboo: BangbooDetails, options: RoleRenderOptions = {}) {
+  const [images, background, texture] = await Promise.all([
+    galleryImages("zzz", [bangboo.artwork, ...bangboo.skills.map(({ artwork }) => artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, heading, text, statRow, row } = makeLayout(texture);
+  const icon = bangboo.artwork ? images.get(bangboo.artwork) : undefined;
+  const title = wrap(bangboo.name, 620, 33);
+  const overview = [text(bangboo.description)];
+  for (let start = 0; start < bangboo.stats.length; start += 3) {
+    overview.push(statRow(bangboo.stats.slice(start, start + 3)));
+  }
+  const pages: Page[] = [{ section: "邦布总览", panels: [overview], trailingGap: false }];
+  if (bangboo.skills.length) {
+    const panels = bangboo.skills.map(({ name, type, description, artwork, levels, rows }) => {
+      const panel = [heading(name, artwork ? images.get(artwork) : undefined, false, type)];
+      if (description) panel.push(text(description));
+      if (!rows.length) return panel;
+      panel.push(text("等级数值", gold, 17, 29));
+      for (let start = 0; start < levels.length; start += 4) {
+        const columns = levels.slice(start, start + 4).map((level) => `Lv${level}`);
+        const labelWidth = 280;
+        const widths = [labelWidth, ...columns.map(() => (contentWidth - labelWidth) / columns.length)];
+        panel.push(row(["项目", ...columns], widths, true));
+        for (const item of rows) {
+          panel.push(row([item.label, ...item.values.slice(start, start + columns.length)], widths));
+        }
+        panel.push({ height: 12, paint() {} });
+      }
+      return panel;
+    });
+    pages.push({ section: "邦布技能", panels });
+  }
+  return renderAtlasPages(pages, title, "zzz", bangboo.version, icon, background, options, 152);
+}
+
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
-  background: Image | undefined, { mode = "auto", scale = 2 }: RoleRenderOptions) {
+  background: Image | undefined, { mode = "auto", scale = 2 }: RoleRenderOptions, titleX = icon ? 152 : margin + 20) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const game = gameNames[gameId];
-  const titleX = icon ? 152 : margin + 20;
   const head = Math.max(header, 118 + title.length * 39);
   const output = [];
   for (const [index, { section, panels, trailingGap }] of pages.entries()) {
