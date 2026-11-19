@@ -1,0 +1,140 @@
+import type { Game } from "./catalog.ts";
+import { object } from "./source-values.ts";
+import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
+
+export const atlasManifestUrl = "https://static.nanoka.cc/manifest.json";
+
+const maxManifestBytes = 1024 * 1024;
+const manifestTimeoutMs = 10_000;
+const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
+
+const pageIds = {
+  gi: { versioned: ["character", "weapon", "artifact", "achievement/achievement", "monster"],
+    challenge: ["tower", "rolecombat", "leyline"] },
+  hsr: { versioned: ["character", "lightcone", "relicset", "achievement/achievement", "monster", "monstervalue", "EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"],
+    challenge: ["maze", "maze_boss", "maze_extra", "maze_peak"] },
+  zzz: { versioned: ["character", "weapon", "equipment", "bangboo", "achievement/achievement", "monster"],
+    challenge: ["boss", "shiyu"] },
+} as const;
+
+export type AtlasPlanPage = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
+
+type AtlasPlanEntry = AtlasPlanPage & { readonly localVersion?: string } & (
+  { readonly kind: "versioned"; readonly action: "current" | "fetch"; readonly targetVersion: string } |
+  { readonly kind: "versioned"; readonly action: "review"; readonly reason: "manifest-unavailable" | "local-unverified" } |
+  { readonly kind: "versioned"; readonly action: "review"; readonly reason: "unproven-upgrade"; readonly targetVersion: string } |
+  { readonly kind: "challenge"; readonly action: "audit-rotation" }
+);
+
+export interface AtlasUpdatePlan {
+  readonly entries: readonly AtlasPlanEntry[];
+  readonly candidateRequirements: readonly AtlasCandidatePage[];
+}
+
+const trackedPages = (Object.keys(pageIds) as Game[]).flatMap((game) =>
+  (["versioned", "challenge"] as const).flatMap((kind) => pageIds[game][kind].map((pageId) => ({ game, pageId, kind }))));
+
+function version(value: unknown): value is string {
+  return typeof value === "string" && versions.test(value);
+}
+
+function targetVersion(manifest: unknown, game: Game): string | undefined {
+  const { latest, available } = object(object(manifest)[game]);
+  if (version(latest) && (game === "zzz" || !latest.includes("+")) && Array.isArray(available) && available.includes(latest)) return latest;
+}
+
+function newer(target: string, local: string, game: Game): boolean {
+  if (!version(local) || (game !== "zzz" && local.includes("+"))) return false;
+  const [targetCore = "", targetBuild] = target.split("+");
+  const [localCore = "", localBuild] = local.split("+");
+  const targetParts = targetCore.split(".").map(Number);
+  const localParts = localCore.split(".").map(Number);
+  for (let index = 0; index < Math.max(targetParts.length, localParts.length); index++) {
+    const difference = (targetParts[index] ?? 0) - (localParts[index] ?? 0);
+    if (difference) return difference > 0;
+  }
+  return game === "zzz" && targetBuild !== undefined && localBuild !== undefined && Number(targetBuild) > Number(localBuild);
+}
+
+/** Pass undefined only for an explicitly empty installation. An invalid snapshot never authorizes writes. */
+export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidation | undefined,
+  scope?: readonly AtlasPlanPage[]): AtlasUpdatePlan {
+  const entries: AtlasPlanEntry[] = [];
+  const candidateRequirements: AtlasCandidatePage[] = [];
+  if (scope?.some(({ game, pageId }) => !trackedPages.some((page) => page.game === game && page.pageId === pageId))) {
+    throw new TypeError("图鉴更新范围包含未识别的游戏或分类。");
+  }
+  for (const page of trackedPages) {
+    const { game, pageId, kind } = page;
+    if (scope && !scope.some((item) => item.game === game && item.pageId === pageId)) continue;
+    const existing = local?.pages.find((item) => item.game === game && item.pageId === pageId);
+    const current = { game, pageId, ...(existing ? { localVersion: existing.version } : {}) };
+    if (kind === "challenge") {
+      entries.push({ ...current, kind, action: "audit-rotation" });
+      continue;
+    }
+    if (local && !local.ok) {
+      entries.push({ ...current, kind, action: "review", reason: "local-unverified" });
+      continue;
+    }
+    const target = targetVersion(manifest, game);
+    if (!target) {
+      entries.push({ ...current, kind, action: "review", reason: "manifest-unavailable" });
+    } else if (existing?.version === target) {
+      entries.push({ ...current, kind, action: "current", targetVersion: target });
+    } else if (existing && !newer(target, existing.version, game)) {
+      entries.push({ ...current, kind, action: "review", reason: "unproven-upgrade", targetVersion: target });
+    } else {
+      entries.push({ ...current, kind, action: "fetch", targetVersion: target });
+      candidateRequirements.push({ game, pageId, version: target });
+    }
+  }
+  return { entries, candidateRequirements };
+}
+
+export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {
+  const timeout = AbortSignal.timeout(manifestTimeoutMs);
+  const response = await fetch(atlasManifestUrl, {
+    redirect: "error", credentials: "omit", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok || !response.body) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error("图鉴版本清单不可用。");
+  }
+  const reader = response.body.getReader();
+  try {
+    let size = 0;
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxManifestBytes) throw new Error("图鉴版本清单超出大小上限。");
+      chunks.push(value);
+    }
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))) as unknown;
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+if (import.meta.main) {
+  const [directory, manifestFile, ...extra] = Bun.argv.slice(2);
+  if (!directory || extra.length) {
+    console.error("用法：bun update-plan.ts <包含 map.json 的本地目录> [清单 JSON 文件]");
+    process.exitCode = 2;
+  } else {
+    try {
+      const local = await validateAtlasCandidate(directory);
+      const manifest = manifestFile ? await Bun.file(manifestFile).json() : await fetchAtlasManifest();
+      const plan = planAtlasUpdate(manifest, local);
+      console.log(JSON.stringify(plan, null, 2));
+      if (plan.entries.some(({ action }) => action === "review")) process.exitCode = 1;
+    } catch {
+      console.error("无法生成图鉴更新计划。请检查固定来源或本地清单文件。");
+      process.exitCode = 1;
+    }
+  }
+}
