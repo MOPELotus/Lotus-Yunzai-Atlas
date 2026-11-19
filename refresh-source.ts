@@ -9,10 +9,14 @@ import { object } from "./source-values.ts";
 import { fetchAtlasManifest, planAtlasUpdate } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
-const sourcePages = { bangboo: "邦布", weapon: "音擎" } as const;
+const zzzIcons = ["icon", "detail.icon"] as const;
+const sourcePages = {
+  bangboo: { game: "zzz", title: "邦布", iconFields: zzzIcons },
+  weapon: { game: "zzz", title: "音擎", iconFields: zzzIcons },
+  lightcone: { game: "hsr", title: "光锥", iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
+} as const;
 type SourcePage = keyof typeof sourcePages;
-const iconFields = ["icon", "detail.icon"] as const;
-type IconField = typeof iconFields[number];
+type IconField = typeof sourcePages[SourcePage]["iconFields"][number];
 
 export interface AtlasRefreshOptions {
   readonly pageId?: SourcePage;
@@ -30,9 +34,10 @@ async function readJson(root: string, path: string): Promise<unknown> {
 }
 
 async function pageAssets(root: string, pageId: SourcePage, signal?: AbortSignal) {
+  const { game, iconFields } = sourcePages[pageId];
   const map = object(await readJson(root, "map.json"));
-  const game = object(object(map.games).zzz);
-  const pages = object(object(object(game.locales).zh).pages);
+  const gameData = object(object(map.games)[game]);
+  const pages = object(object(object(gameData.locales).zh).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { hasDetail: boolean; icons: ReadonlySet<IconField> }>();
   for (const [id, record] of Object.entries(records)) {
@@ -49,22 +54,23 @@ async function pageAssets(root: string, pageId: SourcePage, signal?: AbortSignal
 
 function regressions(pageId: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
   after: Awaited<ReturnType<typeof pageAssets>>) {
+  const { title } = sourcePages[pageId];
   const issues: string[] = [];
   for (const [id, old] of before) {
     const next = after.get(id);
     if (!next) continue;
-    if (old.hasDetail && !next.hasDetail) issues.push(`${sourcePages[pageId]} ${id} 缺少已有详情。`);
+    if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
     for (const field of old.icons) {
-      if (!next.icons.has(field)) issues.push(`${sourcePages[pageId]} ${id} 缺少已下载图标 ${field}。`);
+      if (!next.icons.has(field)) issues.push(`${title} ${id} 缺少已下载图标 ${field}。`);
     }
   }
   return issues;
 }
 
-/** Refresh one supported ZZZ page from the fixed source. */
+/** Refresh one supported page from the fixed source. */
 export async function refreshAtlasSource(root: string, options: AtlasRefreshOptions = {}): Promise<AtlasSourceRefresh> {
   const { signal, request, manifest = fetchAtlasManifest, pageId = "bangboo" } = options;
-  const scope = [{ game: "zzz", pageId }] as const;
+  const scope = [{ game: sourcePages[pageId].game, pageId }] as const;
   signal?.throwIfAborted();
   const directory = await realpath(root).catch(() => undefined);
   const baseline = directory && await discoverAtlasDataDirectory(directory).catch(() => undefined);
@@ -107,9 +113,11 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
 
 if (import.meta.main) {
   const [root, selected, ...extra] = Bun.argv.slice(2);
-  const pageId = selected === "zzz/bangboo" ? "bangboo" : selected === "zzz/weapon" ? "weapon" : undefined;
+  const available = Object.keys(sourcePages) as SourcePage[];
+  const selector = (pageId: SourcePage) => `${sourcePages[pageId].game}/${pageId}`;
+  const pageId = available.find((pageId) => selector(pageId) === selected);
   if (!root || !pageId || extra.length) {
-    console.error("用法：bun refresh-source.ts <图鉴根目录> <zzz/bangboo|zzz/weapon>");
+    console.error(`用法：bun refresh-source.ts <图鉴根目录> <${available.map(selector).join("|")}>`);
     process.exitCode = 2;
   } else {
     try {
@@ -117,7 +125,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(result, null, 2));
       if (result.status !== "published" && result.status !== "current") process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : `无法刷新绝区零${sourcePages[pageId]}图鉴。`);
+      console.error(error instanceof Error ? error.message : `无法刷新${sourcePages[pageId].title}图鉴。`);
       process.exitCode = 1;
     }
   }
