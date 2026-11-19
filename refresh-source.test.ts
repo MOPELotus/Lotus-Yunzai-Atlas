@@ -53,10 +53,10 @@ test("邦布自动刷新按计划抓取较新构建并发布完整候选", () =>
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
 
-test("音擎刷新只请求和发布选中的分类并保留邦布", () => fixture(async (workspace, root) => {
-  const request = (version: string) => async (url: string) => {
-    const name = `样例音擎 ${version}`;
-    const asset = "Weapon_A_Refresh";
+function engineSource(version: string) {
+  const name = `样例音擎 ${version}`;
+  const asset = "Weapon_A_Refresh";
+  return async (url: string) => {
     if (url.endsWith(`/${version}/weapon.json`)) {
       return Response.json({ "13001": { zh: name, icon: asset, rank: 3, type: 4 } });
     }
@@ -67,15 +67,103 @@ test("音擎刷新只请求和发布选中的分类并保留邦布", () => fixtu
     if (url.endsWith(`/assets/zzz/${asset}.webp`)) return new Response(new Uint8Array(webp));
     throw new Error("刷新请求超出了音擎分类。");
   };
+}
+
+async function seedEngines(workspace: string, root: string) {
   const donor = join(workspace, "weapon");
   const selected = [{ game: "zzz", pageId: "weapon", version: original }] as const;
-  await acquireAtlasSource(donor, selected, undefined, request(original));
+  await acquireAtlasSource(donor, selected, undefined, engineSource(original));
   expect((await applyAtlasCandidate(root, donor, selected)).status).toBe("published");
-  const result = await refreshAtlasSource(root, { pageId: "weapon", manifest: manifest(upgrade), request: request(upgrade) });
+  await rm(donor, { recursive: true });
+}
+
+test("音擎刷新只请求和发布选中的分类并保留邦布", () => fixture(async (workspace, root) => {
+  await seedEngines(workspace, root);
+  const result = await refreshAtlasSource(root, { pageId: "weapon", manifest: manifest(upgrade), request: engineSource(upgrade) });
   expect(result).toMatchObject({ status: "published", version: 2 });
   const index = await createAtlasRuntimeCatalog(root).read();
   expect(findEquipment(index, "13001", "zzz")[0]?.version).toBe(upgrade);
   expect(findBangboos(index, "53001")[0]?.version).toBe(original);
+}));
+
+const genshinOriginal = "7.2.52";
+const genshinUpgrade = "7.2.53";
+const genshinScope = [{ game: "gi", pageId: "weapon", version: genshinOriginal }] as const;
+const genshinIndex = (version: string) => `https://static.nanoka.cc/gi/${version}/weapon.json`;
+const genshinDetail = (version: string, id: number) => `https://static.nanoka.cc/gi/${version}/zh/weapon/${id}.json`;
+const genshinArt = "https://static.nanoka.cc/assets/gi/UI_EquipIcon_Refresh.webp";
+const genshinEventArt = "https://static.nanoka.cc/assets/gi/Sword_Template.webp";
+const genshinManifest = (version: string, zenless = original) => async () => ({
+  gi: { latest: version, available: [genshinOriginal, genshinUpgrade] }, zzz: { latest: zenless, available: [original, upgrade] },
+});
+
+function genshinSource(version: string) {
+  const name = `样例原神武器 ${version}`;
+  const normal = { rank: 1, type: "WEAPON_SWORD_ONE_HAND", icon: "UI_EquipIcon_Refresh", zh: name, atk: 74 };
+  const event = { rank: 4, type: "ITEM_TPS_WEAPON", icon: "Sword_Template", zh: "样例活动武器" };
+  const phases = [1, 2, 3, 4];
+  return async (url: string) => {
+    if (url === genshinIndex(version)) return Response.json({ "11101": normal, "224008": event });
+    if (url === genshinDetail(version, 11101)) return Response.json({ name, rarity: normal.rank,
+      weapon_type: normal.type, icon: normal.icon, desc: "说明。",
+      stats_modifier: { atk: { base: 1, levels: Object.fromEntries(Array.from({ length: 70 }, (_, index) => [index + 1, index + 1])) } },
+      ascension: Object.fromEntries(phases.map((phase) => [phase, { fight_prop_base_attack: phase }])),
+      materials: Object.fromEntries(phases.map((phase) => [phase, { fixture: phase }])), refinement: {},
+    });
+    if (url === genshinDetail(version, 224008)) return Response.json({ name: event.zh, rarity: event.rank,
+      weapon_type: event.type, icon: event.icon, desc: "活动说明。",
+    });
+    if (url === genshinArt || url === genshinEventArt) return new Response(new Uint8Array(webp));
+    throw new Error(`刷新请求超出原神武器分类 ${url}`);
+  };
+}
+
+async function seedGenshinWeapons(workspace: string, root: string) {
+  const donor = join(workspace, "genshin-weapon");
+  await acquireAtlasSource(donor, genshinScope, undefined, genshinSource(genshinOriginal));
+  expect((await applyAtlasCandidate(root, donor, genshinScope)).status).toBe("published");
+  await rm(donor, { recursive: true });
+}
+
+test("原神武器刷新跳过同版，与绝区零同名分类分别规划和发布", () => fixture(async (workspace, root) => {
+  await seedGenshinWeapons(workspace, root);
+  await seedEngines(workspace, root);
+  const calls: string[] = [];
+  const collect = genshinSource(genshinUpgrade);
+  const request = async (url: string) => { calls.push(url); return collect(url); };
+  expect(await refreshAtlasSource(root, { selection: "gi/weapon", manifest: genshinManifest(genshinOriginal, upgrade), request }))
+    .toEqual({ status: "current", version: genshinOriginal });
+  expect(await refreshAtlasSource(root, { pageId: "weapon", manifest: genshinManifest(genshinUpgrade), request }))
+    .toEqual({ status: "current", version: original });
+  expect(calls).toEqual([]);
+  const catalog = createAtlasRuntimeCatalog(root);
+  const previous = await catalog.read();
+  expect(await refreshAtlasSource(root, { selection: "gi/weapon", manifest: genshinManifest(genshinUpgrade, upgrade), request }))
+    .toEqual({ status: "published", version: 3, directory: join(root, "snapshots/3/data") });
+  expect(calls).toEqual([genshinIndex(genshinUpgrade), genshinDetail(genshinUpgrade, 11101), genshinArt,
+    genshinDetail(genshinUpgrade, 224008), genshinEventArt]);
+  const current = await catalog.read();
+  expect(findEquipment(current, "11101", "gi")[0]?.version).toBe(genshinUpgrade);
+  expect(findEquipment(current, "13001", "zzz")[0]).toEqual(findEquipment(previous, "13001", "zzz")[0]);
+  expect(findBangboos(current, "53001")[0]).toEqual(findBangboos(previous, "53001")[0]);
+  expect(await readdir(workspace)).toEqual(["atlas"]);
+}));
+
+test("原神武器刷新遇到原图缺失或已有活动图标降级时保留旧指针", () => fixture(async (workspace, root) => {
+  await seedGenshinWeapons(workspace, root);
+  const collect = genshinSource(genshinUpgrade);
+  const refresh = (absent: string) => refreshAtlasSource(root, {
+    selection: "gi/weapon", manifest: genshinManifest(genshinUpgrade),
+    request: async (url) => url === absent ? missing() : collect(url),
+  });
+  await expect(refresh(genshinArt)).rejects.toThrow("原神武器来源图标缺失");
+  expect(await readAtlasSnapshotVersion(root)).toBe(1);
+  expect(await refresh(genshinEventArt)).toEqual({ status: "invalid", issues: [
+    "原神武器 224008 缺少已下载图标 icon。", "原神武器 224008 缺少已下载图标 detail.icon。",
+  ] });
+  expect(await readAtlasSnapshotVersion(root)).toBe(1);
+  expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
+  expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
 
 const coneOriginal = "4.7.52";
@@ -157,10 +245,10 @@ test("光锥详情、原图或命途图缺失时保留旧发布指针", () => fi
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
 
-test("刷新 CLI 将 lightcone 固定到星铁，并继续接受绝区零两个选项", () => fixture(async (workspace) => {
+test("刷新 CLI 接受四个已支持的游戏和分类组合", () => fixture(async (workspace) => {
   const script = join(import.meta.dir, "refresh-source.ts");
   const absent = join(workspace, "missing");
-  for (const selection of ["hsr/lightcone", "zzz/bangboo", "zzz/weapon"]) {
+  for (const selection of ["hsr/lightcone", "zzz/bangboo", "zzz/weapon", "gi/weapon"]) {
     const command = Bun.spawnSync([process.execPath, script, absent, selection]);
     expect(command.exitCode).toBe(1);
     expect(JSON.parse(command.stdout.toString())).toEqual({ status: "review", reason: "local-unverified" });
@@ -168,6 +256,7 @@ test("刷新 CLI 将 lightcone 固定到星铁，并继续接受绝区零两个�
   const wrong = Bun.spawnSync([process.execPath, script, absent, "zzz/lightcone"]);
   expect(wrong.exitCode).toBe(2);
   expect(wrong.stderr.toString()).toContain("hsr/lightcone");
+  expect(wrong.stderr.toString()).toContain("gi/weapon");
 }));
 
 test("同版本、不明版本及缺失旧基线都不请求邦布详情", () => fixture(async (workspace, root) => {
