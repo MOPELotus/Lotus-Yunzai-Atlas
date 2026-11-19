@@ -2,7 +2,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
-import { compareKey, label, object } from "./source-values.ts";
+import { compareKey, effectText, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
@@ -27,7 +27,7 @@ const setPages = {
 
 const achievementPage = { id: "achievement/achievement", name: "成就" } as const;
 const bangbooPage = { id: "bangboo", name: "邦布" } as const;
-const kinds = ["character", "equipment", "set", "bangboo", "achievement"] as const;
+const kinds = ["character", "equipment", "set", "bangboo", "monster", "achievement"] as const;
 type StandardKind = typeof kinds[number];
 type Kind = StandardKind | "challenge";
 
@@ -38,6 +38,7 @@ function pageFor(game: Game, kind: StandardKind): { id: string; name: string } |
     case "set": return setPages[game];
     case "achievement": return achievementPage;
     case "bangboo": return game === "zzz" ? bangbooPage : undefined;
+    case "monster": return { id: "monster", name: "敌人" };
   }
 }
 
@@ -130,7 +131,8 @@ function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): 
 export type TraditionalLookup = "search" | "name" | "equipment";
 
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
-  const kinds = mode === "equipment" ? ["equipment", "set"] as const : ["character", "equipment", "set", "bangboo"] as const;
+  const kinds = mode === "equipment" ? ["equipment", "set"] as const
+    : ["character", "equipment", "set", "bangboo", "monster"] as const;
   return findMatches(catalog, kinds, query, game, mode !== "search");
 }
 
@@ -148,6 +150,10 @@ export function findSets(catalog: Catalog, query: string, game?: Game): AtlasEnt
 
 export function findBangboos(catalog: Catalog, query: string): AtlasEntry[] {
   return findEntries(catalog, "bangboo", query, "zzz");
+}
+
+export function findMonsters(catalog: Catalog, query: string, game?: Game): AtlasEntry[] {
+  return findEntries(catalog, "monster", query, game);
 }
 
 const weaponTypes = new Map([
@@ -347,6 +353,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
     async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
       const content = await readContent(entry, mode.id);
       return readChallengeFacts(mode, content);
+    },
+    async monsterDescription(entry: AtlasEntry): Promise<string> {
+      const detail = object((await readContent(entry, "monster")).detail);
+      return label(detail.name) === entry.name ? effectText(detail.desc) : "";
     },
     async bangbooDetails(entry: AtlasEntry) {
       if (entry.game !== "zzz") return;

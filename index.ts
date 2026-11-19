@@ -7,7 +7,7 @@ import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, find
 import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
-export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment } from "./catalog.ts";
+export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findMonsters } from "./catalog.ts";
 
 const games = new Map<string, Game>([
   ["原神", "gi"], ["星铁", "hsr"], ["星穹铁道", "hsr"], ["崩坏星穹铁道", "hsr"], ["崩铁", "hsr"],
@@ -175,7 +175,7 @@ async function traditionalQuery(
     const exact = mode === "character" || mode === "shortcut";
     const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
       mode !== "character" || kind === "character");
-    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装或邦布。" : undefined;
+    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布或敌人。" : undefined;
     const first = matches[0]!;
     if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
     if (matches.length === 1 && first.kind === "equipment") {
@@ -190,12 +190,18 @@ async function traditionalQuery(
       const book = await bangbooBook(first.entry);
       if (book) return book;
     }
-    const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
+    const lines = await Promise.all(matches.slice(0, 8).map(async ({ kind, entry }) => {
       switch (kind) {
         case "equipment": return equipmentLine(entry);
         case "set": return setLines(entry, matches.length === 1);
         case "character": return characterLine(entry, true);
         case "bangboo": return bangbooLine(entry);
+        case "monster": {
+          const title = [gameNames[entry.game], "敌人", entry.name, `ID ${entry.id}`].join(" · ");
+          if (matches.length > 1) return title;
+          const description = await catalog.monsterDescription(entry);
+          return `${title}\n${description || "当前快照缺少已核对的敌人简介。"}`;
+        }
       }
     }));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");

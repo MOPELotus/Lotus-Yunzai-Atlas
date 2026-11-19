@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findSets } from "./catalog.ts";
+import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findMonsters, findSets, findTraditionalEntries } from "./catalog.ts";
 
 test("角色索引保留同名条目，坏快照不替换已验证的索引", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-"));
@@ -244,5 +244,41 @@ test("同尺寸同修改时间的覆写会使索引失效", async () => {
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-monster-"));
+  try {
+    const record = (id: string, name: string, file: string) => ({ id, name, path: `items/${file}.json` });
+    const page = (...rows: ReturnType<typeof record>[]) => ({ version: "1", recordCount: rows.length,
+      records: Object.fromEntries(rows.map((row) => [row.id, row])) });
+    const game = (pages: object) => ({ locales: { zh: { pages } } });
+    await mkdir(join(root, "items"));
+    await writeFile(join(root, "map.json"), JSON.stringify({ games: {
+      gi: game({ monster: page(record("51", "样例敌人", "gi")) }),
+      hsr: game({ monster: page(record("62", "样例敌人", "hsr"), record("63", "样例敌人", "hsr-variant")),
+        monstervalue: page(record("64", "仅数值的条目", "stats")) }),
+      zzz: game({ monster: page(record("62", "另一只敌人", "zzz")) }),
+    } }));
+    const detail = (file: string, gameId: string, recordId: string, name: string, version = "1") => writeFile(join(root, "items", `${file}.json`),
+      JSON.stringify({ meta: { gameId, recordId, pageId: "monster", version },
+        content: { list: { desc: "English list fallback" }, detail: { name, desc: "简体中文<color=#AABBCC>敌人</color>。\\n后续。" } } }));
+    await detail("gi", "gi", "51", "样例敌人");
+    await detail("hsr", "hsr", "62", "样例敌人", "2");
+    await detail("hsr-variant", "hsr", "63", "另一个条目");
+    await detail("zzz", "zzz", "62", "另一只敌人");
+    const catalog = createAtlasCatalog(root);
+    const snapshot = await catalog.read();
+    expect(findMonsters(snapshot, "样例敌人").map(({ game, id }) => `${game}/${id}`)).toEqual(["gi/51", "hsr/62", "hsr/63"]);
+    expect(findMonsters(snapshot, "仅数值的条目")).toEqual([]);
+    expect(findMonsters(snapshot, "６２", "zzz").map(({ name }) => name)).toEqual(["另一只敌人"]);
+    expect(findTraditionalEntries(snapshot, "样例敌人", "gi", "name").map(({ kind }) => kind)).toEqual(["monster"]);
+    expect(findTraditionalEntries(snapshot, "样例敌人", "gi", "equipment")).toEqual([]);
+    expect(findTraditionalEntries(snapshot, "样例", "gi", "name")).toEqual([]);
+    expect(await catalog.monsterDescription(findMonsters(snapshot, "51", "gi")[0]!)).toBe("简体中文敌人。\n后续。");
+    for (const id of ["62", "63"]) expect(await catalog.monsterDescription(findMonsters(snapshot, id, "hsr")[0]!)).toBe("");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
