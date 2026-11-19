@@ -1,0 +1,92 @@
+import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readdir, realpath, rename, unlink } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
+
+const checkpointName = /^[0-9a-f]{64}\.blob$/u;
+const partialName = /^\.partial-[0-9a-f-]{36}$/u;
+
+function code(error: unknown): string | undefined {
+  return (error as NodeJS.ErrnoException | undefined)?.code;
+}
+
+function digest(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+export async function openAtlasPinnedCache(path: string) {
+  if (!path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path)) throw new Error("请指定独立的本地图鉴下载目录。");
+  const resolved = resolve(path);
+  const directory = join(await realpath(dirname(resolved)), basename(resolved));
+  await mkdir(directory, { mode: 0o700 }).catch((error) => {
+    if (code(error) !== "EEXIST") throw error;
+  });
+  if (!(await lstat(directory)).isDirectory() || await realpath(directory) !== directory) {
+    throw new Error("图鉴下载目录须为实体目录。");
+  }
+  if ((await readdir(directory)).some((name) => !checkpointName.test(name) && !partialName.test(name))) {
+    throw new Error("图鉴下载目录须为空或已有图鉴下载检查点。");
+  }
+
+  function checkpoint(sha256: string) {
+    const name = `${sha256}.blob`;
+    if (!checkpointName.test(name)) throw new Error("图鉴检查点的 SHA-256 无效。");
+    return join(directory, name);
+  }
+
+  return {
+    directory,
+    async read(sha256: string, limit: number, signal?: AbortSignal): Promise<Buffer | undefined> {
+      signal?.throwIfAborted();
+      const file = checkpoint(sha256);
+      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error) => {
+        if (code(error) !== "ENOENT") throw error;
+      });
+      if (!handle) return;
+      try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) throw new Error("图鉴下载检查点须为实体文件。");
+        if (stats.size < 1 || stats.size > limit) return;
+        const bytes = Buffer.alloc(stats.size + 1);
+        let size = 0;
+        while (size < bytes.length) {
+          signal?.throwIfAborted();
+          const { bytesRead } = await handle.read(bytes, size, bytes.length - size, size);
+          if (!bytesRead) break;
+          size += bytesRead;
+        }
+        const result = bytes.subarray(0, size);
+        if (size === stats.size && digest(result) === sha256) return result;
+      } finally {
+        await handle.close();
+      }
+    },
+    async write(sha256: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
+      signal?.throwIfAborted();
+      const file = checkpoint(sha256);
+      if (digest(bytes) !== sha256) throw new Error("图鉴下载检查点与登记的 SHA-256 不符。");
+      const temporary = join(directory, `.partial-${randomUUID()}`);
+      const handle = await open(temporary, "wx", 0o600);
+      try {
+        try {
+          await handle.writeFile(bytes);
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
+        signal?.throwIfAborted();
+        await rename(temporary, file);
+        const parent = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+        try {
+          await parent.sync();
+        } finally {
+          await parent.close();
+        }
+      } finally {
+        await unlink(temporary).catch((error) => {
+          if (code(error) !== "ENOENT") throw error;
+        });
+      }
+    },
+  };
+}

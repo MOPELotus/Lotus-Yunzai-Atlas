@@ -4,13 +4,13 @@ import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "
 import { object } from "./source-values.ts";
 import { fetchAtlasManifest } from "./update-plan.ts";
 
-const maxIndexBytes = 2 * 1024 * 1024;
+export const maxLegacyAtlasIndexBytes = 2 * 1024 * 1024;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 type IndexState = "verified" | "version-unavailable" | "request-failed" | "content-mismatch";
 
 export function matchesLegacyAtlasIndex(page: LegacyAtlasSourcePage, bytes: Uint8Array): boolean {
-  if (bytes.byteLength > maxIndexBytes || createHash("sha256").update(bytes).digest("hex") !== page.indexSha256) return false;
+  if (bytes.byteLength > maxLegacyAtlasIndexBytes || createHash("sha256").update(bytes).digest("hex") !== page.indexSha256) return false;
   try {
     const data: unknown = JSON.parse(utf8.decode(bytes));
     return page.indexShape === "array" ? Array.isArray(data) && data.length === page.recordCount
@@ -38,7 +38,7 @@ export async function auditLegacyAtlasSource({ manifest = fetchAtlasManifest, re
     if (!Array.isArray(available) || !available.includes(version)) {
       state = "version-unavailable";
     } else {
-      const bytes = await readAtlasSourceBytes(url, "application/json", maxIndexBytes, false, signal, request).catch(() => undefined);
+      const bytes = await readAtlasSourceBytes(url, "application/json", maxLegacyAtlasIndexBytes, false, signal, request).catch(() => undefined);
       signal?.throwIfAborted();
       state = bytes ? matchesLegacyAtlasIndex(page, bytes) ? "verified" : "content-mismatch" : "request-failed";
     }
