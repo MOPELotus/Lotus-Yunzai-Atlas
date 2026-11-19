@@ -56,11 +56,27 @@ function newer(target: string, local: string, game: Game): boolean {
   return game === "zzz" && targetBuild !== undefined && localBuild !== undefined && Number(targetBuild) > Number(localBuild);
 }
 
+function planVersionedPage(page: AtlasPlanPage & { readonly localVersion?: string },
+  local: AtlasCandidateValidation | undefined, target: string | undefined): AtlasPlanEntry {
+  if (local && !local.ok) return { ...page, kind: "versioned", action: "review", reason: "local-unverified" };
+  if (!target) return { ...page, kind: "versioned", action: "review", reason: "manifest-unavailable" };
+  if (page.localVersion === target) return { ...page, kind: "versioned", action: "current", targetVersion: target };
+  if (page.localVersion && !newer(target, page.localVersion, page.game)) {
+    return { ...page, kind: "versioned", action: "review", reason: "unproven-upgrade", targetVersion: target };
+  }
+  return { ...page, kind: "versioned", action: "fetch", targetVersion: target };
+}
+
+function buildPlan(entries: AtlasPlanEntry[]): AtlasUpdatePlan {
+  const candidateRequirements = entries.flatMap((entry) => entry.action === "fetch"
+    ? [{ game: entry.game, pageId: entry.pageId, version: entry.targetVersion }] : []);
+  return { entries, candidateRequirements };
+}
+
 /** Pass undefined only for an explicitly empty installation. An invalid snapshot never authorizes writes. */
 export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidation | undefined,
   scope?: readonly AtlasPlanPage[]): AtlasUpdatePlan {
   const entries: AtlasPlanEntry[] = [];
-  const candidateRequirements: AtlasCandidatePage[] = [];
   if (scope?.some(({ game, pageId }) => !trackedPages.some((page) => page.game === game && page.pageId === pageId))) {
     throw new TypeError("图鉴更新范围包含未识别的游戏或分类。");
   }
@@ -73,23 +89,19 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       entries.push({ ...current, kind, action: "audit-rotation" });
       continue;
     }
-    if (local && !local.ok) {
-      entries.push({ ...current, kind, action: "review", reason: "local-unverified" });
-      continue;
-    }
-    const target = targetVersion(manifest, game);
-    if (!target) {
-      entries.push({ ...current, kind, action: "review", reason: "manifest-unavailable" });
-    } else if (existing?.version === target) {
-      entries.push({ ...current, kind, action: "current", targetVersion: target });
-    } else if (existing && !newer(target, existing.version, game)) {
-      entries.push({ ...current, kind, action: "review", reason: "unproven-upgrade", targetVersion: target });
-    } else {
-      entries.push({ ...current, kind, action: "fetch", targetVersion: target });
-      candidateRequirements.push({ game, pageId, version: target });
-    }
+    entries.push(planVersionedPage(current, local, targetVersion(manifest, game)));
   }
-  return { entries, candidateRequirements };
+  return buildPlan(entries);
+}
+
+/** Deadly Assault acquisition uses the published build and verifies each source window separately. */
+export function planPublishedBossRefresh(manifest: unknown, local: AtlasCandidateValidation): AtlasUpdatePlan {
+  const { live, available } = object(object(manifest).zzz);
+  const target = version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live) ? live : undefined;
+  const scope = { game: "zzz", pageId: "boss" } as const;
+  const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
+  if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
+  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, target)]);
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {
