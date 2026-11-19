@@ -55,3 +55,8 @@ export const legacyAtlasSourcePages: readonly LegacyAtlasSourcePage[] = (Object.
 });
 
 export const legacyAtlasCounts = { detailCount: 2989, imageCount: 6222 } as const;
+
+export const legacyIndexedOnlyPages: ReadonlySet<string> = new Set([
+  "gi/achievement/achievement", "hsr/achievement/achievement", "zzz/achievement/achievement",
+  "hsr/monstervalue", "hsr/EliteGroup", "hsr/HardLevelGroup", "hsr/InfiniteEliteGroup",
+]);

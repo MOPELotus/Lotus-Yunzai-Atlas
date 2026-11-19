@@ -6,14 +6,20 @@ import { candidateFile } from "./candidate-gallery.ts";
 import { readLegacyExportInventory } from "./legacy-coverage.ts";
 import { planLegacyDetailQueue } from "./legacy-detail-queue.ts";
 import { compareLegacyJsonEvidence, evidenceObject, legacyEvidenceDigest, parseLegacyJsonEvidence } from "./legacy-json-evidence.ts";
-import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import { legacyAtlasSourcePages, type LegacyAtlasSourcePage } from "./legacy-source-profile.ts";
 import { openAtlasPinnedCache } from "./pinned-source-cache.ts";
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
-async function oldContent(data: string, itemPath: string) {
-  const json = parseLegacyJsonEvidence(utf8.decode(await readFile(await candidateFile(data, itemPath.slice("data/".length)))));
-  return evidenceObject(evidenceObject(json).content ?? null);
+export async function readOldItemEvidence(data: string, itemPath: string) {
+  return evidenceObject(parseLegacyJsonEvidence(utf8.decode(await readFile(await candidateFile(data, itemPath.slice("data/".length))))));
+}
+
+export async function readFixedIndexEvidence(page: LegacyAtlasSourcePage, checkpoints: Awaited<ReturnType<typeof openAtlasPinnedCache>>, signal?: AbortSignal) {
+  const bytes = await checkpoints.read(page.indexSha256, maxLegacyAtlasIndexBytes, signal);
+  if (!bytes || !matchesLegacyAtlasIndex(page, bytes)) return;
+  const raw = parseLegacyJsonEvidence(utf8.decode(bytes));
+  return Array.isArray(raw) ? Object.fromEntries(raw.map((row, index) => [String(index), row])) : evidenceObject(raw);
 }
 
 /** Return evidence only. Even matching candidate bytes are never added to independent source coverage here. */
@@ -22,7 +28,7 @@ export async function reviewLegacyDetail(exportRoot: string, cache: string, key:
   const entry = queue.entries.find((item) => item.key === key && item.state === "eligible-candidate");
   if (!entry) throw new Error("图鉴详情没有可独立复核的候选身份。");
   const { body, sha256, bytes } = await readLegacyDetailCandidate(entry, checkpoint, signal);
-  const old = (await oldContent(await realpath(join(exportRoot, "data")), entry.itemPath)).detail;
+  const old = evidenceObject((await readOldItemEvidence(await realpath(join(exportRoot, "data")), entry.itemPath)).content ?? null).detail;
   if (!old) throw new Error("旧导出没有对应的嵌入详情。");
   const detail = parseLegacyJsonEvidence(utf8.decode(body));
   const comparison = compareLegacyJsonEvidence(old, detail);
@@ -43,17 +49,15 @@ export async function reviewLegacyIndexedOnly(exportRoot: string, cache: string,
     const { game, pageId, version, indexSha256 } = page;
     const records = inventory.pages.get(`${game}/${pageId}`)!;
     if ([...records.values()].some(({ detailUrl }) => detailUrl !== undefined)) continue;
-    const bytes = await checkpoints.read(indexSha256, maxLegacyAtlasIndexBytes, signal);
-    if (!bytes || !matchesLegacyAtlasIndex(page, bytes)) {
+    const indexed = await readFixedIndexEvidence(page, checkpoints, signal);
+    if (!indexed) {
       pages.push({ game, pageId, version, indexSha256, records: records.size, exactRows: 0, status: "index-unverified" });
       continue;
     }
-    const raw = parseLegacyJsonEvidence(utf8.decode(bytes));
-    const indexed = Array.isArray(raw) ? Object.fromEntries(raw.map((row, index) => [String(index), row])) : evidenceObject(raw);
     let exactRows = 0;
     for (const [id, { itemPath }] of records) {
       signal?.throwIfAborted();
-      const { list } = await oldContent(data, itemPath);
+      const { list } = evidenceObject((await readOldItemEvidence(data, itemPath)).content ?? null);
       if (list !== undefined && Object.hasOwn(indexed, id) && compareLegacyJsonEvidence(list, indexed[id]!).status === "exact") exactRows++;
     }
     pages.push({ game, pageId, version, indexSha256, records: records.size, exactRows, status: exactRows === records.size ? "exact" : "different" });

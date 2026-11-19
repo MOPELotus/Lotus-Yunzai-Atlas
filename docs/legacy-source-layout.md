@@ -41,3 +41,14 @@ bun plugins/atlas/review-legacy-details.ts /path/to/legacy-export /path/to/check
 详情复核报告独立旧详情摘要、候选原始响应 SHA-256 以及带 JSON Pointer 的差异。旧详情摘要对对象键排序，同时保留所有原数字词法。候选摘要来自校验并解码后的原始响应字节。末日 3020 与 3021 各有 9 个 `stage_name` 尾数差异，其旧值均符合 JS 整数舍入，状态为 `legacy-integer-rounding`，仍属候选。
 
 `--indexed-only` 比较旧 `content.list` 与已固定原索引行。三款游戏的成就以及星铁 `monstervalue`、`EliteGroup`、`HardLevelGroup` 和 `InfiniteEliteGroup` 都没有独立详情请求，这七类在核实的旧导出中共 3,066 条。复验报告按类显示实测相符行数，不计入独立详情覆盖。
+
+## 生成隔离的索引条目
+
+```sh
+bun plugins/atlas/prepare-indexed-only.ts /path/to/legacy-export /path/to/checkpoints
+bun plugins/atlas/prepare-indexed-only.ts /path/to/legacy-export /path/to/checkpoints /path/to/new-staging
+```
+
+省略最后一个参数时只输出计划。指定新目录时，将七类的原索引行写入 `preview/data/items/` 对应旧目录，同时生成运行时 `map.json` 和单独的 `status.json`。索引行通过固定摘要和旧导出的逐记录内容核对。包装保留对象顺序、数字原始写法和旧记录 ID，`content.detail` 写为 `null`。
+
+`status.json` 按分类记录字段类型和原图要求，并列出缺失路径、原 URL、SHA-256 与字节数。目前 75 张原神成就图缺独立检查点，其余六类没有图库要求。预览只登记实际复核通过的图库文件。`publishable` 固定为 `false`，本目录供离线查询验收。

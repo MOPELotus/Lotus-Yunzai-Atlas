@@ -4,7 +4,8 @@ class SourceNumber {
   constructor(readonly text: string) {}
 }
 
-type Json = null | boolean | string | SourceNumber | readonly Json[] | { readonly [key: string]: Json };
+export type EvidenceJson = null | boolean | string | SourceNumber | readonly EvidenceJson[] | { readonly [key: string]: EvidenceJson };
+type Json = EvidenceJson;
 const parseWithSource = JSON.parse as (source: string, revive: (key: string, value: unknown, context?: { source?: string }) => unknown) => unknown;
 
 export function parseLegacyJsonEvidence(source: string): Json {
@@ -20,18 +21,24 @@ export function evidenceObject(value: Json): Readonly<Record<string, Json>> {
     ? value as Readonly<Record<string, Json>> : {};
 }
 
-function canonical(value: Json): string {
+export function legacyEvidenceType(value: Json) {
+  return value instanceof SourceNumber ? "number" : value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+}
+
+export function serializeLegacyJsonEvidence(value: Json, sortKeys = false): string {
   if (value instanceof SourceNumber) return value.text;
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => serializeLegacyJsonEvidence(item, sortKeys)).join(",")}]`;
   if (value !== null && typeof value === "object") {
     const entries = evidenceObject(value);
-    return `{${Object.keys(entries).sort().map((key) => `${JSON.stringify(key)}:${canonical(entries[key]!)}`).join(",")}}`;
+    const keys = Object.keys(entries);
+    if (sortKeys) keys.sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${serializeLegacyJsonEvidence(entries[key]!, sortKeys)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
 export function legacyEvidenceDigest(value: Json): string {
-  return createHash("sha256").update(canonical(value)).digest("hex");
+  return createHash("sha256").update(serializeLegacyJsonEvidence(value, true)).digest("hex");
 }
 
 function decimal(value: string) {

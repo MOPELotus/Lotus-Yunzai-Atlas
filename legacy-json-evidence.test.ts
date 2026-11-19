@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { compareLegacyJsonEvidence, legacyEvidenceDigest, parseLegacyJsonEvidence } from "./legacy-json-evidence.ts";
+import { compareLegacyJsonEvidence, legacyEvidenceDigest, parseLegacyJsonEvidence, serializeLegacyJsonEvidence } from "./legacy-json-evidence.ts";
 
 const compare = (old: string, source: string) => compareLegacyJsonEvidence(parseLegacyJsonEvidence(old), parseLegacyJsonEvidence(source));
 
@@ -20,4 +20,10 @@ test("精确十进制允许等值写法，但不会把字符串、数组重排�
   expect(compare('{"a":"1","b":[1,2]}', '{"a":1,"b":[2,1]}')).toMatchObject({ status: "different", differenceCount: 3 });
   expect(compare('{"__proto__":1,"a/b~c":0}', '{"__proto__":2,"a/b~c":1}').differences.map(({ path }) => path))
     .toEqual(["/__proto__", "/a~1b~0c"]);
+});
+
+test("写出运行时包裹时沿用原始数字和对象顺序", () => {
+  const list = '{"z":1358289180218405445,"a":1.2500,"t":2e+20}';
+  expect(serializeLegacyJsonEvidence({ content: { list: parseLegacyJsonEvidence(list), detail: null } }))
+    .toBe(`{"content":{"list":${list},"detail":null}}`);
 });
