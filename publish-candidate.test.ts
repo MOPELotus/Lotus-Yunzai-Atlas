@@ -1,0 +1,130 @@
+import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { createAtlasCatalog, findEquipment } from "./catalog.ts";
+import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
+
+const itemPath = "items/weapon.json";
+const imagePath = "gallery/gi/weapon.webp";
+const pages = (version: number) => [{ game: "gi", pageId: "weapon", recordCount: 1, version: String(version) }] as const;
+
+async function snapshot(root: string, version: number, type = "WEAPON_SWORD_ONE_HAND") {
+  const candidate = join(root, "snapshots", String(version));
+  const data = join(candidate, "data");
+  await mkdir(join(data, "items"), { recursive: true });
+  const name = `样例剑 ${version}`;
+  const page = { id: "weapon", version: String(version), recordCount: 1, totalRecordCount: 1, sampled: false,
+    records: { "1": { id: "1", name, path: itemPath, hasDetail: false } } };
+  await writeFile(join(data, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: { weapon: page } } } } } }));
+  const image = join(candidate, imagePath);
+  await mkdir(dirname(image), { recursive: true });
+  await writeFile(image, `image ${version}`);
+  await writeFile(join(data, itemPath), JSON.stringify({
+    meta: { gameId: "gi", pageId: "weapon", locale: "zh", recordId: "1", version: String(version), name, hasDetail: false,
+      images: [{ localPath: imagePath, status: "downloaded", sha256: createHash("sha256").update(`image ${version}`).digest("hex") }] },
+    content: { list: { type }, detail: null },
+  }));
+  return { data, image };
+}
+
+async function fixture(run: (root: string) => Promise<void>) {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-publish-"));
+  try {
+    await run(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("原子发布新目录后，在途图鉴读取保留旧版条目和图库", () => fixture(async (root) => {
+  const first = await snapshot(root, 1);
+  const second = await snapshot(root, 2, "WEAPON_BOW");
+  const pointer = join(root, "current");
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
+  expect(await publishAtlasCandidate(root, null, 1, pages(1))).toEqual({ status: "published", version: 1, directory: first.data });
+  const catalog = createAtlasCatalog(pointer);
+  const [old] = findEquipment(await catalog.read(), "样例剑 1", "gi");
+  expect(old).toBeDefined();
+  expect(await publishAtlasCandidate(root, 1, 2, pages(2))).toEqual({ status: "published", version: 2, directory: second.data });
+  expect(await readlink(pointer)).toBe("snapshots/2/data");
+  expect(await readAtlasSnapshotVersion(root)).toBe(2);
+  const [current] = findEquipment(await catalog.read(), "样例剑 2", "gi");
+  expect(current).toBeDefined();
+  expect((await catalog.equipmentFacts(old!)).scope).toBe("单手剑");
+  expect((await catalog.equipmentFacts(current!)).scope).toBe("弓");
+  expect(catalog.assetRoot(old!)).toBe(first.data);
+  expect(await Bun.file(first.image).text()).toBe("image 1");
+}));
+
+test("竞争发布只有一个成功，过期及较低版本保持获胜指针", () => fixture(async (root) => {
+  await Promise.all([snapshot(root, 1), snapshot(root, 2), snapshot(root, 3)]);
+  expect((await publishAtlasCandidate(root, null, 1, pages(1))).status).toBe("published");
+  const results = await Promise.all([publishAtlasCandidate(root, 1, 2, pages(2)), publishAtlasCandidate(root, 1, 3, pages(3))]);
+  const published = results.filter(({ status }) => status === "published");
+  expect(published).toHaveLength(1);
+  const winner = published[0];
+  if (winner?.status !== "published") throw new Error("没有发布者取得指针。");
+  const current = winner.version;
+  expect(await readAtlasSnapshotVersion(root)).toBe(current);
+  expect(results.filter(({ status }) => status === "stale")).toEqual([{ status: "stale", current }]);
+  expect(await publishAtlasCandidate(root, current, 1, pages(1))).toEqual({ status: "stale", current });
+  expect(await realpath(join(root, "current"))).toBe(join(root, `snapshots/${current}/data`));
+}));
+
+test("分类、条目、图库或候选实体目录复验失败时保持旧指针", () => fixture(async (root) => {
+  const first = await snapshot(root, 1);
+  const second = await snapshot(root, 2);
+  expect((await publishAtlasCandidate(root, null, 1, pages(1))).status).toBe("published");
+  expect((await publishAtlasCandidate(root, 1, 2, pages(3))).status).toBe("invalid");
+  expect((await publishAtlasCandidate(root, 1, 2, [])).status).toBe("invalid");
+  await writeFile(second.image, "changes after assembly");
+  const corrupt = await publishAtlasCandidate(root, 1, 2, pages(2));
+  expect(corrupt).toMatchObject({ status: "invalid", issues: [expect.stringContaining("图库文件内容与记录不符")] });
+  await rm(second.image);
+  expect((await publishAtlasCandidate(root, 1, 2, pages(2))).status).toBe("invalid");
+  await writeFile(join(second.data, itemPath), "{}");
+  expect((await publishAtlasCandidate(root, 1, 2, pages(2))).status).toBe("invalid");
+  await mkdir(join(root, "snapshots/3"));
+  await symlink(second.data, join(root, "snapshots/3/data"), "dir");
+  expect((await publishAtlasCandidate(root, 1, 3, pages(3))).status).toBe("invalid");
+  expect(await realpath(join(root, "current"))).toBe(first.data);
+}));
+
+test("发布进程硬中断后系统释放写锁，后续发布可替换遗留的临时链接", () => fixture(async (root) => {
+  await Promise.all([snapshot(root, 1), snapshot(root, 2)]);
+  expect((await publishAtlasCandidate(root, null, 1, pages(1))).status).toBe("published");
+  const sidecar = join(root, ".publication.sqlite");
+  const child = Bun.spawn([process.execPath, "-e", `
+    import { Database } from "bun:sqlite";
+    import { symlink } from "node:fs/promises";
+    const db = new Database(Bun.env.ATLAS_TEST_LOCK);
+    db.exec("BEGIN IMMEDIATE");
+    await symlink("snapshots/2/data", Bun.env.ATLAS_TEST_PENDING, "dir");
+    console.log("locked");
+    setInterval(() => {}, 1000);
+  `], { env: { ATLAS_TEST_LOCK: sidecar, ATLAS_TEST_PENDING: join(root, ".current-next") }, stdout: "pipe", stderr: "inherit" });
+  try {
+    const reader = child.stdout.getReader();
+    try {
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe("locked\n");
+    } finally {
+      reader.releaseLock();
+    }
+    const lock = await stat(sidecar);
+    const abort = new AbortController();
+    const waiting = publishAtlasCandidate(root, 1, 2, pages(2), abort.signal);
+    abort.abort(new Error("发布已取消"));
+    await expect(waiting).rejects.toThrow("发布已取消");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    child.kill("SIGKILL");
+    await child.exited;
+    expect((await publishAtlasCandidate(root, 1, 2, pages(2))).status).toBe("published");
+    expect((await stat(sidecar)).ino).toBe(lock.ino);
+    await expect(readlink(join(root, ".current-next"))).rejects.toThrow();
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await child.exited;
+  }
+}));

@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
-import { constants, createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { candidateFile, candidateGallery, copyCandidateFile } from "./candidate-gallery.ts";
 import type { Game } from "./catalog.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
@@ -92,74 +91,22 @@ function composeMap(baseline: Root, replacement: Root, pages: readonly SelectedP
   return { meta: { source, mode: "merged", locales: ["zh"], selectedPages: Object.fromEntries(selected), requestedVersions }, games };
 }
 
-async function physicalFile(root: string, path: string): Promise<string> {
-  const source = join(root, path);
-  if (!inside(root, source) || await realpath(source) !== source || !(await lstat(source)).isFile()) {
-    throw new Error("快照引用的文件必须位于源目录内且为实体文件。");
-  }
-  return source;
-}
-
-async function copyNewFile(source: string, destination: string) {
-  await mkdir(dirname(destination), { recursive: true });
-  await copyFile(source, destination, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-}
-
-async function hashFile(file: string, signal?: AbortSignal): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file, { signal })) hash.update(chunk);
-  return hash.digest("hex");
-}
-
-function referencedImage(image: ObjectValue, game: Game) {
-  if (image.status !== "downloaded" && image.placeholder !== true) return;
-  const { localPath: path, sha256 } = image;
-  const placeholder = image.placeholder === true;
-  if (typeof path !== "string" || /[\\\u0000-\u001f\u007f-\u009f]/u.test(path) ||
-      path.split("/").some((part) => !part || part === "." || part === "..") ||
-      (placeholder ? path !== "gallery/_placeholder/unknown.svg" : !path.startsWith(`gallery/${game}/`))) {
-    throw new Error("源图片路径或哈希无效。");
-  }
-  if (placeholder) return { path, sha256: undefined };
-  if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(sha256)) throw new Error("源图片路径或哈希无效。");
-  return { path, sha256 };
-}
-
 async function copyPages(pages: readonly SelectedPage[], target: string, signal?: AbortSignal) {
-  const images = new Map<string, { sha256: string; sources: Set<string> }>();
+  const gallery = candidateGallery(target);
   for (const { source, page, payload } of pages) {
     for (const record of Object.values(object(payload.records))) {
       signal?.throwIfAborted();
       const path = object(record).path;
       if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("源索引在合成期间改变。");
-      const file = await physicalFile(join(source.directory, "data"), path);
+      const file = await candidateFile(join(source.directory, "data"), path);
       const destination = join(target, "data", path);
       if (!inside(join(target, "data", "items"), destination)) throw new Error("候选条目路径越界。");
-      await copyNewFile(file, destination);
-      const { images: list } = object(object(JSON.parse(await readFile(destination, "utf8"))).meta);
-      for (const row of Array.isArray(list) ? list : []) {
-        signal?.throwIfAborted();
-        const asset = referencedImage(object(row), page.game);
-        if (!asset) continue;
-        const earlier = images.get(asset.path);
-        if (earlier && asset.sha256 && earlier.sha256 !== asset.sha256) throw new Error(`图库路径冲突：${asset.path}`);
-        if (earlier?.sources.has(source.directory)) continue;
-        const imageFile = await physicalFile(source.directory, asset.path);
-        const checksum = await hashFile(imageFile, signal);
-        if ((asset.sha256 && checksum !== asset.sha256) || (earlier && earlier.sha256 !== checksum)) {
-          throw new Error(`图库文件内容与记录不符：${asset.path}`);
-        }
-        if (earlier) earlier.sources.add(source.directory);
-        else {
-          const output = join(target, asset.path);
-          await copyNewFile(imageFile, output);
-          if (await hashFile(output, signal) !== checksum) throw new Error(`复制时图库文件发生变化：${asset.path}`);
-          images.set(asset.path, { sha256: checksum, sources: new Set([source.directory]) });
-        }
-      }
+      await copyCandidateFile(file, destination);
+      const item: unknown = JSON.parse(await readFile(destination, "utf8"));
+      await gallery.include(item, page.game, source.directory, signal);
     }
   }
-  return images.size;
+  return gallery.count;
 }
 
 /** Source roots contain data/map.json and optionally gallery/. The destination must not exist. */
