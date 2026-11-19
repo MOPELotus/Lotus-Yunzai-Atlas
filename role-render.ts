@@ -1,8 +1,9 @@
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderPng } from "@lotus-yunzai/skia";
-import { Canvas, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
+import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames } from "./catalog.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 
@@ -18,16 +19,44 @@ const inner = width - 2 * margin;
 const contentWidth = inner - 40;
 const header = 184;
 const footer = 62;
-const maxDimension = 16_384;
+const maxDimension = 24_000;
 const maxImageBytes = 8 * 1024 * 1024;
 const font = '"MiaoWiki", MiSans, "Noto Sans CJK SC", sans-serif';
-const gold = "#e0c89a";
-const white = "#f3efea";
-const muted = "#c4cad7";
-const accents: readonly [RegExp, string][] = [
-  [/冰|霜/u, "#34596a"], [/水|以太|量子/u, "#334677"], [/火/u, "#713d45"], [/草|风/u, "#38624f"],
-  [/岩|虚数/u, "#675844"], [/雷|电/u, "#554274"],
-];
+const gold = "#d3bc8e";
+const white = "#f1efed";
+const muted = "#c2c5cb";
+const backgrounds = [
+  [/量子/u, "quantum"], [/虚数|岩/u, "geo"], [/火/u, "pyro"], [/水/u, "hydro"], [/冰|霜/u, "cryo"],
+  [/风/u, "anemo"], [/雷|电/u, "electro"], [/草/u, "dendro"],
+] as const;
+
+type Background = (typeof backgrounds)[number][1] | "sr";
+type ThemeAsset = `bg/bg-${Background}.webp` | "card-bg.png";
+const themeDirectory = Bun.env.LOTUS_ATLAS_THEME_DIR?.trim() || fileURLToPath(new URL("./assets/miao-theme/", import.meta.url));
+const themeImages = new Map<ThemeAsset, Promise<Image | undefined>>();
+let themeFonts: Promise<void> | undefined;
+
+async function loadThemeFonts(): Promise<void> {
+  for (const [family, filename] of [["MiaoWiki", "HYWH-65W.ttf"], ["MiSans", "MiSans-VF.ttf"]] as const) {
+    const paths = [join(themeDirectory, "fonts", filename)];
+    if (family === "MiSans") paths.push(join(dirname(themeDirectory), "fonts", filename));
+    for (const path of paths) {
+      if (!await Bun.file(path).exists()) continue;
+      FontLibrary.use(family, [path]);
+      break;
+    }
+  }
+}
+
+function themeImage(asset: ThemeAsset): Promise<Image | undefined> {
+  let image = themeImages.get(asset);
+  if (!image) {
+    image = Bun.file(join(themeDirectory, asset)).arrayBuffer()
+      .then((bytes) => loadImage(Buffer.from(bytes))).catch(() => undefined);
+    themeImages.set(asset, image);
+  }
+  return image;
+}
 
 type Block = { readonly height: number; paint(ctx: Context, top: number): void };
 type Page = { section: string; panels: Block[][] };
@@ -40,9 +69,10 @@ function rounded(ctx: Context, x: number, y: number, w: number, h: number, radiu
 }
 
 function paintLines(ctx: Context, lines: readonly string[], x: number, y: number, size: number,
-  lineHeight: number, color: string, bold = false) {
-  ctx.font = `${bold ? "600 " : ""}${size}px ${font}`;
+  lineHeight: number, color: string) {
+  ctx.font = `${size}px ${font}`;
   ctx.textBaseline = "top";
+  ctx.textAlign = "left";
   ctx.fillStyle = color;
   for (const [row, line] of lines.entries()) ctx.fillText(line, x, y + row * lineHeight);
 }
@@ -54,13 +84,13 @@ function contain(ctx: Context, image: Image, x: number, y: number, w: number, h:
   ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
-function makeLayout() {
+function makeLayout(texture?: Image) {
   const metrics = new Canvas(1, 1);
   metrics.gpu = false;
   const measure = metrics.getContext("2d");
 
-  function wrap(text: string, maxWidth: number, size: number, bold = false) {
-    measure.font = `${bold ? "600 " : ""}${size}px ${font}`;
+  function wrap(text: string, maxWidth: number, size: number) {
+    measure.font = `${size}px ${font}`;
     return text.split(/\r?\n/u).flatMap((paragraph) => {
       const lines: string[] = [];
       let line = "";
@@ -82,60 +112,69 @@ function makeLayout() {
   function text(value: string, color = white, size = 19): Block {
     const lines = wrap(value, contentWidth, size);
     const lineHeight = size + 10;
-    return { height: lines.length * lineHeight + 16, paint: (ctx, top) =>
-      paintLines(ctx, lines, margin + 20, top + 8, size, lineHeight, color) };
+    return { height: lines.length * lineHeight + 20, paint: (ctx, top) =>
+      paintLines(ctx, lines, margin + 20, top + 10, size, lineHeight, color) };
   }
 
   function heading(value: string, artwork?: Image, small = false): Block {
     const size = small ? 21 : 26;
     const lineHeight = size + 8;
-    const lines = wrap(value, contentWidth - (artwork ? 70 : 0), size, true);
-    return { height: Math.max(small ? 48 : 70, lines.length * lineHeight + 24), paint(ctx, top) {
-      ctx.fillStyle = "rgba(210,188,153,.10)";
-      ctx.fillRect(margin, top, inner, this.height);
+    const lines = wrap(value, inner - (artwork ? 124 : 40), size);
+    return { height: Math.max(small ? 48 : 82, lines.length * lineHeight + (small ? 24 : 35)), paint(ctx, top) {
+      if (texture) ctx.drawImage(texture, margin, top, inner, this.height);
       if (artwork) {
-        rounded(ctx, margin + 16, top + 8, 52, 52, 26, "rgba(255,255,255,.11)");
-        contain(ctx, artwork, margin + 22, top + 14, 40, 40);
+        rounded(ctx, 40, top + 11, 62, 62, 31, "rgba(255,255,255,0.10)");
+        contain(ctx, artwork, 49, top + 20, 44, 44);
       }
-      paintLines(ctx, lines, margin + (artwork ? 82 : 20), top + 12, size, lineHeight, gold, true);
+      paintLines(ctx, lines, artwork ? 122 : 44, top + (small ? 12 : 14), size, lineHeight, gold);
     } };
   }
 
   function row(values: readonly string[], widths: readonly number[], title = false): Block {
     const size = 17;
-    const lineHeight = 22;
-    const cells = values.map((value, index) => wrap(value, widths[index]! - 12, size, title));
-    const height = Math.max(32, ...cells.map((cell) => cell.length * lineHeight + 10));
+    const lineHeight = 25;
+    const cells = values.map((value, index) => wrap(value, widths[index]! - 12, size));
+    const height = Math.max(title ? 44 : 40, ...cells.map((cell) => cell.length * lineHeight + 14));
     return { height, paint(ctx, top) {
       if (title) {
-        ctx.fillStyle = "rgba(211,188,142,.15)";
+        ctx.fillStyle = "rgba(211,188,142,0.19)";
         ctx.fillRect(margin, top, inner, height);
       }
       let x = margin + 20;
       for (const [index, lines] of cells.entries()) {
-        paintLines(ctx, lines, x + 6, top + 5, size, lineHeight, title ? gold : white, title);
+        paintLines(ctx, lines, x + 6, top + 10, size, lineHeight, title ? gold : white);
         x += widths[index]!;
       }
-      ctx.fillStyle = "rgba(255,255,255,.08)";
+      ctx.fillStyle = "rgba(255,255,255,0.09)";
       ctx.fillRect(margin + 20, top + height - 1, contentWidth, 1);
     } };
   }
 
   function statRow(stats: readonly { label: string; value: string }[]): Block {
-    const column = contentWidth / 3;
     const labelSize = 16;
     const valueSize = 23;
     const cells = stats.map(({ label, value }) => ({
-      labels: wrap(label, column - 16, labelSize),
-      values: wrap(value, column - 16, valueSize),
+      labels: wrap(label, 212, labelSize),
+      values: wrap(value, 212, valueSize),
     }));
-    const height = Math.max(90, ...cells.map(({ labels, values }) => 24 + labels.length * 24 + values.length * 30));
+    const height = Math.max(90, ...cells.map(({ labels, values }) => 20 + labels.length * 24 + values.length * 30));
     return { height, paint(ctx, top) {
       for (const [index, { labels, values }] of cells.entries()) {
-        const x = margin + 24 + index * column;
-        paintLines(ctx, labels, x, top + 12, labelSize, 24, muted);
-        paintLines(ctx, values, x, top + 16 + labels.length * 24, valueSize, 30, gold);
+        const x = 48 + index * (inner / 3);
+        paintLines(ctx, labels, x, top + 14, labelSize, 24, muted);
+        paintLines(ctx, values, x, top + 18 + labels.length * 24, valueSize, 30, gold);
       }
+    } };
+  }
+
+  function material(name: string, count: number, artwork?: Image): Block {
+    const lines = wrap(name, inner - 180, 20);
+    const quantity = wrap(`× ${count}`, 102, 21);
+    const height = Math.max(86, lines.length * 28 + 26, quantity.length * 28 + 26);
+    return { height, paint(ctx, top) {
+      if (artwork) contain(ctx, artwork, 40, top + 11, 60, 60);
+      paintLines(ctx, lines, artwork ? 120 : 44, top + 24, 20, 28, white);
+      paintLines(ctx, quantity, 654, top + 26, 21, 28, gold);
     } };
   }
 
@@ -192,7 +231,7 @@ function makeLayout() {
     return result;
   }
 
-  return { wrap, text, heading, statRow, levelBlocks };
+  return { wrap, text, heading, statRow, material, levelBlocks };
 }
 
 async function roleArtwork(role: RoleDetails, assetRoot: string | undefined) {
@@ -232,16 +271,30 @@ async function roleArtwork(role: RoleDetails, assetRoot: string | undefined) {
   return images;
 }
 
+function measurePage(head: number, panels: readonly Block[][]) {
+  const heights = panels.map((blocks) => blocks.reduce((sum, { height }) => sum + height, 0));
+  return { heights, height: Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight + 16, 0) + footer) };
+}
+
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
   const { mode = "auto", scale = 2 } = options;
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
-  const images = await roleArtwork(role, options.assetRoot);
+  const property = role.overview.facts.find(({ label }) => label === "属性") ??
+    role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
+  const backdrop = backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
+  const [images, background, texture] = await Promise.all([
+    roleArtwork(role, options.assetRoot), themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
-  const layout = makeLayout();
-  const { wrap, heading, text, statRow, levelBlocks } = layout;
+  const layout = makeLayout(texture);
+  const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon);
   const portrait = image(role.overview.artwork);
+  const titleX = icon ? 152 : margin + 20;
+  const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
+  const head = Math.max(header, 118 + title.length * 39);
   const overview: Block[] = [];
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
   if (role.overview.description) overview.push(text(role.overview.description));
@@ -254,12 +307,12 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   }
 
   const pages: Page[] = [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
-  const skillPanels = role.skills.filter(({ cards }) => cards.length).flatMap(({ title, cards }) => [
+  const skills = role.skills.filter(({ cards }) => cards.length).flatMap(({ title, cards }) => [
     [heading(title, undefined, true)],
     ...cards.map((card) => [heading(card.name, image(card.artwork)), ...(card.description ? [text(card.description)] : []),
-      ...card.details.map(details), ...levelBlocks(card.levels ?? [])]),
+      ...card.details.map(details), ...layout.levelBlocks(card.levels ?? [])]),
   ]);
-  if (skillPanels.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skillPanels });
+  if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
   if (role.ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: role.ranks.map((rank) => [
     heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)),
     ...(rank.description ? [text(rank.description)] : []), ...(rank.story ? [text(rank.story, muted, 17)] : []),
@@ -267,49 +320,41 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const materials = role.materials.filter(({ items }) => items.length);
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
-    ...items.map((item) => heading(`${item.name || item.id || "材料"}　× ${item.count}`, image(item.artwork))),
+    ...items.map((item) => material(item.name || item.id || "材料", item.count, image(item.artwork))),
   ]) });
 
   const game = gameNames[role.game];
-  const titleX = icon ? 152 : margin + 20;
-  const title = wrap(role.overview.name, width - margin - 10 - titleX, 32, true);
-  const element = role.overview.facts.find(({ label }) => /^(?:属性|神之眼|元素)$/u.test(label))?.value ?? "";
-  const accent = accents.find(([pattern]) => pattern.test(element))?.[1] ?? "#41495d";
-  const head = Math.max(header, 118 + title.length * 37);
   const output = [];
   for (const [index, { section, panels }] of pages.entries()) {
-    const heights = panels.map((blocks) => blocks.reduce((sum, { height }) => sum + height, 0));
-    const height = Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight + 16, 0) + footer);
+    const { heights, height } = measurePage(head, panels);
     if (height > maxDimension) throw new RangeError(`图鉴「${section}」超出可渲染高度。`);
     const zoom = Math.min(scale, maxDimension / height);
     const { png, engine } = await renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
       ctx.scale(zoom, zoom);
-      const bg = ctx.createLinearGradient(0, 0, width, height);
-      bg.addColorStop(0, accent);
-      bg.addColorStop(.45, "#252c40");
-      bg.addColorStop(1, "#151a29");
-      ctx.fillStyle = bg;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.fillStyle = "#252c40";
       ctx.fillRect(0, 0, width, height);
+      if (background) ctx.drawImage(background, 0, 0, width, height);
 
-      rounded(ctx, margin, 12, inner, head - 32, 12, "rgba(13,17,29,.60)");
+      rounded(ctx, margin, 12, inner, head - 32, 12, "rgba(15,18,29,0.52)");
       if (icon) {
-        rounded(ctx, 33, 28, 102, 102, 51, "rgba(225,201,160,.12)");
         ctx.save();
         ctx.beginPath();
-        ctx.arc(84, 79, 50, 0, Math.PI * 2);
+        ctx.arc(84, 79, 51, 0, Math.PI * 2);
         ctx.clip();
         contain(ctx, icon, 33, 28, 102, 102);
         ctx.restore();
         ctx.strokeStyle = gold;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(84, 79, 51, 0, Math.PI * 2);
+        ctx.arc(84, 79, 52, 0, Math.PI * 2);
         ctx.stroke();
       }
-      paintLines(ctx, title, titleX, 30, 32, 37, white, true);
+      paintLines(ctx, title, titleX, 30, 33, 39, white);
       const page = `${index + 1}/${pages.length}`;
-      paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 42 + title.length * 37, 18, 27, gold);
-      if (role.version) paintLines(ctx, [`资料版本 ${role.version}`], titleX + 2, 72 + title.length * 37, 14, 21, muted);
+      paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
+      paintLines(ctx, [role.version ? `资料版本 ${role.version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
 
       let y = head;
       for (const [panel, blocks] of panels.entries()) {
@@ -318,7 +363,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
         ctx.beginPath();
         ctx.roundRect(margin, y, inner, panelHeight, 10);
         ctx.clip();
-        ctx.fillStyle = "rgba(12,17,29,.62)";
+        ctx.fillStyle = "rgba(15,20,31,0.58)";
         ctx.fillRect(margin, y, inner, panelHeight);
         for (const block of blocks) {
           block.paint(ctx, y);
