@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { apocalypseMode, challengeModes, chaosMode, fictionMode, findAnnouncedStarrailNext, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
+import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findAnnouncedStarrailNext, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
   onslaughtMode, readChallengeFacts, theaterMode, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
@@ -168,6 +168,24 @@ test("幻想剧诗上期在中国服秒级轮换边界切换", async () => {
   expect(await select("2026-11-01T04:00:00+08:00")).toBe("30");
   expect(await select("2026-12-01T03:59:59.999+08:00")).toBe("30");
   expect(await select("2026-12-01T04:00:00+08:00")).toBeUndefined();
+});
+
+test("深境上期只使用首尾相邻且与公告无冲突的实装窗口", async () => {
+  const earlier = row("123", "2026-09-16 04:00:00", "2026-10-16 03:59:59");
+  const previous = row("124", "2026-10-16 04:00:00", "2026-11-16 03:59:59");
+  const current = row("125", "2026-11-16 04:00:00", "2026-12-16 03:59:59");
+  const conflict = row("126", "2027-01-16 04:00:00", "2027-02-16 03:59:59");
+  const choosePrevious = async (records: readonly { id: string; list: object }[], time: string) =>
+    (await findPreviousChallenge(abyssMode, records, async (entry) => readChallengeFacts(abyssMode, entry), Date.parse(time)))?.entry.id;
+  const records = [current, previous, earlier, conflict];
+  expect(await choosePrevious(records, "2026-11-16T03:59:59.999+08:00")).toBe("123");
+  expect(await choosePrevious(records, "2026-11-16T04:00:00+08:00")).toBe("124");
+  expect(await choosePrevious([earlier, previous, { id: "125", list: { begin: current.list.live_begin, end: current.list.live_end } }],
+    "2026-11-16T04:00:00+08:00")).toBeUndefined();
+  expect(await choosePrevious([...records, row("补窗夹具", "2026-12-16 04:00:00", "2027-01-16 03:59:59")],
+    "2027-01-16T04:00:00+08:00")).toBeUndefined();
+  expect(await choosePrevious([...records, row("后继夹具", "2027-02-16 04:00:00", "2027-03-16 03:59:59")],
+    "2027-02-16T04:00:00+08:00")).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {

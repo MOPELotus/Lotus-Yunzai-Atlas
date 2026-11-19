@@ -373,7 +373,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
   const previous = target === "上期" &&
-    (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
+    (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const forecast = target === "下期" && (mode.id === shiyuMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id);
   const relative = previous || forecast;
@@ -574,6 +574,8 @@ const atlas = {
     "#上期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
     "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
+    "#上期深渊图鉴": () => challengeQuery("原神 深境螺旋 上期"),
+    "#上期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 上期"),
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     "#星铁上期末日图鉴": () => challengeQuery("星铁 末日幻影 上期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),

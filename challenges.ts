@@ -89,11 +89,11 @@ async function findAdjacentChallenge<Entry extends { readonly id: string }, Fact
   }));
   const active = rows.filter(({ times }) => times && times.begin <= now && now < times.end);
   const [current] = active;
-  if (active.length !== 1 || !current?.times) return;
+  if (active.length !== 1 || !current?.times || hasChallengeScheduleConflict(mode, current.entry.id, current.facts.window)) return;
   const boundary = direction === "previous" ? current.times.begin : current.times.end;
   const adjacent = rows.filter(({ times }) => (direction === "previous" ? times?.end : times?.begin) === boundary);
   const [match] = adjacent;
-  if (adjacent.length !== 1 || !match?.times) return;
+  if (adjacent.length !== 1 || !match?.times || hasChallengeScheduleConflict(mode, match.entry.id, match.facts.window)) return;
   const { begin, end } = match.times;
   if (rows.some((row) => row !== match && row.times && row.times.begin < end && begin < row.times.end)) return;
   return { current, adjacent: { entry: match.entry, facts: match.facts } };
@@ -131,7 +131,8 @@ export async function findAnnouncedStarrailNext<Entry extends { readonly id: str
 }
 
 export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode | typeof theaterMode, entries: readonly Entry[],
+  mode: typeof abyssMode | typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode | typeof theaterMode,
+  entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
   return (await findAdjacentChallenge(mode, "previous", entries, readFacts, now))?.adjacent;
