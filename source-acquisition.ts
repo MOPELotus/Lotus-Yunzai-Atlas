@@ -6,7 +6,7 @@ import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
-const origin = "https://static.nanoka.cc";
+import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 const locale = "zh";
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
@@ -38,7 +38,6 @@ const pages = {
 type SourcePage = keyof typeof pages;
 const maxJsonBytes = 1024 * 1024;
 const maxIconBytes = 2 * 1024 * 1024;
-const requestTimeout = 10_000;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const placeholderPath = "gallery/_placeholder/unknown.svg";
 // Keep the owner's legacy placeholder bytes so old and new classifications can share its gallery path.
@@ -47,8 +46,6 @@ const placeholder = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height=
 const placeholderImage = { status: "placeholder", placeholder: true, placeholderReason: "remote_missing", remoteUrl: null,
   localPath: placeholderPath, contentType: "image/svg+xml", bytes: Buffer.byteLength(placeholder),
   sha256: createHash("sha256").update(placeholder).digest("hex") } as const;
-
-type SourceFetch = (url: string, options: RequestInit) => Promise<Response>;
 
 function sourcePage(value: string): value is SourcePage {
   return Object.hasOwn(pages, value);
@@ -61,38 +58,8 @@ export interface AtlasAcquiredSource {
   readonly missingImageCount: number;
 }
 
-async function responseBytes(url: string, accept: string, limit: number, optional: boolean,
-  signal: AbortSignal, request: SourceFetch): Promise<Buffer | undefined> {
-  const response = await request(url, {
-    redirect: "error", credentials: "omit", headers: { Accept: accept },
-    signal: AbortSignal.any([signal, AbortSignal.timeout(requestTimeout)]),
-  });
-  if (!response.ok || !response.body) {
-    await response.body?.cancel().catch(() => {});
-    if (optional && response.status === 404) return;
-    throw new Error(`图鉴来源读取失败（HTTP ${response.status}）。`);
-  }
-  const reader = response.body.getReader();
-  try {
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      signal.throwIfAborted();
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > limit) throw new Error("图鉴来源文件超出大小上限。");
-      chunks.push(value);
-    }
-    return Buffer.concat(chunks, size);
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
-}
-
-async function sourceJson(url: string, optional: boolean, signal: AbortSignal, request: SourceFetch) {
-  const bytes = await responseBytes(url, "application/json", maxJsonBytes, optional, signal, request);
+async function sourceJson(url: string, optional: boolean, signal: AbortSignal, request: AtlasSourceFetch) {
+  const bytes = await readAtlasSourceBytes(url, "application/json", maxJsonBytes, optional, signal, request);
   return bytes === undefined ? undefined : JSON.parse(utf8.decode(bytes)) as unknown;
 }
 
@@ -267,12 +234,12 @@ function webp(bytes: Buffer): boolean {
 }
 
 async function readIcon(name: string, paths: readonly string[], category: SourcePage, target: string,
-  signal: AbortSignal, request: SourceFetch) {
+  signal: AbortSignal, request: AtlasSourceFetch) {
   const { game, folder } = pages[category];
   const localPath = `gallery/${game}/${name}.webp`;
   for (const path of paths) {
-    const remoteUrl = `${origin}/assets/${game}/${path}.webp`;
-    const bytes = await responseBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request);
+    const remoteUrl = `${atlasSourceOrigin}/assets/${game}/${path}.webp`;
+    const bytes = await readAtlasSourceBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request);
     if (!bytes) continue;
     if (!webp(bytes)) throw new Error(`${folder}来源图标不是有效的 WebP 文件。`);
     await mkdir(dirname(join(target, localPath)), { recursive: true });
@@ -288,7 +255,7 @@ function imageReference(fieldPath: string, originalValue: unknown, icon: Awaited
 
 /** Fetch a complete verified page into a fresh source root suitable for candidate assembly. */
 export async function acquireAtlasSource(destination: string, requirements: readonly AtlasCandidatePage[],
-  signal?: AbortSignal, request: SourceFetch = fetch): Promise<AtlasAcquiredSource> {
+  signal?: AbortSignal, request: AtlasSourceFetch = fetch): Promise<AtlasAcquiredSource> {
   const scope = requirements[0];
   const category = `${scope?.game}/${scope?.pageId}`;
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
@@ -308,7 +275,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
   await mkdir(target, { mode: 0o700 });
   try {
     const sourcePath = `${version}/${pageId}.json`;
-    const sourceUrl = `${origin}/${game}/${sourcePath}`;
+    const sourceUrl = `${atlasSourceOrigin}/${game}/${sourcePath}`;
     const index = await sourceJson(sourceUrl, false, active, request);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
@@ -325,7 +292,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const legacyMissing = new Set<string>();
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
-      const detailUrl = `${origin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
+      const detailUrl = `${atlasSourceOrigin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
       const detail = await sourceJson(detailUrl, pageId === "bangboo", active, request);
       const hasDetail = detail !== undefined;
       const detailSourceUrl = hasDetail ? detailUrl : null;

@@ -3,29 +3,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { copyAtlasCandidate } from "./assemble-candidate.ts";
 import { atlasApplyStagingPrefix, hasLegacyAtlasData, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
   type AtlasPublication } from "./publish-candidate.ts";
-import type { Game } from "./catalog.ts";
-import type { AtlasCandidatePage } from "./validate-candidate.ts";
-
-// Inventory of the complete simplified Chinese legacy export verified against Nanoka's fixed-version indexes.
-const legacyVersions = {
-  gi: { version: "7.2.52", pages: {
-    character: 154, artifact: 67, monster: 593, weapon: 292, "achievement/achievement": 75,
-    leyline: 14, rolecombat: 31, tower: 30,
-  } },
-  hsr: { version: "4.7.52", pages: {
-    lightcone: 174, character: 101, monster: 666, relicset: 64, "achievement/achievement": 9,
-    maze_boss: 24, maze: 49, maze_peak: 12, maze_extra: 29, monstervalue: 666,
-    EliteGroup: 1461, HardLevelGroup: 787, InfiniteEliteGroup: 65,
-  } },
-  zzz: { version: "3.4.4+20539349", pages: {
-    weapon: 106, character: 65, bangboo: 44, equipment: 32, monster: 321, "achievement/achievement": 3,
-    boss: 53, shiyu: 68,
-  } },
-} as const;
-
-const inventory: readonly Required<AtlasCandidatePage>[] = Object.entries(legacyVersions).flatMap(([game, { version, pages }]) =>
-  Object.entries(pages).map(([pageId, recordCount]) => ({ game: game as Game, pageId, version, recordCount })));
-const counts = { detailCount: 2989, imageCount: 6222 };
+import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 
 function contains(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -46,7 +24,7 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
   const stage = await mkdtemp(join(dirname(directory), atlasApplyStagingPrefix));
   let result: AtlasPublication | undefined;
   try {
-    const prepared = await copyAtlasCandidate(donor, join(stage, "candidate"), inventory, counts, signal);
+    const prepared = await copyAtlasCandidate(donor, join(stage, "candidate"), legacyAtlasSourcePages, legacyAtlasCounts, signal);
     result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, prepared.validation.pages, signal, true);
     return result;
   } finally {
