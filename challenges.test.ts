@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { challengeModes, findChallengeMode, findCurrentChallenge, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
+import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
   const mode = findChallengeMode("hsr", "混沌");
@@ -40,6 +40,20 @@ test("异相仲裁拆分骑士与王棋，危局按子模式保留敌人", () =>
     { label: "试炼", count: 2, items: ["试炼一", "试炼二"] },
     { label: "绝境", count: 1, items: ["绝境敌人"] },
   ]);
+});
+
+test("幽境危战识别六种难度的历史数据，活动期间之外仍按记录查询", () => {
+  expect(findChallengeMode("gi", "幽境危战")).toBe(onslaughtMode);
+  expect(findChallengeMode("gi", "危战")).toBe(onslaughtMode);
+  expect(findChallengeMode("gi", "地脉异常")).toBe(onslaughtMode);
+  expect(findChallengeMode("hsr", "幽境")).toBeUndefined();
+  expect(hasChallengeRotation(onslaughtMode)).toBe(false);
+  const list = { begin: "2026-11-03 10:00:00", end: "2026-12-01 03:59:59" };
+  const level = Object.fromEntries([39, 69, 89, 99, 104, 109].map((monster_level, index) => [101401 + index, { monster_level }]));
+  expect(readChallengeFacts(onslaughtMode, { list, detail: { level } })).toMatchObject({
+    window: { begin: list.begin, end: list.end, from: "export" },
+    sections: [{ label: "难度配置", count: 6, items: ["N1", "N2", "N3", "N4", "N5", "N6"] }],
+  });
 });
 
 function row(id: string, liveBegin?: string, liveEnd?: string, variant?: { sort: number; zh: string }) {

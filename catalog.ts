@@ -139,9 +139,9 @@ function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): 
 export type TraditionalLookup = "search" | "name" | "equipment";
 
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
-  const kinds = mode === "equipment" ? ["equipment", "set"] as const
-    : ["character", "equipment", "set", "bangboo", "monster"] as const;
-  return findMatches(catalog, kinds, query, game, mode !== "search");
+  if (mode === "equipment") return findMatches(catalog, ["equipment", "set"], query, game, true);
+  const pages = catalog.pages.filter((page) => page.kind !== "challenge" || page.challengeMode?.id === "leyline");
+  return findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"], query, game, mode === "name");
 }
 
 export function findCharacters(catalog: Catalog, query: string, game?: Game): Character[] {

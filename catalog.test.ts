@@ -293,3 +293,22 @@ test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情"
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("通用图鉴只纳入旧幽境危战分类，保留其他挑战的专属入口", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-leyline-"));
+  try {
+    const page = (id: string, name: string) => ({ version: "7.2.52", recordCount: 1,
+      records: { [id]: { id, name, path: `items/${id}.json` } } });
+    await writeFile(join(root, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: {
+      leyline: page("5269013", "幽境样例"), tower: page("125", "深渊样例"),
+    } } } } } }));
+    const catalog = await createAtlasCatalog(root).read();
+    expect(catalog.pages.map(({ challengeMode }) => challengeMode?.id)).toEqual(["tower", "leyline"]);
+    expect(findTraditionalEntries(catalog, "5269013", "gi")[0]?.entry.name).toBe("幽境样例");
+    expect(findTraditionalEntries(catalog, "幽境样例", "gi", "name")[0]?.entry.id).toBe("5269013");
+    expect(findTraditionalEntries(catalog, "幽境", "gi", "name")).toEqual([]);
+    expect(findTraditionalEntries(catalog, "125", "gi")).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

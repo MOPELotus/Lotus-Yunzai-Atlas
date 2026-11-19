@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation } from "./challenges.ts";
+import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -171,6 +171,30 @@ function monsterLine(entry: AtlasEntry): string {
   return [gameNames[entry.game], "敌人", entry.name, `ID ${entry.id}`].join(" · ");
 }
 
+function challengeTitle(entry: AtlasEntry, mode: ChallengeMode): string {
+  return [gameNames[entry.game], mode.name, entry.name !== entry.id ? entry.name : "", `记录 ID ${entry.id}`].filter(Boolean).join(" · ");
+}
+
+async function challengeDetails(entry: AtlasEntry, mode: ChallengeMode, current: boolean,
+  facts?: Awaited<ReturnType<typeof catalog.challengeFacts>>): Promise<string[]> {
+  const { window, sections } = facts ?? await catalog.challengeFacts(entry, mode);
+  const lines = [challengeTitle(entry, mode), `快照版本 ${entry.version}`];
+  if (current) lines.push("当前轮换 · 中国服（UTC+8）");
+  if (window) {
+    const origin = window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
+    lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
+  } else {
+    lines.push("该条目缺少已知的起止时间。");
+  }
+  if (!sections.length) lines.push("当前快照缺少可验证的关卡详情。");
+  for (const section of sections) {
+    const names = section.items.slice(0, 8);
+    const end = section.items.length > names.length ? "等" : "";
+    lines.push(`${section.label} · 共 ${section.count} 条${names.length ? ` · ${names.join("、")}${end}` : ""}`);
+  }
+  return lines;
+}
+
 async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
   const title = monsterLine(entry);
   const monster = await catalog.monsterDetails(entry);
@@ -192,7 +216,7 @@ async function traditionalQuery(
     const exact = mode === "character" || mode === "shortcut";
     const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
       mode !== "character" || kind === "character");
-    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布或敌人。" : undefined;
+    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
     const first = matches[0]!;
     if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
     if (matches.length === 1 && first.kind === "equipment") {
@@ -211,6 +235,11 @@ async function traditionalQuery(
       const reply = await monsterReply(first.entry);
       return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
     }
+    if (matches.length === 1 && first.kind === "challenge") {
+      const lines = await challengeDetails(first.entry, onslaughtMode, false);
+      if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+      return lines.join("\n");
+    }
     const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
       switch (kind) {
         case "equipment": return equipmentLine(entry);
@@ -218,6 +247,7 @@ async function traditionalQuery(
         case "character": return characterLine(entry, true);
         case "bangboo": return bangbooLine(entry);
         case "monster": return monsterLine(entry);
+        case "challenge": return challengeTitle(entry, onslaughtMode);
       }
     }));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
@@ -345,23 +375,7 @@ async function challengeQuery(argument: string): Promise<string> {
     }
 
     if (!entry) return "未找到挑战记录。";
-    const { window, sections } = facts ?? await catalog.challengeFacts(entry, mode);
-    const title = [gameNames[game], mode.name, entry.name !== entry.id ? entry.name : "", `记录 ID ${entry.id}`]
-      .filter(Boolean).join(" · ");
-    const lines = [title, `快照版本 ${entry.version}`];
-    if (currentRequested) lines.push("当前轮换 · 中国服（UTC+8）");
-    if (window) {
-      const origin = window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
-      lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
-    } else {
-      lines.push("该条目缺少已知的起止时间。");
-    }
-    if (!sections.length) lines.push("当前快照缺少可验证的关卡详情。");
-    for (const section of sections) {
-      const names = section.items.slice(0, 8);
-      const end = section.items.length > names.length ? "等" : "";
-      lines.push(`${section.label} · 共 ${section.count} 条${names.length ? ` · ${names.join("、")}${end}` : ""}`);
-    }
+    const lines = await challengeDetails(entry, mode, currentRequested, facts);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
   } catch {

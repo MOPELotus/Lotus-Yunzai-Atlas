@@ -1,9 +1,12 @@
 import type { Game } from "./catalog.ts";
 import { compareKey, effectText, label, object } from "./source-values.ts";
 
+export const onslaughtMode = { game: "gi", id: "leyline", name: "幽境危战", aliases: ["幽境", "危战", "地脉异常"] } as const;
+
 export const challengeModes = [
   { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] },
   { game: "gi", id: "rolecombat", name: "幻想真境剧诗", aliases: ["幻想真境"] },
+  onslaughtMode,
   { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌"] },
   { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] },
   { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] },
@@ -81,6 +84,8 @@ interface ChallengeSection {
   readonly count: number;
 }
 
+const onslaughtDifficulties = new Map([[39, "N1"], [69, "N2"], [89, "N3"], [99, "N4"], [104, "N5"], [109, "N6"]]);
+
 function namedSection(label: string, values: readonly unknown[]): ChallengeSection | undefined {
   if (!values.length) return;
   return {
@@ -106,6 +111,16 @@ function detailSections(mode: ChallengeMode, value: unknown): ChallengeSection[]
     case "rolecombat": {
       const count = Object.keys(object(detail.difficulty_config)).length;
       if (count) sections.push({ label: "难度配置", items: [], count });
+      break;
+    }
+    case "leyline": {
+      const levels = Object.values(object(detail.level));
+      const items = levels.flatMap((row) => {
+        const level = object(row).monster_level;
+        const name = typeof level === "number" ? onslaughtDifficulties.get(level) : undefined;
+        return name ? [name] : [];
+      });
+      if (levels.length) sections.push({ label: "难度配置", items, count: levels.length });
       break;
     }
     case "maze":
