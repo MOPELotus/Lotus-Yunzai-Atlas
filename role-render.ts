@@ -9,6 +9,7 @@ import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
+import type { TheaterDetails } from "./theater-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -457,6 +458,46 @@ export async function renderOnslaught(onslaught: OnslaughtDetails, options: Role
     }
     if (enemy.mechanics) blocks.push(text(enemy.mechanics));
   }
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "gi", version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderTheater(theater: TheaterDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, difficulty, minLevel, maxAct, elements, groups, acts } = theater;
+  const cards = [...elements, ...groups.flatMap((group) => group.cards), ...acts.flatMap((act) => act.enemies)];
+  const [images, background, texture] = await Promise.all([
+    galleryImages("gi", [artwork, ...cards.map((card) => card.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const period = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const provenance = window?.from === "export" ? "导出时间（轮换待核对）" : window ? "" : "轮换时间待核对";
+  const overview = [version.split(".", 2).join("."), difficulty, period, provenance,
+    minLevel ? `最低角色等级 Lv${minLevel}` : "最低角色等级待核对",
+    maxAct ? `首领最大幕次 ${maxAct}` : "首领最大幕次待核对"].filter(Boolean).join(" · ");
+  const blocks = [text(overview)];
+  const addCards = (items: readonly (typeof cards)[number][]) => {
+    for (const { name, artwork, description } of items) {
+      blocks.push(heading(name, artwork ? images.get(artwork) : undefined));
+      if (description) blocks.push(text(description));
+    }
+  };
+  if (elements.length) {
+    blocks.push(heading("限定元素"));
+    addCards(elements);
+  }
+  for (const group of groups) {
+    blocks.push(heading(group.name));
+    addCards(group.cards);
+  }
+  for (const act of acts) {
+    blocks.push(heading(act.name));
+    if (act.subtitle) blocks.push(text(act.subtitle));
+    if (act.description) blocks.push(text(act.description));
+    addCards(act.enemies);
+  }
+  const icon = artwork ? images.get(artwork) : undefined;
   const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "gi", version, icon, background, options, 152);
   return page!;

@@ -8,6 +8,7 @@ import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
 import { normalizeOnslaught } from "./onslaught-data.ts";
+import { normalizeTheater } from "./theater-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -376,6 +377,31 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
     async onslaughtDetails(entry: AtlasEntry) {
       const item = await readItem(entry, "leyline");
       if (item) return normalizeOnslaught(entry, item.content, item.meta.images);
+    },
+    async theaterDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
+      if (entry.game !== "gi") return;
+      const item = await readItem(entry, "rolecombat");
+      if (!item) return;
+      const root = entryRoots.get(entry);
+      const related = (kind: "character" | "monster") => new Map(
+        (catalog.pages.find((page) => page.game === "gi" && page.kind === kind)?.entries ?? [])
+          .filter((record) => root && entryRoots.get(record) === root)
+          .map((record) => [record.id, record]),
+      );
+      const characters = related("character");
+      const enemies = related("monster");
+      return normalizeTheater(entry, item.content, item.meta.images, {
+        async character(id) {
+          const character = characters.get(id);
+          if (!character) return;
+          const details = await readItem(character, "character");
+          return { name: character.name, artwork: galleryArtwork(details?.meta.images, "gi")("icon", "detail.icon") };
+        },
+        enemy(id, name) {
+          const enemy = enemies.get(id);
+          return enemy && (!name || enemy.name === name) ? monsterDetails(enemy) : Promise.resolve(undefined);
+        },
+      }, current);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, type ChallengeMode } from "./challenges.ts";
+import { challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -393,6 +393,18 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       const image = await onslaughtCard(entry);
       if (image) return image;
     }
+    if (mode.id === theaterMode.id) {
+      const theater = await catalog.theaterDetails(entry, result, currentRequested);
+      if (theater) {
+        try {
+          const { renderTheater } = await import("./role-render.ts");
+          const { png } = await renderTheater(theater, { assetRoot: catalog.assetRoot(entry) });
+          return { type: "image", file: png };
+        } catch {
+          // The verified challenge summary remains usable without rendering.
+        }
+      }
+    }
     const lines = await challengeDetails(entry, mode, currentRequested, facts);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -431,6 +443,9 @@ export default {
     "#成就图鉴": achievementQuery,
     "#成就分类": achievementCategoryQuery,
     "#挑战图鉴": challengeQuery,
+    "#本期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
+    "#本期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
+    "#本期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();
