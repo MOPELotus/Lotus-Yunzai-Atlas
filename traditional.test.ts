@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
-import { parseEquipmentShortcut, parseGluedLookup } from "./traditional.ts";
+import { parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -27,6 +27,22 @@ test("旧显式入口接受紧连名称，预留状态、维护和帮助指令",
     "#更新图鉴", "#Lotus检查图鉴更新", "#全量更新图鉴", "#荷花重置图鉴", "#lotus清空图鉴"]) {
     expect(parseGluedLookup(command)).toBeUndefined();
     expect(parseEquipmentShortcut(command)).toBeUndefined();
+  }
+});
+
+test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", () => {
+  for (const [game, query, commands] of [
+    ["gi", "芙宁娜", ["芙宁娜命座", "芙宁娜命座图鉴", "#芙宁娜命座", "#原神芙宁娜命座图鉴"]],
+    ["hsr", "卡芙卡", ["卡芙卡星魂", "*卡芙卡星魂", "#星穹铁道卡芙卡星魂图鉴"]],
+    ["zzz", "艾莲·乔", ["艾莲·乔影画", "艾莲·乔影画图鉴", "％艾莲·乔影画", "#绝区零艾莲·乔影画图鉴"]],
+  ] as const) {
+    for (const command of commands) expect(parseRoleShortcut(command)).toEqual({ game, query });
+  }
+  expect(parseRoleShortcut("芙宁娜天赋")).toEqual({ query: "芙宁娜" });
+  expect(parseRoleShortcut("#芙宁娜天赋")).toEqual({ game: "gi", query: "芙宁娜" });
+  expect(parseRoleShortcut("%雅影画")).toEqual({ game: "zzz", query: "雅" });
+  for (const command of ["#角色天赋", "角色天赋", "芙宁娜攻略命座", "*卡芙卡影画", "#绝区零艾莲星魂", "芙宁娜图鉴", "雅影画"]) {
+    expect(parseRoleShortcut(command)).toBeUndefined();
   }
 });
 
@@ -67,6 +83,9 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("余响 · 旧曲", "gi", "equipment")).toEqual([["gi", "equipment", "101"]]);
     expect(hits("西风", undefined, "name")).toEqual([]);
     expect(hits("西风剑客", undefined, "name")).toEqual([["gi", "character", "10"]]);
+    expect(hits("西风剑", undefined, "character")).toEqual([]);
+    expect(hits("西风剑", "gi", "character")).toEqual([]);
+    expect(hits("西风剑客", undefined, "character")).toEqual([["gi", "character", "10"]]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

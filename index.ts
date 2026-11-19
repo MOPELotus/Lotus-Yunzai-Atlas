@@ -238,13 +238,12 @@ async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
 }
 
 async function traditionalQuery(
-  query: string, game?: Game, mode: TraditionalLookup | "character" | "shortcut" = "search",
+  query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
   try {
     const result = await catalog.read();
-    const exact = mode === "character" || mode === "shortcut";
-    const matches = findTraditionalEntries(result, query, game, exact ? "name" : mode).filter(({ kind }) =>
-      mode !== "character" || kind === "character");
+    const matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
+    if (mode === "character" && !game && matches.length !== 1) return;
     if (!matches.length && mode === "shortcut" && game === "hsr") {
       const key = query.normalize("NFKC").toLowerCase();
       const entries = result.pages.find(({ challengeMode }) => challengeMode?.id === arbitrationMode.id)?.entries ?? [];

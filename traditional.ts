@@ -9,7 +9,7 @@ const gamePrefix = /^(?:#崩坏星穹铁道|#星穹铁道|#绝区零|#绝区|#�
 const reserved = /攻略|练度统计|(?:命座|星魂|影画|天赋)$/u;
 const operations = /^#?(?:Lotus|lotus|荷花)?(?:图鉴(?:状态|帮助|更新|检查更新|全量更新|重置)|(?:更新|检查更新|全量更新|重置|清空)图鉴)$/u;
 const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
-const roleShortcut = /^[#*%％][^\r\n]+(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
+const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
 
@@ -31,17 +31,17 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   if (game) return { game, query };
 }
 
-export function parseRoleShortcut(message: string): { game: Game; query: string } | undefined {
+export function parseRoleShortcut(message: string): { game?: Game; query: string } | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
-  if (!prefix) return;
-  const result = roleDetail.exec(input.slice(prefix.length));
+  const result = roleDetail.exec(input.slice(prefix?.length ?? 0));
   const query = result?.[1]?.trim();
   const suffix = result?.[2];
-  const game = prefixes[prefix];
-  if (!query || !game || reserved.test(query)) return;
-  if ((suffix === "命座" && game === "gi") || (suffix === "星魂" && game === "hsr") ||
-      (suffix === "影画" && game === "zzz") || suffix === "天赋") return { game, query };
+  if (!query || (!prefix && query.length < 2) || query === "角色" || reserved.test(query)) return;
+  const game = prefix ? prefixes[prefix] : undefined;
+  if (suffix === "天赋") return game ? { game, query } : { query };
+  const suffixGame = suffix === "命座" ? "gi" : suffix === "星魂" ? "hsr" : "zzz";
+  if (!game || game === suffixGame) return { game: suffixGame, query };
 }
 
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };

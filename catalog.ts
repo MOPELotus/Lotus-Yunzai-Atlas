@@ -157,10 +157,11 @@ function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): 
   return findMatches(catalog, [kind], query, game).map(({ entry }) => entry);
 }
 
-export type TraditionalLookup = "search" | "name" | "equipment";
+export type TraditionalLookup = "search" | "name" | "equipment" | "character";
 
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
   if (mode === "equipment") return findMatches(catalog, ["equipment", "set"], query, game, true);
+  if (mode === "character") return findMatches(catalog, ["character"], query, game, true);
   const pages = catalog.pages.filter((page) => page.kind !== "challenge" || page.challengeMode?.id === "leyline");
   return findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"], query, game, mode === "name");
 }
