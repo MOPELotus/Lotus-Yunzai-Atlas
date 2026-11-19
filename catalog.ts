@@ -11,6 +11,7 @@ import { normalizeOnslaught } from "./onslaught-data.ts";
 import { normalizeTheater } from "./theater-data.ts";
 import { normalizeAbyss } from "./abyss-data.ts";
 import { normalizeStarrailChallenge, type StarrailChallengeMode } from "./starrail-challenge-data.ts";
+import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -329,7 +330,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       .map((record) => [record.id, record]));
   }
 
-  function genshinEnemyLookup(entry: AtlasEntry, catalog: Catalog) {
+  function exactEnemyLookup(entry: AtlasEntry, catalog: Catalog) {
     const enemies = relatedRecords(entry, catalog, "monster");
     const pending = new Map<string, Promise<MonsterDetails | undefined>>();
     return (id: string, name: string) => {
@@ -437,18 +438,23 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
           const details = await readItem(character, "character");
           return { name: character.name, artwork: galleryArtwork(details?.meta.images, "gi")("icon", "detail.icon") };
         },
-        enemy: genshinEnemyLookup(entry, catalog),
+        enemy: exactEnemyLookup(entry, catalog),
       }, current);
     },
     async abyssDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
       if (entry.game !== "gi") return;
       const item = await readItem(entry, "tower");
-      if (item) return normalizeAbyss(entry, item.content, item.meta.images, genshinEnemyLookup(entry, catalog), current);
+      if (item) return normalizeAbyss(entry, item.content, item.meta.images, exactEnemyLookup(entry, catalog), current);
     },
     async starrailChallengeDetails(entry: AtlasEntry, catalog: Catalog, mode: StarrailChallengeMode, current = false) {
       if (entry.game !== "hsr") return;
       const item = await readItem(entry, mode.id);
       if (item) return normalizeStarrailChallenge(entry, mode, item.content, item.meta.images, starrailEnemyLookup(entry, catalog), current);
+    },
+    async shiyuDetails(entry: AtlasEntry, catalog: Catalog, period?: ShiyuPeriod) {
+      if (entry.game !== "zzz") return;
+      const item = await readItem(entry, "shiyu");
+      if (item) return normalizeShiyu(entry, item.content, item.meta.images, exactEnemyLookup(entry, catalog), period);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {

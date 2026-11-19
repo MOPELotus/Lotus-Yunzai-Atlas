@@ -7,6 +7,7 @@ export const abyssMode = { game: "gi", id: "tower", name: "深境螺旋", aliase
 export const apocalypseMode = { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] } as const;
 export const fictionMode = { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] } as const;
 export const chaosMode = { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌", "忘却", "忘却之庭"] } as const;
+export const shiyuMode = { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫", "防卫战", "式舆", "式舆防卫"] } as const;
 
 export const challengeModes = [
   abyssMode,
@@ -16,7 +17,7 @@ export const challengeModes = [
   apocalypseMode,
   fictionMode,
   { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: [] },
-  { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫战"] },
+  shiyuMode,
   { game: "zzz", id: "boss", name: "危局强袭战", aliases: ["强袭战"] },
 ] as const satisfies readonly { game: Game; id: string; name: string; aliases: readonly string[] }[];
 
@@ -46,27 +47,54 @@ export function hasChallengeRotation(mode: ChallengeMode): boolean {
   return datedRotations.has(mode.id);
 }
 
-export async function findCurrentChallenge<Entry extends { readonly id: string }, Facts extends {
+interface RotationFacts {
   readonly window: ChallengeWindow | undefined;
   readonly rotationEligible: boolean;
-}>(
+}
+
+function rotationTimes(mode: ChallengeMode, facts: RotationFacts) {
+  const { window, rotationEligible } = facts;
+  const lastSecondIncluded = mode.game !== "hsr";
+  if (!rotationEligible || window?.from !== "live" || (lastSecondIncluded && !window.end.endsWith(":59"))) return;
+  return {
+    begin: Date.parse(window.begin.replace(" ", "T") + "+08:00"),
+    end: Date.parse(window.end.replace(" ", "T") + "+08:00") + (lastSecondIncluded ? 1_000 : 0),
+  };
+}
+
+export async function findCurrentChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
   mode: ChallengeMode, entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ): Promise<{ entry: Entry; facts: Facts } | undefined> {
   if (!hasChallengeRotation(mode) || !Number.isFinite(now)) return;
-  const lastSecondIncluded = mode.game !== "hsr";
   let current: { entry: Entry; facts: Facts } | undefined;
   for (const entry of entries) {
     const facts = await readFacts(entry);
-    const { window } = facts;
-    if (!facts.rotationEligible || window?.from !== "live" || (lastSecondIncluded && !window.end.endsWith(":59"))) continue;
-    const begin = Date.parse(window.begin.replace(" ", "T") + "+08:00");
-    const end = Date.parse(window.end.replace(" ", "T") + "+08:00") + (lastSecondIncluded ? 1_000 : 0);
-    if (!(begin <= now && now < end)) continue;
-    if (hasChallengeScheduleConflict(mode, entry.id, window)) return;
+    const times = rotationTimes(mode, facts);
+    if (!times || !(times.begin <= now && now < times.end)) continue;
+    if (hasChallengeScheduleConflict(mode, entry.id, facts.window)) return;
     if (current) return;
     current = { entry, facts };
   }
   return current;
+}
+
+export async function findNextShiyu<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+): Promise<{ entry: Entry; facts: Facts } | undefined> {
+  const rows = await Promise.all(entries.map(async (entry) => {
+    const facts = await readFacts(entry);
+    return { entry, facts, times: rotationTimes(shiyuMode, facts) };
+  }));
+  const active = rows.filter(({ times }) => times && times.begin <= now && now < times.end);
+  const [current] = active;
+  if (active.length !== 1 || !current?.times) return;
+  const currentEnd = current.times.end;
+  const adjacent = rows.filter(({ times }) => times?.begin === currentEnd);
+  const [next] = adjacent;
+  if (adjacent.length !== 1 || !next?.times) return;
+  const { begin, end } = next.times;
+  if (rows.some((row) => row !== next && row.times && row.times.begin < end && begin < row.times.end)) return;
+  return { entry: next.entry, facts: next.facts };
 }
 
 function validDate(value: unknown): string {

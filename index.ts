@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
-  onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge,
+  findNextShiyu, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -177,12 +177,13 @@ function challengeTitle(entry: AtlasEntry, mode: ChallengeMode): string {
 }
 
 async function challengeDetails(entry: AtlasEntry, mode: ChallengeMode, current: boolean,
-  facts?: Awaited<ReturnType<typeof catalog.challengeFacts>>): Promise<string[]> {
+  facts?: Awaited<ReturnType<typeof catalog.challengeFacts>>, forecast = false): Promise<string[]> {
   const { window, sections } = facts ?? await catalog.challengeFacts(entry, mode);
   const lines = [challengeTitle(entry, mode), `快照版本 ${entry.version}`];
   if (current) lines.push("当前轮换 · 中国服（UTC+8）");
   if (window) {
-    const origin = hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
+    const origin = forecast ? "快照预计（下期预览）"
+      : hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
       : window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
     lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
   } else {
@@ -342,16 +343,17 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   }
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
-  const unverifiedRotation = `${mode.name}本期轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  const forecast = mode.id === shiyuMode.id && target === "下期";
+  const unverifiedRotation = `${mode.name}${forecast ? "下期" : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
-  if (/^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
+  if (!forecast && /^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
 
   try {
     const result = await catalog.read();
     const category = result.pages.find((page) => page.game === game && page.challengeMode?.id === mode.id);
-    if (!category) return currentRequested ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
+    if (!category) return currentRequested || forecast ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
 
     const pageMatch = /^第(\d+)页$/u.exec(target);
     if (!target || pageMatch) {
@@ -370,11 +372,13 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
 
     let entry: AtlasEntry | undefined;
     let facts: Awaited<ReturnType<typeof catalog.challengeFacts>> | undefined;
-    if (currentRequested) {
+    if (currentRequested || forecast) {
       if (result.stale || category.sampled) return unverifiedRotation;
-      const current = await findCurrentChallenge(mode, category.entries, (item) => catalog.challengeFacts(item, mode));
-      if (!current) return unverifiedRotation;
-      ({ entry, facts } = current);
+      const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
+      const matched = forecast ? await findNextShiyu(category.entries, readFacts)
+        : await findCurrentChallenge(mode, category.entries, readFacts);
+      if (!matched) return unverifiedRotation;
+      ({ entry, facts } = matched);
     } else {
       const key = compareKey(target);
       const recordId = target.normalize("NFKC");
@@ -431,7 +435,19 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
-    const lines = await challengeDetails(entry, mode, currentRequested, facts);
+    if (mode.id === shiyuMode.id) {
+      const shiyu = await catalog.shiyuDetails(entry, result, forecast ? "next" : currentRequested ? "current" : undefined);
+      if (shiyu) {
+        try {
+          const { renderShiyu } = await import("./role-render.ts");
+          const { png } = await renderShiyu(shiyu, { assetRoot: catalog.assetRoot(entry) });
+          return { type: "image", file: png };
+        } catch {
+          // The verified challenge summary remains usable without rendering.
+        }
+      }
+    }
+    const lines = await challengeDetails(entry, mode, currentRequested, facts, forecast);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
   } catch {
@@ -456,6 +472,14 @@ export default {
     "#星铁本期混沌回忆图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却图鉴": "#星铁本期混沌图鉴",
     "#星铁本期忘却之庭图鉴": "#星铁本期混沌图鉴",
+    "#绝区零本期防卫图鉴": "#绝区零本期防卫战图鉴",
+    "#绝区零本期式舆图鉴": "#绝区零本期防卫战图鉴",
+    "#绝区零本期式舆防卫图鉴": "#绝区零本期防卫战图鉴",
+    "#绝区零本期式舆防卫战图鉴": "#绝区零本期防卫战图鉴",
+    "#绝区零下期防卫图鉴": "#绝区零下期防卫战图鉴",
+    "#绝区零下期式舆图鉴": "#绝区零下期防卫战图鉴",
+    "#绝区零下期式舆防卫图鉴": "#绝区零下期防卫战图鉴",
+    "#绝区零下期式舆防卫战图鉴": "#绝区零下期防卫战图鉴",
   },
   commands: {
     async "#图鉴"(argument: string) {
@@ -482,6 +506,8 @@ export default {
     "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
+    "#绝区零本期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 本期"),
+    "#绝区零下期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 下期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

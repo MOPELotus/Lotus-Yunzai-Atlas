@@ -12,6 +12,7 @@ import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
 import type { AbyssDetails } from "./abyss-data.ts";
 import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
+import type { ShiyuDetails } from "./shiyu-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -580,6 +581,49 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
   const icon = artwork ? images.get(artwork) : undefined;
   const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "hsr", version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderShiyu(shiyu: ShiyuDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, forecast, effects, defenses } = shiyu;
+  const lines = defenses.flatMap((defense) => [defense, ...defense.challenges]);
+  const enemies = lines.flatMap((line) => line.rooms.flatMap((room) => room.enemies));
+  const [images, background, texture] = await Promise.all([
+    galleryImages("zzz", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const period = forecast ? `快照预计 · ${range}`
+    : window?.from === "export" ? `导出时间 ${range}（轮换待核对）`
+      : range || "起止时间待核对";
+  const blocks = [text(period)];
+  if (effects.length) {
+    blocks.push(heading("环境与全局效果"));
+    for (const effect of effects) blocks.push(heading(effect.name), text(effect.description));
+  }
+  const hpFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+  for (const line of lines) {
+    const effects = line.rooms.length && line.effects.length ? line.effects.join(" / ") : "";
+    blocks.push(heading(line.name), text([line.level ? `Lv${line.level}` : "", line.goals, effects].filter(Boolean).join(" · ")));
+    if (!line.rooms.length && !line.challenges.length) blocks.push(text("阵容待核对"));
+    for (const room of line.rooms) {
+      if (room.name) blocks.push(heading(room.name));
+      const facts = [room.level ? `Lv${room.level}` : "",
+        room.weaknesses.length ? `弱点 ${room.weaknesses.join(" / ")}` : "",
+        room.resistances.length ? `抗性 ${room.resistances.join(" / ")}` : ""].filter(Boolean);
+      if (facts.length) blocks.push(text(facts.join(" · ")));
+      if (!room.enemies.length) blocks.push(text("阵容待核对"));
+      for (const enemy of room.enemies) {
+        blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
+        if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
+        if (enemy.description) blocks.push(text(enemy.description));
+      }
+    }
+  }
+  const icon = artwork ? images.get(artwork) : undefined;
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "zzz", version, icon, background, options, 152);
   return page!;
 }
 
