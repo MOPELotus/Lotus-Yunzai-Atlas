@@ -8,6 +8,7 @@ import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
+import type { OnslaughtDetails } from "./onslaught-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -431,6 +432,33 @@ export async function renderMonster(monster: MonsterDetails, options: RoleRender
   // The original generic item card shows its overview and repeats it below the introduction heading.
   const panels = [[text(description), heading("简介"), text(description)]];
   const [page] = await renderAtlasPages([{ section: "敌人", panels }], wrap(name, 620, 33), game, version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderOnslaught(onslaught: OnslaughtDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, rules, enemies } = onslaught;
+  const [images, background, texture] = await Promise.all([
+    galleryImages("gi", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const icon = artwork ? images.get(artwork) : undefined;
+  const period = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const title = [`${version.split(".", 2).join(".")} 幽境危战 N5/6`.trim(), period,
+    window?.from === "export" ? "导出时间（轮换待核对）" : ""].filter(Boolean).join(" · ");
+  const blocks = [text(title), ...rules.flatMap(({ difficulty, description }) => [heading(difficulty), text(description)])];
+  for (const enemy of enemies) {
+    const [first] = enemy.variants;
+    if (!first) continue;
+    blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined), text(`Lv${first.level}`));
+    blocks.push(text(enemy.variants.map(({ difficulty, level }) => `${difficulty}：Lv${level}`).join(" · ")));
+    for (const { difficulty, description } of enemy.variants) {
+      if (description) blocks.push(heading(`${difficulty}说明`), text(description));
+    }
+    if (enemy.mechanics) blocks.push(text(enemy.mechanics));
+  }
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "gi", version, icon, background, options, 152);
   return page!;
 }
 

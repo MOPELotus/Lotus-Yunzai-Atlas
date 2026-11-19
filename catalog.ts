@@ -7,6 +7,7 @@ import { readAchievementCategories, type AchievementCategory } from "./achieveme
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
+import { normalizeOnslaught } from "./onslaught-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -371,6 +372,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
     async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
       const content = await readContent(entry, mode.id);
       return readChallengeFacts(mode, content);
+    },
+    async onslaughtDetails(entry: AtlasEntry) {
+      const item = await readItem(entry, "leyline");
+      if (item) return normalizeOnslaught(entry, item.content, item.meta.images);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {

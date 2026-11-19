@@ -195,6 +195,18 @@ async function challengeDetails(entry: AtlasEntry, mode: ChallengeMode, current:
   return lines;
 }
 
+async function onslaughtCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
+  const onslaught = await catalog.onslaughtDetails(entry);
+  if (!onslaught) return;
+  try {
+    const { renderOnslaught } = await import("./role-render.ts");
+    const { png } = await renderOnslaught(onslaught, { assetRoot: catalog.assetRoot(entry) });
+    return { type: "image", file: png };
+  } catch {
+    return undefined;
+  }
+}
+
 async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
   const title = monsterLine(entry);
   const monster = await catalog.monsterDetails(entry);
@@ -236,6 +248,8 @@ async function traditionalQuery(
       return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
     }
     if (matches.length === 1 && first.kind === "challenge") {
+      const image = await onslaughtCard(first.entry);
+      if (image) return image;
       const lines = await challengeDetails(first.entry, onslaughtMode, false);
       if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
       return lines.join("\n");
@@ -315,7 +329,7 @@ async function achievementCategoryQuery(argument: string): Promise<string> {
   }
 }
 
-async function challengeQuery(argument: string): Promise<string> {
+async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const { game, query } = searchTerms(argument);
   if (!game) return "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]";
   const [modeName = "", ...terms] = query.split(/\s+/u);
@@ -375,6 +389,10 @@ async function challengeQuery(argument: string): Promise<string> {
     }
 
     if (!entry) return "未找到挑战记录。";
+    if (mode.id === onslaughtMode.id) {
+      const image = await onslaughtCard(entry);
+      if (image) return image;
+    }
     const lines = await challengeDetails(entry, mode, currentRequested, facts);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
