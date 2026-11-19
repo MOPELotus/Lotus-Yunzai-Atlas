@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge,
+import { abyssMode, apocalypseMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findChallengeMode, findCurrentChallenge,
   findNextShiyu, hasChallengeRotation, hasChallengeScheduleConflict, onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
@@ -447,6 +447,18 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
+    if (mode.id === deadlyAssaultMode.id) {
+      const deadlyAssault = await catalog.deadlyAssaultDetails(entry, result, currentRequested);
+      if (deadlyAssault) {
+        try {
+          const { renderDeadlyAssault } = await import("./role-render.ts");
+          const { png } = await renderDeadlyAssault(deadlyAssault, { assetRoot: catalog.assetRoot(entry) });
+          return { type: "image", file: png };
+        } catch {
+          // The verified challenge summary remains usable without rendering.
+        }
+      }
+    }
     const lines = await challengeDetails(entry, mode, currentRequested, facts, forecast);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -480,6 +492,9 @@ export default {
     "#绝区零下期式舆图鉴": "#绝区零下期防卫战图鉴",
     "#绝区零下期式舆防卫图鉴": "#绝区零下期防卫战图鉴",
     "#绝区零下期式舆防卫战图鉴": "#绝区零下期防卫战图鉴",
+    "#绝区零本期危局强袭战图鉴": "#绝区零本期危局图鉴",
+    "#绝区零本期强袭图鉴": "#绝区零本期危局图鉴",
+    "#绝区零本期强袭战图鉴": "#绝区零本期危局图鉴",
   },
   commands: {
     async "#图鉴"(argument: string) {
@@ -508,6 +523,7 @@ export default {
     "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
     "#绝区零本期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 本期"),
     "#绝区零下期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 下期"),
+    "#绝区零本期危局图鉴": () => challengeQuery("绝区零 危局强袭战 本期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

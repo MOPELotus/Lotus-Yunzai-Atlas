@@ -13,6 +13,8 @@ import type { TheaterDetails } from "./theater-data.ts";
 import type { AbyssDetails } from "./abyss-data.ts";
 import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
 import type { ShiyuDetails } from "./shiyu-data.ts";
+import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
+import type { ZzzChallengeRoom } from "./zzz-challenge-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -602,23 +604,71 @@ export async function renderShiyu(shiyu: ShiyuDetails, options: RoleRenderOption
     blocks.push(heading("环境与全局效果"));
     for (const effect of effects) blocks.push(heading(effect.name), text(effect.description));
   }
-  const hpFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
   for (const line of lines) {
     const effects = line.rooms.length && line.effects.length ? line.effects.join(" / ") : "";
     blocks.push(heading(line.name), text([line.level ? `Lv${line.level}` : "", line.goals, effects].filter(Boolean).join(" · ")));
     if (!line.rooms.length && !line.challenges.length) blocks.push(text("阵容待核对"));
-    for (const room of line.rooms) {
-      if (room.name) blocks.push(heading(room.name));
-      const facts = [room.level ? `Lv${room.level}` : "",
-        room.weaknesses.length ? `弱点 ${room.weaknesses.join(" / ")}` : "",
-        room.resistances.length ? `抗性 ${room.resistances.join(" / ")}` : ""].filter(Boolean);
-      if (facts.length) blocks.push(text(facts.join(" · ")));
-      if (!room.enemies.length) blocks.push(text("阵容待核对"));
-      for (const enemy of room.enemies) {
-        blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
-        if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
-        if (enemy.description) blocks.push(text(enemy.description));
+    blocks.push(...zzzRoomBlocks(line.rooms, { heading, text }, images));
+  }
+  const icon = artwork ? images.get(artwork) : undefined;
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "zzz", version, icon, background, options, 152);
+  return page!;
+}
+
+function zzzRoomBlocks(rooms: readonly ZzzChallengeRoom[],
+  { heading, text }: Pick<ReturnType<typeof makeLayout>, "heading" | "text">, images: ReadonlyMap<string, Image>): Block[] {
+  const blocks: Block[] = [];
+  const hpFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+  for (const room of rooms) {
+    if (room.name) blocks.push(heading(room.name));
+    const facts = [room.level ? `Lv${room.level}` : "",
+      room.weaknesses.length ? `弱点 ${room.weaknesses.join(" / ")}` : "",
+      room.resistances.length ? `抗性 ${room.resistances.join(" / ")}` : ""].filter(Boolean);
+    if (facts.length) blocks.push(text(facts.join(" · ")));
+    if (!room.enemies.length) blocks.push(text("阵容待核对"));
+    for (const enemy of room.enemies) {
+      blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
+      if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
+      if (enemy.description) blocks.push(text(enemy.description));
+    }
+  }
+  return blocks;
+}
+
+export async function renderDeadlyAssault(assault: DeadlyAssaultDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, commonOptional, divisions } = assault;
+  const encounters = divisions.flatMap((division) => division.encounters);
+  const enemies = encounters.flatMap((encounter) => encounter.rooms.flatMap((room) => room.enemies));
+  const [images, background, texture] = await Promise.all([
+    galleryImages("zzz", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
+  const blocks = [text(period)];
+  const addOptional = (effects: typeof commonOptional) => {
+    if (!effects.length) return;
+    blocks.push(heading("可选增益"));
+    for (const { name, description } of effects) {
+      if (name) blocks.push(heading(name));
+      blocks.push(text(description));
+    }
+  };
+  addOptional(commonOptional);
+  for (const division of divisions) {
+    blocks.push(heading(division.name));
+    for (const encounter of division.encounters) {
+      const meta = [encounter.level ? `Lv${encounter.level}` : "", encounter.goals].filter(Boolean).join(" · ");
+      blocks.push(heading(encounter.name), text(meta));
+      for (const { name, description } of encounter.mechanics) {
+        if (name) blocks.push(heading(name));
+        blocks.push(text(description));
       }
+      if (!commonOptional.length) addOptional(encounter.optional);
+      if (!encounter.rooms.length) blocks.push(text("阵容待核对"));
+      blocks.push(...zzzRoomBlocks(encounter.rooms, { heading, text }, images));
     }
   }
   const icon = artwork ? images.get(artwork) : undefined;

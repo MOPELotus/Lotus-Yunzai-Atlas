@@ -12,6 +12,7 @@ import { normalizeTheater } from "./theater-data.ts";
 import { normalizeAbyss } from "./abyss-data.ts";
 import { normalizeStarrailChallenge, type StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
+import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -455,6 +456,11 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       if (entry.game !== "zzz") return;
       const item = await readItem(entry, "shiyu");
       if (item) return normalizeShiyu(entry, item.content, item.meta.images, exactEnemyLookup(entry, catalog), period);
+    },
+    async deadlyAssaultDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
+      if (entry.game !== "zzz") return;
+      const item = await readItem(entry, "boss");
+      if (item) return normalizeDeadlyAssault(entry, item.content, item.meta.images, exactEnemyLookup(entry, catalog), current);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {
