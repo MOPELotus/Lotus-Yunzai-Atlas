@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAtlasRuntimeCatalog, findBangboos } from "./catalog.ts";
+import { applyAtlasCandidate } from "./apply-candidate.ts";
+import { createAtlasRuntimeCatalog, findBangboos, findEquipment } from "./catalog.ts";
 import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
 import { refreshAtlasSource } from "./refresh-source.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
@@ -50,6 +51,31 @@ test("邦布自动刷新按计划抓取较新构建并发布完整候选", () =>
   expect(catalog.assetRoot(updated!)).toBe(join(root, "snapshots/1/data"));
   expect(catalog.assetRoot(old!)).toBe(join(root, "data"));
   expect(await readdir(workspace)).toEqual(["atlas"]);
+}));
+
+test("音擎刷新只请求和发布选中的分类并保留邦布", () => fixture(async (workspace, root) => {
+  const request = (version: string) => async (url: string) => {
+    const name = `样例音擎 ${version}`;
+    const asset = "Weapon_A_Refresh";
+    if (url.endsWith(`/${version}/weapon.json`)) {
+      return Response.json({ "13001": { zh: name, icon: asset, rank: 3, type: 4 } });
+    }
+    if (url.endsWith(`/${version}/zh/weapon/13001.json`)) return Response.json({
+      id: 13001, name, code_name: asset, rarity: 3, weapon_type: { 4: { name: "样例专精" } },
+      icon: `Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker/${asset}.png`,
+    });
+    if (url.endsWith(`/assets/zzz/${asset}.webp`)) return new Response(new Uint8Array(webp));
+    throw new Error("刷新请求超出了音擎分类。");
+  };
+  const donor = join(workspace, "weapon");
+  const selected = [{ game: "zzz", pageId: "weapon", version: original }] as const;
+  await acquireAtlasSource(donor, selected, undefined, request(original));
+  expect((await applyAtlasCandidate(root, donor, selected)).status).toBe("published");
+  const result = await refreshAtlasSource(root, { pageId: "weapon", manifest: manifest(upgrade), request: request(upgrade) });
+  expect(result).toMatchObject({ status: "published", version: 2 });
+  const index = await createAtlasRuntimeCatalog(root).read();
+  expect(findEquipment(index, "13001", "zzz")[0]?.version).toBe(upgrade);
+  expect(findBangboos(index, "53001")[0]?.version).toBe(original);
 }));
 
 test("同版本、不明版本及缺失旧基线都不请求邦布详情", () => fixture(async (workspace, root) => {
