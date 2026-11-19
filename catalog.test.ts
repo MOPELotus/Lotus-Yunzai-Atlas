@@ -262,7 +262,12 @@ test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情"
       zzz: game({ monster: page(record("62", "另一只敌人", "zzz")) }),
     } }));
     const detail = (file: string, gameId: string, recordId: string, name: string, version = "1") => writeFile(join(root, "items", `${file}.json`),
-      JSON.stringify({ meta: { gameId, recordId, pageId: "monster", version },
+      JSON.stringify({ meta: { gameId, recordId, pageId: "monster", version, images: [
+        { fieldPath: "icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/../invalid.webp" },
+        { fieldPath: "detail.icon", status: "downloaded", placeholder: true, localPath: "gallery/gi/placeholder.webp" },
+        { fieldPath: "detail.monster_info.51.icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/original.webp" },
+        { fieldPath: "icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/later.webp" },
+      ] },
         content: { list: { desc: "English list fallback" }, detail: { name, desc: "简体中文<color=#AABBCC>敌人</color>。\\n后续。" } } }));
     await detail("gi", "gi", "51", "样例敌人");
     await detail("hsr", "hsr", "62", "样例敌人", "2");
@@ -276,7 +281,13 @@ test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情"
     expect(findTraditionalEntries(snapshot, "样例敌人", "gi", "name").map(({ kind }) => kind)).toEqual(["monster"]);
     expect(findTraditionalEntries(snapshot, "样例敌人", "gi", "equipment")).toEqual([]);
     expect(findTraditionalEntries(snapshot, "样例", "gi", "name")).toEqual([]);
-    expect(await catalog.monsterDescription(findMonsters(snapshot, "51", "gi")[0]!)).toBe("简体中文敌人。\n后续。");
+    const original = findMonsters(snapshot, "51", "gi")[0]!;
+    expect(await catalog.monsterDetails(original)).toEqual({ game: "gi", name: "样例敌人", version: "1",
+      description: "简体中文敌人。\n后续。", artwork: "gallery/gi/original.webp" });
+    expect(await catalog.monsterDescription(original)).toBe("简体中文敌人。\n后续。");
+    const noIcon = await catalog.monsterDetails(findMonsters(snapshot, "62", "zzz")[0]!);
+    expect(noIcon?.description).toBe("简体中文敌人。\n后续。");
+    expect(noIcon?.artwork).toBeUndefined();
     for (const id of ["62", "63"]) expect(await catalog.monsterDescription(findMonsters(snapshot, id, "hsr")[0]!)).toBe("");
   } finally {
     await rm(root, { recursive: true, force: true });

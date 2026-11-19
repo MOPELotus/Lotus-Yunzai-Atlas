@@ -2,7 +2,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
-import { compareKey, effectText, label, object } from "./source-values.ts";
+import { compareKey, effectText, galleryArtwork, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
@@ -52,6 +52,14 @@ export interface AtlasEntry {
 }
 
 export type Character = AtlasEntry;
+
+export interface MonsterDetails {
+  readonly game: Game;
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly artwork?: string;
+}
 
 interface AtlasPage {
   readonly game: Game;
@@ -300,6 +308,16 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
     return (await readItem(entry, pageId))?.content ?? {};
   }
 
+  async function monsterDetails(entry: AtlasEntry): Promise<MonsterDetails | undefined> {
+    const item = await readItem(entry, "monster");
+    const detail = object(item?.content.detail);
+    if (!item || label(detail.name) !== entry.name) return;
+    const description = effectText(detail.desc);
+    if (!description) return;
+    return { game: entry.game, name: entry.name, version: entry.version, description,
+      artwork: galleryArtwork(item.meta.images, entry.game)() };
+  }
+
   return {
     assetRoot(entry: AtlasEntry): string {
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
@@ -354,9 +372,9 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       const content = await readContent(entry, mode.id);
       return readChallengeFacts(mode, content);
     },
+    monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {
-      const detail = object((await readContent(entry, "monster")).detail);
-      return label(detail.name) === entry.name ? effectText(detail.desc) : "";
+      return (await monsterDetails(entry))?.description ?? "";
     },
     async bangbooDetails(entry: AtlasEntry) {
       if (entry.game !== "zzz") return;

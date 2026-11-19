@@ -3,7 +3,7 @@ import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
-import { gameNames, type Game } from "./catalog.ts";
+import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
 import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
@@ -417,6 +417,20 @@ export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOpt
   const panels = [[...overview, ...(cards.shift() ?? [])], ...cards].filter((panel) => panel.length);
   if (weapon.story) panels.push([heading("武器故事"), text(weapon.story)]);
   const [page] = await renderAtlasPages([{ section, panels }], title, game, weapon.version, icon, background, options);
+  return page!;
+}
+
+export async function renderMonster(monster: MonsterDetails, options: RoleRenderOptions = {}) {
+  const { game, artwork, description, name, version } = monster;
+  const [images, background, texture] = await Promise.all([
+    galleryImages(game, [artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, heading, text } = makeLayout(texture);
+  const icon = artwork ? images.get(artwork) : undefined;
+  // The original generic item card shows its overview and repeats it below the introduction heading.
+  const panels = [[text(description), heading("简介"), text(description)]];
+  const [page] = await renderAtlasPages([{ section: "敌人", panels }], wrap(name, 620, 33), game, version, icon, background, options, 152);
   return page!;
 }
 

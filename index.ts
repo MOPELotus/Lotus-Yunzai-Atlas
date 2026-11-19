@@ -167,6 +167,23 @@ async function bangbooBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
   }
 }
 
+function monsterLine(entry: AtlasEntry): string {
+  return [gameNames[entry.game], "敌人", entry.name, `ID ${entry.id}`].join(" · ");
+}
+
+async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
+  const title = monsterLine(entry);
+  const monster = await catalog.monsterDetails(entry);
+  if (!monster) return `${title}\n当前快照缺少已核对的敌人简介。`;
+  try {
+    const { renderMonster } = await import("./role-render.ts");
+    const { png } = await renderMonster(monster, { assetRoot: catalog.assetRoot(entry) });
+    return { type: "image", file: png };
+  } catch {
+    return `${title}\n${monster.description}`;
+  }
+}
+
 async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "character" | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
@@ -190,18 +207,17 @@ async function traditionalQuery(
       const book = await bangbooBook(first.entry);
       if (book) return book;
     }
-    const lines = await Promise.all(matches.slice(0, 8).map(async ({ kind, entry }) => {
+    if (matches.length === 1 && first.kind === "monster") {
+      const reply = await monsterReply(first.entry);
+      return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
+    }
+    const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
       switch (kind) {
         case "equipment": return equipmentLine(entry);
         case "set": return setLines(entry, matches.length === 1);
         case "character": return characterLine(entry, true);
         case "bangboo": return bangbooLine(entry);
-        case "monster": {
-          const title = [gameNames[entry.game], "敌人", entry.name, `ID ${entry.id}`].join(" · ");
-          if (matches.length > 1) return title;
-          const description = await catalog.monsterDescription(entry);
-          return `${title}\n${description || "当前快照缺少已核对的敌人简介。"}`;
-        }
+        case "monster": return monsterLine(entry);
       }
     }));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");

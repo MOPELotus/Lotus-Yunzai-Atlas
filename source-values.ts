@@ -24,7 +24,9 @@ export function galleryArtwork(images: unknown, game: string) {
         path.split("/").every((part) => /^[\p{L}\p{N}][\p{L}\p{N}_. -]*$/u.test(part)) &&
         /\.(?:webp|png|jpe?g)$/iu.test(path)) fields.set(field, path);
   }
-  return (...keys: string[]) => keys.map((key) => fields.get(key)).find((path) => path !== undefined);
+  // A generic Atlas card uses the first downloaded image in source order.
+  return (...keys: string[]) => keys.length ? keys.map((key) => fields.get(key)).find((path) => path !== undefined)
+    : fields.values().next().value;
 }
 
 export function effectText(
