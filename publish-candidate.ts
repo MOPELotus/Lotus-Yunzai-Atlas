@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { lstat, readFile, realpath, rename, symlink, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, mkdir, readdir, readFile, realpath, rename, rmdir, stat, symlink, unlink } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
 import { atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
@@ -8,12 +8,19 @@ import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
 type Version = number | null;
+export const atlasApplyStagingPrefix = ".atlas-apply-";
 
 export type AtlasPublication =
   | { readonly status: "published"; readonly version: number; readonly directory: string }
   | { readonly status: "stale"; readonly current: Version }
   | { readonly status: "invalid"; readonly issues: readonly string[] }
   | { readonly status: "busy" };
+
+interface PreparedPublication {
+  readonly data: string;
+  readonly version: number;
+  readonly promote?: () => Promise<void>;
+}
 
 function errorCode(error: unknown) {
   return (error as NodeJS.ErrnoException | undefined)?.code;
@@ -87,20 +94,19 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
  * Readers use root/current as their data directory. Old versions stay available to pinned readers.
  * The caller provides the full page list from its assembled candidate and stops writing before publication.
  */
-export async function publishAtlasCandidate(root: string, expected: Version, version: number,
-  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
+async function publish(root: string, expected: Version, expectedPages: AtlasCandidateValidation["pages"],
+  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal): Promise<AtlasPublication> {
   signal?.throwIfAborted();
-  if (!isAtlasSnapshotVersion(version) || (expected !== null && !isAtlasSnapshotVersion(expected))) {
-    throw new Error("图鉴发布版本须为正整数。");
-  }
+  if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
   const directory = await realpath(root);
   const database = await lockPublication(join(directory, ".publication.sqlite"), signal);
   if (!database) return { status: "busy" };
   try {
     const current = await readAtlasSnapshotPointer(join(directory, "current"));
-    if (current !== expected || (current !== null && version <= current)) return { status: "stale", current };
+    if (current !== expected) return { status: "stale", current };
 
-    const candidate = join(directory, atlasSnapshotTarget(version));
+    const { data: candidate, version, promote } = await prepare(directory);
+    if (current !== null && version <= current) return { status: "stale", current };
     const candidateRoot = await realpath(candidate).catch(() => undefined);
     if (candidateRoot !== candidate || !(await lstat(candidate).catch(() => undefined))?.isDirectory()) {
       return { status: "invalid", issues: ["发布候选 data 须为发布根内的实体目录。"] };
@@ -120,9 +126,56 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
       return { status: "invalid", issues: [issue] };
     }
 
+    signal?.throwIfAborted();
+    await promote?.();
     await commitPointer(directory, version, signal);
-    return { status: "published", version, directory: candidate };
+    return { status: "published", version, directory: join(directory, atlasSnapshotTarget(version)) };
   } finally {
     database.close();
   }
+}
+
+export async function publishAtlasCandidate(root: string, expected: Version, version: number,
+  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
+  if (!isAtlasSnapshotVersion(version)) throw new Error("图鉴发布版本须为正整数。");
+  return publish(root, expected, expectedPages, async (directory) => ({
+    data: join(directory, atlasSnapshotTarget(version)), version,
+  }), signal);
+}
+
+/** Move an assembled, caller-owned private candidate into the version store under the publication lock. */
+export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
+  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
+  return publish(root, expected, expectedPages, async (directory) => {
+    const stagedRoot = dirname(prepared);
+    if (dirname(stagedRoot) !== dirname(directory) || !basename(stagedRoot).startsWith(atlasApplyStagingPrefix) ||
+        basename(prepared) !== "candidate") throw new Error("图鉴发布只接收相邻私有暂存中的合成候选。");
+    const snapshots = join(directory, "snapshots");
+    await mkdir(snapshots, { mode: 0o700 }).catch((error) => {
+      if (errorCode(error) !== "EEXIST") throw error;
+    });
+    if (await realpath(snapshots) !== snapshots || !(await lstat(snapshots)).isDirectory()) {
+      throw new Error("图鉴版本库须为发布根内的实体目录。");
+    }
+    if ((await stat(prepared)).dev !== (await stat(snapshots)).dev) {
+      throw new Error("图鉴候选暂存与版本库须位于同一文件系统。");
+    }
+    let highest = expected ?? 0;
+    for (const name of await readdir(snapshots)) {
+      const version = Number(name);
+      if (isAtlasSnapshotVersion(version) && String(version) === name) highest = Math.max(highest, version);
+    }
+    const version = highest + 1;
+    if (!isAtlasSnapshotVersion(version)) throw new Error("图鉴发布版本已用尽。");
+    const destination = dirname(join(directory, atlasSnapshotTarget(version)));
+    return {
+      data: join(prepared, "data"), version,
+      promote: async () => {
+        // Reserve the name without replacing any pre-existing snapshot, even an empty directory.
+        await mkdir(destination, { mode: 0o700 });
+        await rename(prepared, destination);
+        await rmdir(stagedRoot);
+      },
+    };
+  }, signal);
 }
