@@ -7,6 +7,8 @@ import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Contex
 import { gameNames, type Game } from "./catalog.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
+import type { SetDetails, SetPart } from "./set-data.ts";
+import { label, object } from "./source-values.ts";
 
 export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
@@ -60,7 +62,7 @@ function themeImage(asset: ThemeAsset): Promise<Image | undefined> {
 }
 
 type Block = { readonly height: number; paint(ctx: Context, top: number): void };
-type Page = { section: string; panels: Block[][] };
+type Page = { section: string; panels: Block[][]; trailingGap?: false };
 
 function rounded(ctx: Context, x: number, y: number, w: number, h: number, radius: number, fill: string) {
   ctx.fillStyle = fill;
@@ -168,9 +170,9 @@ function makeLayout(texture?: Image) {
     } };
   }
 
-  function material(name: string, count: number, artwork?: Image): Block {
+  function material(name: string, count: number | undefined, artwork?: Image): Block {
     const lines = wrap(name, inner - 180, 20);
-    const quantity = wrap(`× ${count}`, 102, 21);
+    const quantity = count === undefined ? [] : wrap(`× ${count}`, 102, 21);
     const height = Math.max(86, lines.length * 28 + 26, quantity.length * 28 + 26);
     return { height, paint(ctx, top) {
       if (artwork) contain(ctx, artwork, 40, top + 11, 60, 60);
@@ -235,6 +237,19 @@ function makeLayout(texture?: Image) {
   return { wrap, text, heading, statRow, material, levelBlocks };
 }
 
+async function localAsset(path: string, maxBytes: number): Promise<Buffer | undefined> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > maxBytes) return;
+    const bytes = Buffer.alloc(stat.size);
+    const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+    if (bytesRead === bytes.length) return bytes;
+  } finally {
+    await file.close();
+  }
+}
+
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
   const images = new Map<string, Image>();
   if (!assetRoot) return images;
@@ -248,18 +263,10 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
       try {
         const resolved = await realpath(join(base, path));
         if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
-        const file = await open(resolved, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-        try {
-          const stat = await file.stat();
-          if (!stat.isFile() || stat.size > maxImageBytes) continue;
-          const bytes = Buffer.alloc(stat.size);
-          const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
-          if (bytesRead < bytes.length) continue;
-          images.set(path, await loadImage(bytes));
-          break;
-        } finally {
-          await file.close();
-        }
+        const bytes = await localAsset(resolved, maxImageBytes);
+        if (!bytes) continue;
+        images.set(path, await loadImage(bytes));
+        break;
       } catch {
         // A missing or unreadable illustration still leaves the complete text available.
       }
@@ -268,9 +275,38 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
   return images;
 }
 
-function measurePage(head: number, panels: readonly Block[][]) {
+async function starRailPartImages(parts: readonly SetPart[]) {
+  const images = new Map<string, Image>();
+  if (!parts.length) return images;
+  try {
+    const root = await realpath(themeDirectory);
+    const directory = join(root, "relic-parts");
+    if (await realpath(directory) !== directory) return images;
+    const index = await localAsset(join(directory, "index.json"), 1_048_576);
+    if (!index) return images;
+    const references = object(JSON.parse(index.toString("utf8")));
+    for (const part of parts) {
+      if (!/^[1-9]\d*$/u.test(part.id)) continue;
+      const reference = object(references[`sr-${part.id}`]);
+      const file = label(reference.file);
+      if (label(reference.name) !== part.name || !/^sr-[1-9]\d*-[1-6]\.webp$/u.test(file)) continue;
+      try {
+        const bytes = await localAsset(join(directory, file), maxImageBytes);
+        if (bytes) images.set(part.id, await loadImage(bytes));
+      } catch {
+        // The named snapshot part remains available when its original image is absent.
+      }
+    }
+  } catch {
+    // The operator may supply the original background without the optional part archive.
+  }
+  return images;
+}
+
+function measurePage(head: number, panels: readonly Block[][], trailingGap: boolean) {
   const heights = panels.map((blocks) => blocks.reduce((sum, { height }) => sum + height, 0));
-  return { heights, height: Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight + 16, 0) + footer) };
+  const gap = Math.max(0, heights.length - (trailingGap ? 0 : 1)) * 16;
+  return { heights, height: Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight, 0) + gap + footer) };
 }
 
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
@@ -347,6 +383,23 @@ export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOpt
   return page!;
 }
 
+export async function renderSet(set: SetDetails, options: RoleRenderOptions = {}) {
+  const [images, background, texture] = await Promise.all([
+    galleryImages(set.game, [set.artwork, ...set.parts.map(({ artwork }) => artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const themed = set.game === "hsr" ? await starRailPartImages(set.parts.filter(({ artwork }) => !artwork || !images.has(artwork))) : undefined;
+  const { wrap, heading, material, text } = makeLayout(texture);
+  const icon = set.artwork ? images.get(set.artwork) : undefined;
+  const title = wrap(set.name, icon ? 620 : contentWidth, 33);
+  const pages: Page[] = [];
+  if (set.effects.length) pages.push({ section: "套装效果", panels: set.effects.map((effect) => [heading(effect.title), text(effect.text)]) });
+  if (set.parts.length) pages.push({ section: "套装部件", trailingGap: false, panels: [set.parts.map((part) =>
+    material(part.name, undefined, (part.artwork ? images.get(part.artwork) : undefined) ?? themed?.get(part.id)))] });
+  if (set.story) pages.push({ section: "套装故事", panels: [[text(set.story)]], trailingGap: false });
+  return renderAtlasPages(pages, title, set.game, set.version, icon, background, options);
+}
+
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
   background: Image | undefined, { mode = "auto", scale = 2 }: RoleRenderOptions) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
@@ -354,8 +407,8 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
   const titleX = icon ? 152 : margin + 20;
   const head = Math.max(header, 118 + title.length * 39);
   const output = [];
-  for (const [index, { section, panels }] of pages.entries()) {
-    const { heights, height } = measurePage(head, panels);
+  for (const [index, { section, panels, trailingGap }] of pages.entries()) {
+    const { heights, height } = measurePage(head, panels, trailingGap !== false);
     if (height > maxDimension) throw new RangeError(`图鉴「${section}」超出可渲染高度。`);
     const zoom = Math.min(scale, maxDimension / height);
     const { png, engine } = await renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {

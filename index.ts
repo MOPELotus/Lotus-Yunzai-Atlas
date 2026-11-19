@@ -70,7 +70,7 @@ async function equipmentQuery(argument: string, command: string, fixedGame?: Gam
   }
 }
 
-async function setsQuery(argument: string, command: string, fixedGame?: Game): Promise<string> {
+async function setsQuery(argument: string, command: string, fixedGame?: Game): Promise<AtlasReply> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
   if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的套装。`;
   if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}套装名或 ID`;
@@ -78,6 +78,10 @@ async function setsQuery(argument: string, command: string, fixedGame?: Game): P
     const result = await catalog.read();
     const matches = findSets(result, query, game);
     if (!matches.length) return "未找到匹配的套装。";
+    if (matches.length === 1) {
+      const book = await setBook(matches[0]!);
+      if (book) return book;
+    }
     const lines = await Promise.all(matches.slice(0, 8).map((item) => setLines(item, matches.length === 1)));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的套装名。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
@@ -130,6 +134,21 @@ async function weaponCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
   }
 }
 
+async function setBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
+  const set = await catalog.setDetails(entry);
+  if (!set) return;
+  try {
+    const { renderSet } = await import("./role-render.ts");
+    const pages = await renderSet(set, { assetRoot: dataDirectory });
+    const images: AtlasImage[] = pages.map(({ png }) => ({ type: "image", file: png }));
+    if (images.length <= 1) return images[0];
+    const sections = pages.map(({ section }) => section).join(" → ");
+    return { type: "forward", nodes: [`${set.name}完整图鉴\n${sections}\n共 ${pages.length} 页`, ...images] };
+  } catch {
+    return undefined;
+  }
+}
+
 async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "character" | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
@@ -144,6 +163,10 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(first.entry);
       if (image) return image;
+    }
+    if (matches.length === 1 && first.kind === "set") {
+      const book = await setBook(first.entry);
+      if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, 8).map(({ kind, entry }) => {
       switch (kind) {

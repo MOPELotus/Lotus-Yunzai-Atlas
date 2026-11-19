@@ -2,10 +2,11 @@ import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
-import { compareKey, effectText, label, object } from "./source-values.ts";
+import { compareKey, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
+import { normalizeSet, setEffects } from "./set-data.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
@@ -176,33 +177,6 @@ function artifactName(list: Record<string, unknown>): string {
   return names.size === 1 ? [...names][0] ?? "" : "";
 }
 
-interface SetEffect {
-  readonly pieces: number;
-  readonly text: string;
-}
-
-function setEffects(game: Game, detail: Record<string, unknown>): SetEffect[] {
-  if (game === "gi" && Array.isArray(detail.need) && Array.isArray(detail.affix) &&
-      detail.need.length === detail.affix.length) {
-    const affixes = detail.affix;
-    return detail.need.flatMap((pieces, index) => pieces === 1 || pieces === 2 || pieces === 4
-      ? [{ pieces, text: effectText(object(affixes[index]).desc) }] : []);
-  }
-  if (game === "hsr") {
-    return Object.entries(object(detail.require_num)).flatMap(([count, value]) => {
-      if (count !== "2" && count !== "4") return [];
-      const effect = object(value);
-      return [{ pieces: Number(count), text: effectText(effect.desc,
-        Array.isArray(effect.param_list) ? effect.param_list : undefined) }];
-    });
-  }
-  if (game === "zzz") {
-    return ([2, 4] as const).flatMap((pieces) => detail[`desc${pieces}`]
-      ? [{ pieces, text: effectText(detail[`desc${pieces}`]) }] : []);
-  }
-  return [];
-}
-
 export function createAtlasCatalog(directory: string) {
   const mapPath = resolve(directory, "map.json");
   let snapshot: Snapshot | undefined;
@@ -336,6 +310,10 @@ export function createAtlasCatalog(directory: string) {
       const planar = entry.game === "hsr" && Object.keys(object(detail.parts)).length === 2 &&
         effects.length === 1 && effects[0]?.pieces === 2;
       return { category: planar ? "位面饰品" : category.name, effects };
+    },
+    async setDetails(entry: AtlasEntry) {
+      const item = await readItem(entry, setPages[entry.game].id);
+      if (item) return normalizeSet(entry, item.content, item.meta.images);
     },
     async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
       const content = await readContent(entry, mode.id);
