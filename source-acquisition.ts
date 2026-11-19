@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { branchAndBladeIcon, effectText, object } from "./source-values.ts";
+import { branchAndBladeIcon, effectText, label, object } from "./source-values.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
@@ -142,7 +142,8 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     const rarity = rank === 4 ? "S级" : rank === 3 ? "A级" : "B级";
     if (category === "zzz/weapon") {
-      if (!weaponIcon.test(icon) || typeof type !== "number" || !Number.isInteger(type) || type < 1 || type > 7) {
+      if (!weaponIcon.test(icon) || typeof type !== "number" || !Number.isInteger(type) || type < 1 || type > 7 ||
+          typeof list.atk !== "number" || !Number.isSafeInteger(list.atk) || list.atk <= 0) {
         throw new Error("音擎来源索引条目结构无效。");
       }
       return { id, list, name, rank, rarity, iconName: icon };
@@ -175,6 +176,34 @@ function lightconeDetail(item: Record<string, unknown>, id: string, list: Record
 
 function nonnegative(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function completeEngineCurve(value: unknown, first: number, count: number, fields: readonly string[]): boolean {
+  const rows = object(value);
+  return Object.keys(rows).length === count &&
+    Array.from({ length: count }, (_, index) => first + index)
+      .every((index) => fields.every((field) => nonnegative(object(rows[index])[field])));
+}
+
+function engineDetail(item: Record<string, unknown>, list: Record<string, unknown>): boolean {
+  if (!effectText(item.desc) || !label(item.desc2) || !label(item.desc3) || !label(item.materials) ||
+      !completeEngineCurve(item.level, 0, 61, ["rate", "rate2"]) ||
+      !completeEngineCurve(item.stars, 0, 6, ["star_rate", "rand_rate"])) return false;
+  const base = object(item.base_property);
+  const extra = object(item.rand_property);
+  if (!label(base.name) || !nonnegative(base.value) || !label(extra.name) || !label(extra.format) || !nonnegative(extra.value)) return false;
+  const growth = object(object(item.level)[60]).rate;
+  const upgrade = object(object(item.stars)[5]).star_rate;
+  // The published index truncates the computed attack. The old card formats the raw value separately.
+  if (!nonnegative(growth) || !nonnegative(upgrade) || Math.floor(base.value * (10_000 + growth + upgrade) / 10_000) !== list.atk) {
+    return false;
+  }
+  const talents = object(item.talents);
+  return Object.keys(talents).length === 5 && [1, 2, 3, 4, 5].every((rank) => {
+    const { name, desc, param, param_list } = object(talents[rank]);
+    const params = Array.isArray(param) ? param : Array.isArray(param_list) ? param_list : undefined;
+    return Boolean(label(name) && effectText(desc, params, true));
+  });
 }
 
 function genshinWeaponDetail(item: Record<string, unknown>, id: string, list: Record<string, unknown>): boolean {
@@ -228,7 +257,7 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   if (category === "zzz/bangboo") return true;
   const types = Object.keys(object(item.weapon_type));
   return item.code_name === iconName && item.icon === `${weaponImages}/${iconName}.png` &&
-    types.length === 1 && types[0] === String(list.type);
+    types.length === 1 && types[0] === String(list.type) && engineDetail(item, list);
 }
 
 function webp(bytes: Buffer): boolean {
@@ -264,8 +293,8 @@ export async function acquireAtlasSource(destination: string, requirements: read
   const category = `${scope?.game}/${scope?.pageId}`;
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
   if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
-      !versions.test(scope.version) || ((scope.game !== "zzz" || publishedChallenge || category === "zzz/equipment") && scope.version.includes("+"))) {
-    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、音擎和正式版驱动盘、危局强袭战、式舆防卫战。");
+      !versions.test(scope.version) || (category !== "zzz/bangboo" && scope.version.includes("+"))) {
+    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、正式版音擎、驱动盘、危局强袭战、式舆防卫战。");
   }
   const { version } = scope;
   const { game, pageId, folder, title, timeout: limit } = pages[category];

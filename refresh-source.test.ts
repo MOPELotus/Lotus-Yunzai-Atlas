@@ -53,37 +53,53 @@ test("邦布自动刷新按计划抓取较新构建并发布完整候选", () =>
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
 
-function engineSource(version: string) {
-  const name = `样例音擎 ${version}`;
+const enginePrevious = "3.2";
+const engineCurrent = "3.3";
+const engineManifest = async () => ({ zzz: { live: engineCurrent, latest: upgrade, available: [engineCurrent, upgrade] } });
+function engineSource(version: string, id = 13001) {
+  const name = `样例音擎 ${id}`;
   const asset = "Weapon_A_Refresh";
   return async (url: string) => {
     if (url.endsWith(`/${version}/weapon.json`)) {
-      return Response.json({ "13001": { zh: name, icon: asset, rank: 3, type: 4 } });
+      return Response.json({ [id]: { zh: name, icon: asset, rank: 3, type: 4, atk: 40 } });
     }
-    if (url.endsWith(`/${version}/zh/weapon/13001.json`)) return Response.json({
-      id: 13001, name, code_name: asset, rarity: 3, weapon_type: { 4: { name: "样例专精" } },
+    if (url.endsWith(`/${version}/zh/weapon/${id}.json`)) return Response.json({
+      id, name, code_name: asset, rarity: 3, weapon_type: { 4: { name: "样例专精" } },
       icon: `Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker/${asset}.png`,
+      desc: "官方说明。", desc2: "其他原文。", desc3: "其他原文。", materials: "10:1",
+      base_property: { name: "基础攻击力", value: 40 }, rand_property: { name: "防御力", value: 800, format: "%" },
+      level: Object.fromEntries(Array.from({ length: 61 }, (_, index) => [index, { rate: 0, rate2: 0 }])),
+      stars: Object.fromEntries(Array.from({ length: 6 }, (_, index) => [index, { star_rate: 0, rand_rate: 0 }])),
+      talents: Object.fromEntries([1, 2, 3, 4, 5].map((rank) => [rank, { name: "效果", desc: "样例效果。" }])),
     });
     if (url.endsWith(`/assets/zzz/${asset}.webp`)) return new Response(new Uint8Array(webp));
     throw new Error("刷新请求超出了音擎分类。");
   };
 }
 
-async function seedEngines(workspace: string, root: string) {
+async function seedEngines(workspace: string, root: string, version = enginePrevious) {
   const donor = join(workspace, "weapon");
-  const selected = [{ game: "zzz", pageId: "weapon", version: original }] as const;
-  await acquireAtlasSource(donor, selected, undefined, engineSource(original));
+  const selected = [{ game: "zzz", pageId: "weapon", version }] as const;
+  await acquireAtlasSource(donor, selected, undefined, engineSource(version));
   expect((await applyAtlasCandidate(root, donor, selected)).status).toBe("published");
   await rm(donor, { recursive: true });
 }
 
 test("音擎刷新只请求和发布选中的分类并保留邦布", () => fixture(async (workspace, root) => {
   await seedEngines(workspace, root);
-  const result = await refreshAtlasSource(root, { pageId: "weapon", manifest: manifest(upgrade), request: engineSource(upgrade) });
+  expect(await refreshAtlasSource(root, { pageId: "weapon", manifest: engineManifest, request: engineSource(engineCurrent, 13002) }))
+    .toMatchObject({ status: "invalid", issues: ["音擎 13001 缺少已有音擎资料。"] });
+  const result = await refreshAtlasSource(root, { pageId: "weapon", manifest: engineManifest, request: engineSource(engineCurrent) });
   expect(result).toMatchObject({ status: "published", version: 2 });
   const index = await createAtlasRuntimeCatalog(root).read();
-  expect(findEquipment(index, "13001", "zzz")[0]?.version).toBe(upgrade);
+  expect(findEquipment(index, "13001", "zzz")[0]?.version).toBe(engineCurrent);
   expect(findBangboos(index, "53001")[0]?.version).toBe(original);
+  const unexpected = async () => { throw new Error("不应请求音擎详情"); };
+  expect(await refreshAtlasSource(root, { pageId: "weapon", manifest: engineManifest, request: unexpected }))
+    .toEqual({ status: "current", version: engineCurrent });
+  await seedEngines(workspace, root, "3.4");
+  expect(await refreshAtlasSource(root, { pageId: "weapon", manifest: engineManifest, request: unexpected }))
+    .toEqual({ status: "review", reason: "unproven-upgrade" });
 }));
 
 const genshinOriginal = "7.2.52";
@@ -94,7 +110,8 @@ const genshinDetail = (version: string, id: number) => `https://static.nanoka.cc
 const genshinArt = "https://static.nanoka.cc/assets/gi/UI_EquipIcon_Refresh.webp";
 const genshinEventArt = "https://static.nanoka.cc/assets/gi/Sword_Template.webp";
 const genshinManifest = (version: string, zenless = original) => async () => ({
-  gi: { latest: version, available: [genshinOriginal, genshinUpgrade] }, zzz: { latest: zenless, available: [original, upgrade] },
+  gi: { latest: version, available: [genshinOriginal, genshinUpgrade] },
+  zzz: { live: enginePrevious, latest: zenless, available: [enginePrevious, original, upgrade] },
 });
 
 function genshinSource(version: string) {
@@ -134,7 +151,7 @@ test("原神武器刷新跳过同版，与绝区零同名分类分别规划和�
   expect(await refreshAtlasSource(root, { selection: "gi/weapon", manifest: genshinManifest(genshinOriginal, upgrade), request }))
     .toEqual({ status: "current", version: genshinOriginal });
   expect(await refreshAtlasSource(root, { pageId: "weapon", manifest: genshinManifest(genshinUpgrade), request }))
-    .toEqual({ status: "current", version: original });
+    .toEqual({ status: "current", version: enginePrevious });
   expect(calls).toEqual([]);
   const catalog = createAtlasRuntimeCatalog(root);
   const previous = await catalog.read();

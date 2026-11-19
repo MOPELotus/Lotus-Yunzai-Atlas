@@ -4,7 +4,7 @@ import type { AtlasCandidateValidation } from "./validate-candidate.ts";
 
 const gi = { game: "gi", pageId: "character" } as const;
 const hsr = { game: "hsr", pageId: "lightcone" } as const;
-const zzz = { game: "zzz", pageId: "weapon" } as const;
+const zzz = { game: "zzz", pageId: "bangboo" } as const;
 const stage = { game: "gi", pageId: "tower" } as const;
 const source = {
   gi: { latest: "7.2.52", available: ["7.2", "7.2.52"], live: "7.2", new: { character: [] } },

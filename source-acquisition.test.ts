@@ -127,22 +127,26 @@ test("抓取拒绝无关范围，并在来源身份、图标或连接错误时�
   expect((await acquireAtlasSource(candidate, scope, undefined, request)).imageCount).toBe(1);
 }));
 
-const weaponScope = [{ game: "zzz", pageId: "weapon", version, recordCount: 3 }] as const;
-const weaponListUrl = `https://static.nanoka.cc/zzz/${version}/weapon.json`;
-const weaponDetail = (id: number) => `https://static.nanoka.cc/zzz/${version}/zh/weapon/${id}.json`;
+const engineVersion = "3.3";
+const weaponScope = [{ game: "zzz", pageId: "weapon", version: engineVersion, recordCount: 3 }] as const;
+const weaponListUrl = `https://static.nanoka.cc/zzz/${engineVersion}/weapon.json`;
+const weaponDetail = (id: number) => `https://static.nanoka.cc/zzz/${engineVersion}/zh/weapon/${id}.json`;
 const weaponIcon = (name: string) => `https://static.nanoka.cc/assets/zzz/${name}.webp`;
 const weaponIconPrefix = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
 const weapons = [
-  { id: 12001, zh: "音擎甲", icon: "Weapon_B_Fixture", rank: 2, type: 1 },
-  { id: 13001, zh: "音擎乙", icon: "Weapon_A_Fixture", rank: 3, type: 4 },
-  { id: 14001, zh: "音擎丙", icon: "Weapon_S_Fixture", rank: 4, type: 7 },
+  { id: 12001, zh: "音擎甲", icon: "Weapon_B_Fixture", rank: 2, type: 1, atk: 475 },
+  { id: 13001, zh: "音擎乙", icon: "Weapon_A_Fixture", rank: 3, type: 4, atk: 475 },
+  { id: 14001, zh: "音擎丙", icon: "Weapon_S_Fixture", rank: 4, type: 7, atk: 475 },
 ] as const;
 
 function engineDetail({ id, zh, icon, rank, type }: typeof weapons[number]) {
   return { id, name: zh, code_name: icon, icon: `${weaponIconPrefix}/${icon}.png`, rarity: rank,
-    weapon_type: { [type]: { name: "样例专精" } }, desc: "样例技能。", materials: "10:7200,101010:2",
-    base_property: { name: "基础攻击力", value: 32 }, level: { 0: { rate: 0 } }, stars: { 0: { star_rate: 0 } },
-    talents: { 1: { name: "样例效果", desc: "效果说明。" } } };
+    weapon_type: { [type]: { name: "样例专精" } }, desc: "样例技能。", desc2: "二档说明。", desc3: "三档说明。",
+    materials: "10:7200,101010:2", base_property: { name: "基础攻击力", value: 32 },
+    rand_property: { name: "攻击力", value: 800, format: "%" },
+    level: Object.fromEntries(Array.from({ length: 61 }, (_, index) => [index, { rate: index === 60 ? 94090 : 0, rate2: 0 }])),
+    stars: Object.fromEntries(Array.from({ length: 6 }, (_, index) => [index, { star_rate: index === 5 ? 44610 : 0, rand_rate: 0 }])),
+    talents: Object.fromEntries([1, 2, 3, 4, 5].map((rank) => [rank, { name: "样例效果", desc: "效果说明。" }])) };
 }
 
 function weaponSource(url: string) {
@@ -181,8 +185,11 @@ test("抓取各等级音擎，发布后保留详情字段和两个图标引用",
       { fieldPath: "icon", originalValue: icon, status: "downloaded", localPath },
       { fieldPath: "detail.icon", originalValue: `${weaponIconPrefix}/${icon}.png`, status: "downloaded", localPath },
     ] }, content: { detail: engineDetail(item) } });
-    expect(await catalog.weaponDetails(entry!)).toMatchObject({ artwork: localPath, description: "样例技能。",
-      stats: [{ label: "Lv1基础攻击力", value: "32" }], refinements: [{ rank: 1, name: "样例效果", description: "效果说明。" }] });
+    const details = await catalog.weaponDetails(entry!);
+    expect(details).toMatchObject({ artwork: localPath, description: "样例技能。",
+      stats: [{ label: "Lv1基础攻击力", value: "32" }, { label: "Lv60基础攻击力", value: "476" },
+        { label: "Lv1攻击力", value: "8%" }, { label: "Lv60攻击力", value: "8%" }] });
+    expect(details?.refinements).toHaveLength(5);
   }
 }));
 
@@ -195,6 +202,11 @@ test("音擎详情或图标不完整时清理候选，允许重新抓取", () =>
   await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponDetail(id)
     ? Response.json({ ...engineDetail(weapons[0]), icon: `${weaponIconPrefix}/Weapon_wrong.png` })
     : weaponSource(url))).rejects.toThrow("身份或等级不符");
+  const sample = engineDetail(weapons[0]);
+  for (const detail of [{ ...sample, level: { 0: sample.level[0] } }, { ...sample, stars: {} }, { ...sample, talents: {} }]) {
+    await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponDetail(id)
+      ? Response.json(detail) : weaponSource(url))).rejects.toThrow("身份或等级不符");
+  }
   await expect(acquireAtlasSource(candidate, weaponScope, undefined, async (url) => url === weaponIcon(icon) ||
     url === weaponIcon(`${weaponIconPrefix}/${icon}`) ? missing() : weaponSource(url))).rejects.toThrow("音擎来源图标缺失");
   expect((await acquireAtlasSource(candidate, weaponScope, undefined, async (url) => weaponSource(url))).imageCount).toBe(3);

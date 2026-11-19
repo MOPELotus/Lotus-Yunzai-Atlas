@@ -70,7 +70,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   return assets;
 }
 
-function regressions({ title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
+function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
   after: Awaited<ReturnType<typeof pageAssets>>) {
   const preserveRotation = pageId === "boss" || pageId === "shiyu";
   const issues: string[] = [];
@@ -79,6 +79,7 @@ function regressions({ title, pageId }: SourcePage, before: Awaited<ReturnType<t
     if (!next) {
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
+      if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
       continue;
     }
     if (preserveRotation && (old.name !== next.name || (old.window?.from === "live" &&
