@@ -4,6 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findMonsters, findSets, findTraditionalEntries } from "./catalog.ts";
 
+test("原神装备旧称只匹配已核对的武器与圣遗物套装，标题保留正式名称", () => {
+  const weapon = { game: "gi", id: "11509", name: "雾切之回光", version: "7.2", rarity: "五星", path: "items/11509.json" } as const;
+  const set = { ...weapon, id: "14001", name: "冰风迷途的勇士", path: "items/14001.json" };
+  const common = { game: "gi", version: "7.2", sampled: false } as const;
+  const other = { ...weapon, id: "1", name: "雾切的试作" };
+  const catalog = { pages: [
+    { ...common, kind: "equipment", name: "武器", entries: [other, weapon] },
+    { ...common, kind: "set", name: "圣遗物", entries: [set] },
+  ] as const, stale: false };
+  for (const [alias, entry, kind] of [["雾切", weapon, "equipment"], ["冰封迷途的勇士", set, "set"]] as const) {
+    expect(findTraditionalEntries(catalog, alias, "gi", "name")).toEqual([{ entry, kind, score: 2.5 }]);
+    expect(findTraditionalEntries(catalog, alias, "gi", "equipment").map(({ entry }) => entry)).toEqual([entry]);
+    expect(findTraditionalEntries(catalog, alias, "hsr", "name")).toEqual([]);
+  }
+  expect(findEquipment(catalog, "雾切")).toEqual([weapon]);
+  expect(findSets(catalog, "冰封迷途的勇士")).toEqual([set]);
+  expect(findTraditionalEntries(catalog, "冰封", "gi", "name")).toEqual([]);
+});
+
 test("星见雅旧全名只指向绝区零的雅，保留原索引名与精确名称优先级", () => {
   const entry = { game: "zzz", id: "1091", name: "雅", version: "3.3", rarity: "S级", path: "items/1091.json" } as const;
   const page = { game: "zzz", kind: "character", name: "角色", version: "3.3", sampled: false, entries: [entry] } as const;

@@ -127,18 +127,25 @@ function exactName(value: string): string {
   return value.trim().normalize("NFKC").toLowerCase();
 }
 
+const genshinEquipmentAliases = new Map([
+  ["雾切", { kind: "equipment", id: "11509", name: "雾切之回光" }],
+  ["冰封迷途的勇士", { kind: "set", id: "14001", name: "冰风迷途的勇士" }],
+]);
+
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
   const literal = exactName(query);
   const key = exact ? literal : compareKey(query);
   if (!key) return [];
-  const aliasTarget = zzzCharacterAliases.get(literal);
+  const genshinAlias = genshinEquipmentAliases.get(literal);
   const matches = catalog.pages.flatMap((page) => {
     const kind = kinds.find((kind) => kind === page.kind);
     if (!kind || (game && page.game !== game)) return [];
+    const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal)
+      : page.game === "gi" && genshinAlias?.kind === kind ? genshinAlias : undefined;
     return page.entries.map((entry) => {
       const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key);
-      // The old full name ranks below an exact record name and above a partial match.
-      const alias = kind === "character" && entry.game === "zzz" && aliasTarget?.id === entry.id && aliasTarget.name === entry.name;
+      // A verified name ranks below an exact record name and above a partial match.
+      const alias = aliasTarget?.id === entry.id && aliasTarget.name === entry.name;
       return { kind, entry, score: alias ? 2.5 : direct };
     });
   });
