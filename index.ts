@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { abyssMode, challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
+import { abyssMode, apocalypseMode, challengeModes, findChallengeMode, findCurrentChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
   onslaughtMode, theaterMode, type ChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
@@ -419,6 +419,18 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
+    if (mode.id === apocalypseMode.id) {
+      const apocalypse = await catalog.apocalypseDetails(entry, result, currentRequested);
+      if (apocalypse) {
+        try {
+          const { renderApocalypse } = await import("./role-render.ts");
+          const { png } = await renderApocalypse(apocalypse, { assetRoot: catalog.assetRoot(entry) });
+          return { type: "image", file: png };
+        } catch {
+          // The verified challenge summary remains usable without rendering.
+        }
+      }
+    }
     const lines = await challengeDetails(entry, mode, currentRequested, facts);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
@@ -439,6 +451,7 @@ export default {
     "#lotus图鉴": "#图鉴", "lotus图鉴": "#图鉴",
     "图鉴状态": "#图鉴状态", "#荷花图鉴状态": "#图鉴状态", "荷花图鉴状态": "#图鉴状态",
     "#Lotus图鉴状态": "#图鉴状态", "Lotus图鉴状态": "#图鉴状态", "#lotus图鉴状态": "#图鉴状态", "lotus图鉴状态": "#图鉴状态",
+    "#星铁本期末日幻影图鉴": "#星铁本期末日图鉴",
   },
   commands: {
     async "#图鉴"(argument: string) {
@@ -462,6 +475,7 @@ export default {
     "#本期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
     "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
+    "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();

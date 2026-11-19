@@ -10,6 +10,7 @@ import { normalizeSet, setEffects } from "./set-data.ts";
 import { normalizeOnslaught } from "./onslaught-data.ts";
 import { normalizeTheater } from "./theater-data.ts";
 import { normalizeAbyss } from "./abyss-data.ts";
+import { normalizeApocalypse } from "./apocalypse-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
@@ -321,15 +322,15 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       artwork: galleryArtwork(item.meta.images, entry.game)() };
   }
 
-  function genshinRecords(entry: AtlasEntry, catalog: Catalog, kind: "character" | "monster") {
+  function relatedRecords(entry: AtlasEntry, catalog: Catalog, kind: "character" | "monster") {
     const root = entryRoots.get(entry);
-    return new Map((catalog.pages.find((page) => page.game === "gi" && page.kind === kind)?.entries ?? [])
+    return new Map((catalog.pages.find((page) => page.game === entry.game && page.kind === kind)?.entries ?? [])
       .filter((record) => root && entryRoots.get(record) === root)
       .map((record) => [record.id, record]));
   }
 
   function genshinEnemyLookup(entry: AtlasEntry, catalog: Catalog) {
-    const enemies = genshinRecords(entry, catalog, "monster");
+    const enemies = relatedRecords(entry, catalog, "monster");
     const pending = new Map<string, Promise<MonsterDetails | undefined>>();
     return (id: string, name: string) => {
       const enemy = enemies.get(id);
@@ -339,6 +340,30 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       const details = monsterDetails(enemy);
       pending.set(id, details);
       return details;
+    };
+  }
+
+  function starrailEnemyLookup(entry: AtlasEntry, catalog: Catalog) {
+    const enemies = relatedRecords(entry, catalog, "monster");
+    const pending = new Map<string, ReturnType<typeof readItem>>();
+    return async (id: string) => {
+      // Removing the difficulty suffix only locates a candidate. Both source sheets must name the exact child.
+      const enemy = enemies.get(id) ?? (/^\d{9}$/u.test(id) ? enemies.get(id.slice(0, -2)) : undefined);
+      if (!enemy) return;
+      let reading = pending.get(enemy.id);
+      if (!reading) {
+        reading = readItem(enemy, "monster");
+        pending.set(enemy.id, reading);
+      }
+      const item = await reading;
+      if (!item) return;
+      const { detail: rawDetail, list: rawList } = item.content;
+      const detail = object(rawDetail);
+      const list = object(rawList);
+      if (String(detail.id) !== enemy.id || label(detail.name) !== enemy.name) return;
+      if (enemy.id !== id && !(Array.isArray(list.child) && list.child.includes(Number(id)) &&
+        Array.isArray(detail.child) && detail.child.some((child) => object(child).id === Number(id)))) return;
+      return { name: enemy.name, description: effectText(detail.desc), artwork: galleryArtwork(item.meta.images, "hsr")() };
     };
   }
 
@@ -404,7 +429,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       if (entry.game !== "gi") return;
       const item = await readItem(entry, "rolecombat");
       if (!item) return;
-      const characters = genshinRecords(entry, catalog, "character");
+      const characters = relatedRecords(entry, catalog, "character");
       return normalizeTheater(entry, item.content, item.meta.images, {
         async character(id) {
           const character = characters.get(id);
@@ -419,6 +444,11 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       if (entry.game !== "gi") return;
       const item = await readItem(entry, "tower");
       if (item) return normalizeAbyss(entry, item.content, item.meta.images, genshinEnemyLookup(entry, catalog), current);
+    },
+    async apocalypseDetails(entry: AtlasEntry, catalog: Catalog, current = false) {
+      if (entry.game !== "hsr") return;
+      const item = await readItem(entry, "maze_boss");
+      if (item) return normalizeApocalypse(entry, item.content, item.meta.images, starrailEnemyLookup(entry, catalog), current);
     },
     monsterDetails,
     async monsterDescription(entry: AtlasEntry): Promise<string> {

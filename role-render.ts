@@ -11,6 +11,7 @@ import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
 import type { AbyssDetails } from "./abyss-data.ts";
+import type { ApocalypseDetails } from "./apocalypse-data.ts";
 import { label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
@@ -534,6 +535,43 @@ export async function renderAbyss(abyss: AbyssDetails, options: RoleRenderOption
   const icon = artwork ? images.get(artwork) : undefined;
   const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "gi", version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderApocalypse(apocalypse: ApocalypseDetails, options: RoleRenderOptions = {}) {
+  const { name, version, artwork, window, effect, optional, rooms } = apocalypse;
+  const enemies = rooms.flatMap((room) => room.sides.flatMap((side) => side.enemies));
+  const [images, background, texture] = await Promise.all([
+    galleryImages("hsr", [artwork, ...enemies.map((enemy) => enemy.artwork)], options.assetRoot),
+    themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"), themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, text, heading } = makeLayout(texture);
+  const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
+  const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
+  const blocks = [text(period), heading("环境与全局效果"), heading(effect.name || "末法余烬"),
+    text(effect.description || "增益说明待核对")];
+  if (optional.length) {
+    blocks.push(heading("可选增益"));
+    for (const buff of optional) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));
+  }
+  for (const room of rooms) {
+    const weaknesses = room.sides.flatMap((side) => side.weaknesses.length
+      ? [`${side.name === "星启模式" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
+    blocks.push(heading(room.name));
+    if (weaknesses.length || room.goals.length) blocks.push(text([...weaknesses, ...room.goals].join(" · ")));
+    for (const side of room.sides) {
+      blocks.push(heading(side.name));
+      if (!side.enemies.length) blocks.push(text("阵容待核对"));
+      for (const enemy of side.enemies) {
+        blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
+        if (enemy.level) blocks.push(text(`Lv${enemy.level}`));
+        if (enemy.description) blocks.push(text(enemy.description));
+      }
+    }
+  }
+  const icon = artwork ? images.get(artwork) : undefined;
+  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+    "hsr", version, icon, background, options, 152);
   return page!;
 }
 

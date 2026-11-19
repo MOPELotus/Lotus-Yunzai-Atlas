@@ -4,13 +4,14 @@ import { compareKey, effectText, label, object } from "./source-values.ts";
 export const onslaughtMode = { game: "gi", id: "leyline", name: "幽境危战", aliases: ["幽境", "危战", "地脉异常"] } as const;
 export const theaterMode = { game: "gi", id: "rolecombat", name: "幻想真境剧诗", aliases: ["幻想真境"] } as const;
 export const abyssMode = { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] } as const;
+export const apocalypseMode = { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] } as const;
 
 export const challengeModes = [
   abyssMode,
   theaterMode,
   onslaughtMode,
   { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌"] },
-  { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] },
+  apocalypseMode,
   { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] },
   { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: [] },
   { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫战"] },
