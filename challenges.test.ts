@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { apocalypseMode, challengeModes, fictionMode, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
+import { apocalypseMode, challengeModes, chaosMode, fictionMode, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
   onslaughtMode, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
@@ -112,6 +112,19 @@ test("虚构上期沿中国服实装边界切换，覆盖中断时返回待核�
   expect(await select("2026-10-19T04:00:00+08:00")).toBe("2026");
   expect(await select("2026-11-30T04:00:00+08:00")).toBeUndefined();
   expect(await select("2026-10-19T04:00:00+08:00", [current, earlier])).toBeUndefined();
+});
+
+test("混沌上期识别相邻实装窗口，忽略只有导出时间的记录", async () => {
+  const rows = [row("1031", "2026-04-13 04:00:00", "2026-05-25 04:00:00"),
+    row("1032", "2026-05-25 04:00:00", "2026-07-06 04:00:00"),
+    row("1033", "2026-07-06 04:00:00", "2026-08-17 04:00:00"),
+    { id: "仅导出", list: { begin: "2026-09-01 04:00:00", end: "2026-11-02 04:00:00" } },
+    row("1036", "2026-11-02 04:00:00", "2026-12-14 04:00:00")];
+  const select = async (time: string) =>
+    (await findPreviousChallenge(chaosMode, rows, async (entry) => readChallengeFacts(chaosMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select("2026-07-06T03:59:59+08:00")).toBe("1031");
+  expect(await select("2026-07-06T04:00:00+08:00")).toBe("1032");
+  expect(await select("2026-11-20T12:00:00+08:00")).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {

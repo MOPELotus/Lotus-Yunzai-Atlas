@@ -106,7 +106,7 @@ export function findNextShiyu<Entry extends { readonly id: string }, Facts exten
 }
 
 export function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  mode: typeof apocalypseMode | typeof fictionMode | typeof shiyuMode, entries: readonly Entry[],
+  mode: typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode, entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {
   return findAdjacentChallenge(mode, "previous", entries, readFacts, now);
