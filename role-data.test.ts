@@ -99,6 +99,15 @@ test("绝区零分组保留动作、倍率、两套核心等级、影画故事�
   expect(normalizeRoleDetails(entry("zzz"), { list: { rank: 4 } }, "S级")).toBeUndefined();
 });
 
+test("星见雅保留原图册全名，索引短名和其他角色标题不变", () => {
+  const miyabi = { ...entry("zzz"), id: "1091", name: "雅" };
+  const content = { detail: { partner_info: { full_name: "星见雅" } } };
+  expect(normalizeRoleDetails(miyabi, content, "S级")?.overview.name).toBe("星见雅");
+  expect(miyabi.name).toBe("雅");
+  expect(normalizeRoleDetails({ ...miyabi, id: "1011" }, content, "A级")?.overview.name).toBe("雅");
+  expect(normalizeRoleDetails(miyabi, { detail: { partner_info: { full_name: "异名" } } }, "S级")?.overview.name).toBe("雅");
+});
+
 test("角色总览优先采用明确登记的主图，独立保留头像与按旧序排列的可验证属性", () => {
   const detail = {
     base_hp: 1191.65, base_atk: 20, crit_rate: 0.05, crit_dmg: 0.5,

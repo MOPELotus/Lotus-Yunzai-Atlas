@@ -127,12 +127,19 @@ function exactName(value: string): string {
 }
 
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
-  const key = exact ? exactName(query) : compareKey(query);
+  const literal = exactName(query);
+  const key = exact ? literal : compareKey(query);
   if (!key) return [];
+  const miyabiAlias = literal === "星见雅";
   const matches = catalog.pages.flatMap((page) => {
     const kind = kinds.find((kind) => kind === page.kind);
     if (!kind || (game && page.game !== game)) return [];
-    return page.entries.map((entry) => ({ kind, entry, score: exact ? Number(exactName(entry.name) === key) : score(entry, key) }));
+    return page.entries.map((entry) => {
+      const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key);
+      // The old full name ranks below an exact record name and above a partial match.
+      const alias = miyabiAlias && kind === "character" && entry.game === "zzz" && entry.id === "1091" && entry.name === "雅";
+      return { kind, entry, score: alias ? 2.5 : direct };
+    });
   });
   const best = matches.reduce((best, match) => Math.max(best, match.score), 0);
   return best > 0 ? matches.filter((match) => match.score === best) : [];

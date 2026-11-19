@@ -4,6 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findMonsters, findSets, findTraditionalEntries } from "./catalog.ts";
 
+test("星见雅旧全名只指向绝区零的雅，保留原索引名与精确名称优先级", () => {
+  const entry = { game: "zzz", id: "1091", name: "雅", version: "3.3", rarity: "S级", path: "items/1091.json" } as const;
+  const page = { game: "zzz", kind: "character", name: "角色", version: "3.3", sampled: false, entries: [entry] } as const;
+  const snapshot = { pages: [page], stale: false };
+  expect(findCharacters(snapshot, "星见雅", "zzz")).toEqual([entry]);
+  expect(findTraditionalEntries(snapshot, "星见雅", "zzz", "name").map(({ entry }) => entry)).toEqual([entry]);
+  expect(findTraditionalEntries(snapshot, "雅", "zzz", "name").map(({ entry }) => entry)).toEqual([entry]);
+  expect(findTraditionalEntries(snapshot, "星见雅", "zzz", "equipment")).toEqual([]);
+  expect(findTraditionalEntries(snapshot, "星见雅", "gi", "name")).toEqual([]);
+  expect(findTraditionalEntries(snapshot, "星见", "zzz", "name")).toEqual([]);
+  const distinct = { ...entry, id: "2000", name: "星见雅" };
+  const withExact = { pages: [{ ...page, entries: [entry, distinct] }], stale: false };
+  expect(findTraditionalEntries(withExact, "星见雅", "zzz", "name").map(({ entry }) => entry)).toEqual([distinct]);
+});
+
 test("角色索引保留同名条目，坏快照不替换已验证的索引", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-"));
   try {

@@ -464,13 +464,16 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
+  const partner = object(detail.partner_info);
+  const fullName = label(partner.full_name);
+  const title = game === "zzz" && id === "1091" && name === "雅" && fullName === "星见雅" ? fullName : name;
   const artwork = galleryArtwork(images, game);
   const icon = artwork("detail.icon", "icon");
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
-    overview: { name, rarity, description: text(detail.desc) ?? text(object(detail.partner_info).profile_desc) ?? text(object(content.list).desc),
+    overview: { name: title, rarity, description: text(detail.desc) ?? text(partner.profile_desc) ?? text(object(content.list).desc),
       artwork: artwork(...focusFields[game]) ?? icon, icon, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };
 }
