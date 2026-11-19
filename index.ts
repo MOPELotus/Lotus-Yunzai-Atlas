@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { challengeModes, findChallengeMode } from "./challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
-import { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
+import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
 import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
 
@@ -13,9 +13,9 @@ const games = new Map<string, Game>([
   ["原神", "gi"], ["星铁", "hsr"], ["星穹铁道", "hsr"], ["崩坏星穹铁道", "hsr"], ["崩铁", "hsr"],
   ["绝区零", "zzz"], ["绝区", "zzz"],
 ]);
-const dataDirectory = Bun.env.LOTUS_ATLAS_DATA_DIR || fileURLToPath(new URL("../../data/atlas/data/", import.meta.url));
-const catalog = createAtlasCatalog(dataDirectory);
-const missing = "图鉴数据不可用。请检查 LOTUS_ATLAS_DATA_DIR 指向的目录。";
+const atlasRoot = fileURLToPath(new URL("../../data/atlas/", import.meta.url));
+const catalog = createAtlasRuntimeCatalog(atlasRoot, Bun.env.LOTUS_ATLAS_DATA_DIR);
+const missing = "图鉴数据不可用。请检查 data/atlas 快照或 LOTUS_ATLAS_DATA_DIR 设置。";
 
 function searchTerms(argument: string, fixedGame?: Game) {
   const words = argument.trim().split(/\s+/u);

@@ -1,5 +1,5 @@
-import { readFile, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 import { compareKey, label, object } from "./source-values.ts";
@@ -7,6 +7,7 @@ import { readAchievementCategories, type AchievementCategory } from "./achieveme
 import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
+import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
@@ -70,6 +71,7 @@ interface Catalog {
 interface Snapshot extends Catalog {
   readonly map: Buffer;
   readonly root: string;
+  readonly version: number | null;
 }
 
 function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPage {
@@ -178,16 +180,33 @@ function artifactName(list: Record<string, unknown>): string {
   return names.size === 1 ? [...names][0] ?? "" : "";
 }
 
-export function createAtlasCatalog(directory: string) {
+export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string) {
+  return override ? createAtlasCatalog(override) : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot);
+}
+
+export function createAtlasCatalog(directory: string, publicationRoot?: string) {
   const configuredRoot = resolve(directory);
+  const publishedRoot = publicationRoot && resolve(publicationRoot);
   const entryRoots = new WeakMap<AtlasEntry, string>();
   let snapshot: Snapshot | undefined;
   let reading: Promise<Catalog> | undefined;
 
+  async function locate() {
+    if (publishedRoot) return discoverAtlasDataDirectory(publishedRoot);
+    return { root: await realpath(configuredRoot), version: null };
+  }
+
   async function read(): Promise<Catalog> {
     try {
-      const root = await realpath(configuredRoot);
-      const map = await readFile(resolve(root, "map.json"));
+      const { root, version } = await locate();
+      if (snapshot?.version && (version === null || version < snapshot.version)) {
+        throw new Error("图鉴发布指针丢失或版本倒退。");
+      }
+      const mapPath = join(root, "map.json");
+      if (version !== null && !(await lstat(mapPath)).isFile()) {
+        throw new Error("已发布图鉴索引须为实体文件。");
+      }
+      const map = await readFile(mapPath);
       if (!snapshot || snapshot.stale || root !== snapshot.root || !map.equals(snapshot.map)) {
         const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
@@ -244,8 +263,8 @@ export function createAtlasCatalog(directory: string) {
             }
           }
         }
-        if (!pages.length) throw new Error("图鉴索引没有可查询的分类。");
-        snapshot = { map, root, pages, stale };
+        if (!pages.length || (version !== null && stale)) throw new Error("图鉴索引缺少可用分类。");
+        snapshot = { map, root, version, pages, stale };
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
@@ -256,7 +275,7 @@ export function createAtlasCatalog(directory: string) {
 
   async function readItem(entry: AtlasEntry, pageId: string) {
     try {
-      const root = entryRoots.get(entry) ?? await realpath(configuredRoot);
+      const root = entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? (await locate()).root;
       const file = await realpath(resolve(root, entry.path));
       const local = relative(root, file);
       if (isAbsolute(local) || local === ".." || local.startsWith(`..${sep}`)) return;
@@ -276,7 +295,7 @@ export function createAtlasCatalog(directory: string) {
 
   return {
     assetRoot(entry: AtlasEntry): string {
-      return entryRoots.get(entry) ?? configuredRoot;
+      return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
     read(): Promise<Catalog> {
       return reading ??= read().finally(() => { reading = undefined; });

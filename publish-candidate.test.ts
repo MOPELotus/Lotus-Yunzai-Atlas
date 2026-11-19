@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readlink, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createAtlasCatalog, findEquipment } from "./catalog.ts";
+import { createAtlasRuntimeCatalog, findEquipment } from "./catalog.ts";
 import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
 
 const itemPath = "items/weapon.json";
@@ -39,12 +39,18 @@ async function fixture(run: (root: string) => Promise<void>) {
 }
 
 test("原子发布新目录后，在途图鉴读取保留旧版条目和图库", () => fixture(async (root) => {
+  const catalog = createAtlasRuntimeCatalog(root);
+  await expect(catalog.read()).rejects.toThrow();
+  const legacy = await snapshot(root, 10, "WEAPON_CLAYMORE");
+  const legacyPath = join(root, "data");
+  await rename(legacy.data, legacyPath);
   const first = await snapshot(root, 1);
   const second = await snapshot(root, 2, "WEAPON_BOW");
   const pointer = join(root, "current");
+  const [original] = findEquipment(await catalog.read(), "样例剑 10", "gi");
+  expect(original).toBeDefined();
   expect(await readAtlasSnapshotVersion(root)).toBeNull();
   expect(await publishAtlasCandidate(root, null, 1, pages(1))).toEqual({ status: "published", version: 1, directory: first.data });
-  const catalog = createAtlasCatalog(pointer);
   const [old] = findEquipment(await catalog.read(), "样例剑 1", "gi");
   expect(old).toBeDefined();
   expect(await publishAtlasCandidate(root, 1, 2, pages(2))).toEqual({ status: "published", version: 2, directory: second.data });
@@ -54,8 +60,46 @@ test("原子发布新目录后，在途图鉴读取保留旧版条目和图库",
   expect(current).toBeDefined();
   expect((await catalog.equipmentFacts(old!)).scope).toBe("单手剑");
   expect((await catalog.equipmentFacts(current!)).scope).toBe("弓");
+  expect((await catalog.equipmentFacts(original!)).scope).toBe("双手剑");
   expect(catalog.assetRoot(old!)).toBe(first.data);
+  expect(catalog.assetRoot(current!)).toBe(second.data);
   expect(await Bun.file(first.image).text()).toBe("image 1");
+  const explicit = createAtlasRuntimeCatalog(root, legacyPath);
+  expect((await explicit.read()).pages.map(({ version }) => version)).toEqual(["10"]);
+  await expect(createAtlasRuntimeCatalog(root, join(root, "missing")).read()).rejects.toThrow();
+}));
+
+test("无效发布指针保持最近可用快照，冷启动拒绝读取错误目标", () => fixture(async (root) => {
+  const legacy = await snapshot(root, 10, "WEAPON_CLAYMORE");
+  await rename(legacy.data, join(root, "data"));
+  const first = await snapshot(root, 1);
+  const second = await snapshot(root, 2, "WEAPON_BOW");
+  expect((await publishAtlasCandidate(root, null, 2, pages(2))).status).toBe("published");
+  const catalog = createAtlasRuntimeCatalog(root);
+  const good = await catalog.read();
+  const pointer = join(root, "current");
+  const pending = join(root, "fixture-pointer");
+  await mkdir(join(root, "snapshots/3"));
+  await symlink(second.data, join(root, "snapshots/3/data"), "dir");
+  const wrong = await snapshot(root, 4);
+  await rm(join(wrong.data, "map.json"));
+  await symlink(join(first.data, "map.json"), join(wrong.data, "map.json"));
+
+  const point = async (target: string) => {
+    await symlink(target, pending, "dir");
+    await rename(pending, pointer);
+    expect(await catalog.read()).toEqual({ pages: good.pages, stale: true });
+  };
+  for (const target of [first.data, "data", "snapshots/2/data\n", "snapshots/99/data", "snapshots/3/data", "snapshots/4/data"]) {
+    await point(target);
+    await expect(createAtlasRuntimeCatalog(root).read()).rejects.toThrow();
+  }
+  await point("snapshots/1/data");
+  await rm(pointer);
+  expect(await catalog.read()).toEqual({ pages: good.pages, stale: true });
+  expect((await createAtlasRuntimeCatalog(root).read()).pages.map(({ version }) => version)).toEqual(["10"]);
+  await symlink("snapshots/2/data", pointer, "dir");
+  expect(await catalog.read()).toEqual(good);
 }));
 
 test("竞争发布只有一个成功，过期及较低版本保持获胜指针", () => fixture(async (root) => {

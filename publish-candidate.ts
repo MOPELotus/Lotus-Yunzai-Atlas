@@ -1,8 +1,9 @@
 import { Database } from "bun:sqlite";
-import { lstat, readFile, readlink, realpath, rename, symlink, unlink } from "node:fs/promises";
+import { lstat, readFile, realpath, rename, symlink, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
+import { atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
@@ -18,30 +19,8 @@ function errorCode(error: unknown) {
   return (error as NodeJS.ErrnoException | undefined)?.code;
 }
 
-function isVersion(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0;
-}
-
-function relativeTarget(version: number): string {
-  return `snapshots/${version}/data`;
-}
-
-async function readPointer(path: string): Promise<Version> {
-  let target: string;
-  try {
-    target = await readlink(path);
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return null;
-    throw error;
-  }
-  const match = /^snapshots\/([1-9][0-9]*)\/data$/u.exec(target);
-  const version = Number(match?.[1]);
-  if (!isVersion(version)) throw new Error("图鉴发布指针格式无效。");
-  return version;
-}
-
 export async function readAtlasSnapshotVersion(root: string): Promise<Version> {
-  return readPointer(join(await realpath(root), "current"));
+  return readAtlasSnapshotPointer(join(await realpath(root), "current"));
 }
 
 async function lockPublication(path: string, signal?: AbortSignal): Promise<Database | undefined> {
@@ -75,8 +54,8 @@ async function lockPublication(path: string, signal?: AbortSignal): Promise<Data
 async function commitPointer(root: string, version: number, signal?: AbortSignal) {
   const pending = join(root, ".current-next");
   // Only writers holding the database lock touch this link. A killed writer may leave it behind.
-  if (await readPointer(pending) !== null) await unlink(pending);
-  await symlink(relativeTarget(version), pending, "dir");
+  if (await readAtlasSnapshotPointer(pending) !== null) await unlink(pending);
+  await symlink(atlasSnapshotTarget(version), pending, "dir");
   try {
     signal?.throwIfAborted();
     await rename(pending, join(root, "current"));
@@ -111,15 +90,17 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
 export async function publishAtlasCandidate(root: string, expected: Version, version: number,
   expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
   signal?.throwIfAborted();
-  if (!isVersion(version) || (expected !== null && !isVersion(expected))) throw new Error("图鉴发布版本须为正整数。");
+  if (!isAtlasSnapshotVersion(version) || (expected !== null && !isAtlasSnapshotVersion(expected))) {
+    throw new Error("图鉴发布版本须为正整数。");
+  }
   const directory = await realpath(root);
   const database = await lockPublication(join(directory, ".publication.sqlite"), signal);
   if (!database) return { status: "busy" };
   try {
-    const current = await readPointer(join(directory, "current"));
+    const current = await readAtlasSnapshotPointer(join(directory, "current"));
     if (current !== expected || (current !== null && version <= current)) return { status: "stale", current };
 
-    const candidate = join(directory, relativeTarget(version));
+    const candidate = join(directory, atlasSnapshotTarget(version));
     const candidateRoot = await realpath(candidate).catch(() => undefined);
     if (candidateRoot !== candidate || !(await lstat(candidate).catch(() => undefined))?.isDirectory()) {
       return { status: "invalid", issues: ["发布候选 data 须为发布根内的实体目录。"] };
