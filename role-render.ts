@@ -261,6 +261,27 @@ async function localAsset(path: string, maxBytes: number): Promise<Buffer | unde
   }
 }
 
+async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undefined> {
+  if (role.game !== "gi") return;
+  const id = role.id.split("-", 1)[0];
+  if (!id || !/^[1-9]\d*$/u.test(id)) return;
+  const key = `gi-${id}`;
+  const filename = `${key}.webp`;
+  for (const theme of themeDirectories) {
+    try {
+      const root = await realpath(theme);
+      const directory = join(root, "portraits");
+      if (await realpath(directory) !== directory) continue;
+      const index = await localAsset(join(directory, "index.json"), 1_048_576);
+      if (!index || object(JSON.parse(index.toString("utf8")))[key] !== filename) continue;
+      const bytes = await localAsset(join(directory, filename), maxImageBytes);
+      if (bytes) return await loadImage(bytes);
+    } catch {
+      // Missing original illustrations fall back to the snapshot.
+    }
+  }
+}
+
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
   const images = new Map<string, Image>();
   if (!assetRoot) return images;
@@ -326,11 +347,12 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
   const backdrop = backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
-  const [images, background, texture] = await Promise.all([
+  const [images, background, texture, originalPortrait] = await Promise.all([
     galleryImages(role.game, [role.overview.icon, role.overview.artwork,
       ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
       ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
+    originalGenshinPortrait(role),
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
@@ -338,7 +360,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon);
-  const portrait = image(role.overview.artwork);
+  const portrait = originalPortrait ?? image(role.overview.artwork);
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
   const overview: Block[] = [];
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
