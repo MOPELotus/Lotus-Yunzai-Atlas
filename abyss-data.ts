@@ -73,6 +73,21 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
   "12-3": { level: 100, first: [["26302101", "蕴光月守宫", 1]], second: [["24021101", "恒常机关阵列", 1]] },
 };
 
+// October 16 release. The chamber 3 footage shows one monster in each half.
+// https://genshin.hoyoverse.com/m/fr/news/detail/166383
+// https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
+// https://www.miyoushe.com/ys/article/78933070
+const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  "12-3": { level: 100, first: [["26310501", "嵌合翼骏狮", 1]], second: [["24090501", "秘源机兵·统御械", 1]] },
+};
+
+const verifiedPeriods = {
+  "124": { name: "骇星之月", icon: "UI_TowerBlessing_107", begin: "2026-10-16 04:00:00",
+    end: "2026-11-16 03:59:59", rooms: record124Rooms },
+  "125": { name: "凌振之月", icon: "UI_TowerBlessing_106", begin: "2026-11-16 04:00:00",
+    end: "2026-12-16 03:59:59", rooms: record125Rooms },
+} as const;
+
 export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, unknown>, images: unknown,
   enemy: (id: string, name: string) => Promise<AbyssEnemy | undefined>, current = false): Promise<AbyssDetails | undefined> {
   if (entry.game !== "gi") return;
@@ -82,11 +97,10 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
   const artwork = galleryArtwork(images, "gi");
   const leyline = object(rawLeyline);
   const { window } = readChallengeFacts(abyssMode, content);
-  const identified125 = entry.id === "125" && entry.name === "凌振之月" &&
+  const period = entry.id === "124" || entry.id === "125" ? verifiedPeriods[entry.id] : undefined;
+  const verifiedRooms = period && window && entry.name === period.name && leyline.name === period.name && leyline.icon === period.icon &&
     (entry.version === "7.2" || entry.version === "7.2.52") &&
-    leyline.name === entry.name && leyline.icon === "UI_TowerBlessing_106" &&
-    open === "2026-11-16 04:00:00" && close === "2026-12-16 03:59:59" &&
-    window?.begin === open && window.end === close;
+    open === period.begin && close === period.end && window.begin === open && window.end === close ? period.rooms : undefined;
   const description = effectText(leyline.desc);
   const effects = [{ title: "渊月祝福", description: description || "祝福说明待核对" }];
   const rooms = await Promise.all(floors.flatMap(([floorId, row]) => {
@@ -102,7 +116,7 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
     return numbered(level.room).map(async ([roomId, value]): Promise<AbyssRoom> => {
       const room = object(value);
       const roomName = `${floorId}-${roomId}`;
-      const verified = identified125 ? record125Rooms[roomName] : undefined;
+      const verified = verifiedRooms?.[roomName];
       const sides = await Promise.all((["first", "second"] as const).map(async (half, position) => {
         const rows = Array.isArray(room[half]) ? room[half] : [];
         const name = position === 0 ? "上半" : "下半";
