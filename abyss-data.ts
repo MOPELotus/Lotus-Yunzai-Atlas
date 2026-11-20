@@ -111,6 +111,15 @@ const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
 // https://www.youtube.com/watch?v=ddkJu1ItF8k
 // https://genshinflex.com/en/abyss/history/
 const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  // https://www.18183.com/yuanshen/202609/9034833.html
+  // https://www.ptt.cc/bbs/miHoYo/M.1789508957.A.15F
+  // The live CN reports identify the third Landcruiser as the Cryo scout.
+  // Version 7.1 fixed shooting while frozen or petrified: https://ys.mihoyo.com/main/news/detail/166392
+  "11-1": { level: 88, first: [["25131001", "兽怪投掷者", 10], ["25131601", "兽怪瞄击者", 20]], second: [
+    ["23085201", "巡陆艇·尖端全能斥候型", 8], ["23085301", "巡陆艇·尖端火力地效型", 8],
+    ["23080401", "巡陆艇·强侦斥候型", 8],
+  ] },
   // https://timesaver.gg/blog/genshin-spiral-abyss-floor-11-7-0
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
   // Tower 109 preserves the veteran Phantasm portrait under its exact combat name.

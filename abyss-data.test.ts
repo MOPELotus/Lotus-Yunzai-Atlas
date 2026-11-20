@@ -167,6 +167,8 @@ test("辉卷之月 123 仅补已有独立证据的房间阵容", async () => {
   const source = { list: { live_begin: open, live_end: close }, detail: {
     open, close, leyline: { name: entry123.name, icon: "UI_TowerBlessing_107" },
     floor: { "11": { room: {
+      "1": { level: 88, type: "TOWER_COND_LEFT_HP_GREATER_THAN",
+        cond: [[233893003, 3024, 20], [233893003, 3024, 40], [233893003, 3024, 60]], first: [], second: [] },
       "2": { level: 90, first: [], second: [] },
       "3": { level: 92, first: [], second: [] },
     } }, "12": { room: {
@@ -177,8 +179,12 @@ test("辉卷之月 123 仅补已有独立证据的房间阵容", async () => {
   } };
   const lookup = async (id: string, name: string) => ({ name, artwork: `gallery/gi/${id}.webp` });
   const rendered = await normalizeAbyss(entry123, source, [], lookup);
+  expect(rendered?.rooms[0]?.goal).toBe("防守目标剩余生命值 20% / 40% / 60%");
   expect(rendered?.rooms.map(({ sides }) => sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork])))).toEqual([
+    [[["兽怪投掷者", 10, "gallery/gi/25131001.webp"], ["兽怪瞄击者", 20, "gallery/gi/25131601.webp"]],
+      [["巡陆艇·尖端全能斥候型", 8, "gallery/gi/23085201.webp"], ["巡陆艇·尖端火力地效型", 8, "gallery/gi/23085301.webp"],
+        ["巡陆艇·强侦斥候型", 8, "gallery/gi/23080401.webp"]]],
     [[["镀金旅团·魔岩役使", 1, "gallery/gi/25410101.webp"], ["凝冰戍卫", 1, "gallery/gi/25135101.webp"],
       ["凝冰秘法师", 2, "gallery/gi/25135001.webp"], ["苍遒的木灵长", 1, "gallery/gi/25137001.webp"],
       ["幼嫩的分节树", 2, "gallery/gi/25138001.webp"]],
