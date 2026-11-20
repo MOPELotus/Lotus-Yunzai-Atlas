@@ -268,6 +268,10 @@ async function traditionalQuery(
     }
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
     const first = matches[0]!;
+    if (mode === "weapon") {
+      if (matches.length !== 1) return;
+      return await weaponCard(first.entry) ?? equipmentLine(first.entry);
+    }
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];

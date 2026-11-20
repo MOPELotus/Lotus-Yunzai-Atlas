@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
 import { abyssMode, apocalypseMode, chaosMode, fictionMode } from "./challenges.ts";
-import { parseDatedChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
+import { parseBareEquipmentShortcut, parseDatedChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -17,6 +17,19 @@ test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项�
   for (const command of ["#图鉴", "#星铁图鉴", "#西风剑攻略图鉴", "#芙宁娜练度统计图鉴", "#芙宁娜命座图鉴",
     "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#123图鉴", "#１２３图鉴"]) {
     expect(parseEquipmentShortcut(command)).toBeUndefined();
+  }
+});
+
+test("裸装备捷径沿用各游戏前缀，带图鉴和角色分项仍归原入口", () => {
+  for (const [game, query, commands] of [
+    ["gi", "西风剑", ["#西风剑", "#原神西风剑"]],
+    ["hsr", "锋镝", ["*锋镝", "#星穹铁道锋镝"]],
+    ["zzz", "深海访客", ["%深海访客", "％深海访客", "#绝区零深海访客"]],
+  ] as const) {
+    for (const command of commands) expect(parseBareEquipmentShortcut(command)).toEqual({ game, query });
+  }
+  for (const command of ["西风剑", "#西风剑图鉴", "#更新图鉴", "#123", "#星铁１２３", "*卡芙卡星魂", "%深海访客攻略"]) {
+    expect(parseBareEquipmentShortcut(command)).toBeUndefined();
   }
 });
 
@@ -119,10 +132,11 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
         gi: { locales: { zh: { pages: {
           character: page({ id: "10", name: "西风剑客" },
             { id: "10000005-2", name: "旅行者" }, { id: "10000007-3", name: "旅行者" }),
-          weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" }),
+          weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" },
+            { id: "11505", name: "磐岩结绿" }),
           artifact: page({ id: "202", name: "索引名应由详情修正" }),
         } } } },
-        hsr: { locales: { zh: { pages: { lightcone: page({ id: "300", name: "西风剑" }) } } } },
+        hsr: { locales: { zh: { pages: { lightcone: page({ id: "300", name: "西风剑" }, { id: "21018", name: "舞！舞！舞！" }) } } } },
         zzz: { locales: { zh: { pages: { bangboo: page({ id: "400", name: "企鹅布" }) } } } },
       },
     }));
@@ -140,6 +154,11 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("企鹅布")).toEqual([["zzz", "bangboo", "400"]]);
     expect(hits("西风剑", "hsr", "equipment")).toEqual([["hsr", "equipment", "300"]]);
     expect(hits("西风剑", "gi", "equipment")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"]]);
+    expect(hits("西风剑", "gi", "weapon")).toEqual([["gi", "equipment", "100"]]);
+    expect(hits("绿剑", "gi", "weapon")).toEqual([["gi", "equipment", "11505"]]);
+    expect(hits("舞舞舞", "hsr", "weapon")).toEqual([["hsr", "equipment", "21018"]]);
+    expect(hits("舞舞舞", "gi", "weapon")).toEqual([]);
+    for (const name of ["西风", "100", "西风剑客", "企鹅布"]) expect(hits(name, "gi", "weapon")).toEqual([]);
     for (const name of ["西风", "100", "西风剑客", "企鹅布", "余响旧曲"]) expect(hits(name, "gi", "equipment")).toEqual([]);
     expect(hits("余响 · 旧曲", "gi", "equipment")).toEqual([["gi", "equipment", "101"]]);
     expect(hits("西风", undefined, "name")).toEqual([]);

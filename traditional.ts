@@ -6,13 +6,14 @@ const prefixes: Readonly<Record<string, Game>> = {
   "#绝区零": "zzz", "#绝区": "zzz", "*": "hsr", "%": "zzz", "％": "zzz",
 };
 const shortcut = /^[#*%％][^\r\n]+图鉴$/u;
+const bareEquipment = /^[#*%％][^\r\n]{2,128}$/u;
 const gamePrefix = /^(?:#崩坏星穹铁道|#星穹铁道|#绝区零|#绝区|#星铁|#崩铁|#原神|[#*%％])/u;
 const reserved = /攻略|练度统计|(?:命座|星魂|影画|天赋)$/u;
 const operations = /^#?(?:Lotus|lotus|荷花)?(?:图鉴(?:状态|帮助|更新|检查更新|全量更新|重置)|(?:更新|检查更新|全量更新|重置|清空)图鉴)$/u;
 const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
-const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
+const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${bareEquipment.source}`, "u");
 const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)([^\r\n]+)图鉴$/u;
 const datedModes = [abyssMode, apocalypseMode, chaosMode, fictionMode] as const;
 type DatedChallengeMode = typeof datedModes[number];
@@ -50,6 +51,18 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   if (game) return { game, query };
 }
 
+export function parseBareEquipmentShortcut(message: string): { game: Game; query: string } | undefined {
+  const input = message.trim();
+  if (!bareEquipment.test(input) || operations.test(input) || shortcut.test(input)) return;
+  const prefix = gamePrefix.exec(input)?.[0];
+  if (!prefix) return;
+  const game = prefixes[prefix];
+  const query = input.slice(prefix.length).trim();
+  if (game && query.length >= 2 && !reserved.test(query) && !/^[0-9]+$/u.test(query.normalize("NFKC"))) {
+    return { game, query };
+  }
+}
+
 export function parseRoleShortcut(message: string): { game?: Game; query: string } | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
@@ -66,7 +79,7 @@ export function parseRoleShortcut(message: string): { game?: Game; query: string
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
 type AtlasNode = string | AtlasImage;
 export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
-type Lookup = "glued" | "shortcut" | "character";
+type Lookup = "glued" | "shortcut" | "weapon" | "character";
 
 interface ShortcutEvent {
   readonly msg: string;
@@ -100,8 +113,9 @@ export function traditionalAtlasApps(
             ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
             : await findDatedChallengeReply(dated.mode, dated.period, dated.at));
           const target = parseEquipmentShortcut(event.msg);
-          if (!target) return false;
-          return this.send(event, await findReply(target.query, "shortcut", target.game));
+          if (target) return this.send(event, await findReply(target.query, "shortcut", target.game));
+          const bare = parseBareEquipmentShortcut(event.msg);
+          return bare ? this.send(event, await findReply(bare.query, "weapon", bare.game)) : false;
         }
 
         async send(event: ShortcutEvent, reply: AtlasReply | undefined) {

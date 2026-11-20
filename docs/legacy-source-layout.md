@@ -84,3 +84,7 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 ## 角色总览原画
 
 角色总览优先从 `LOTUS_CHARACTER_GALLERY_DIR` 的 `gs-character/`、`sr-character/` 或 `zzz-character/` 选择同角色原画。支持角色名文件、角色名子目录，遇到坏图继续尝试同角色候选。未匹配指定图库时，原神与星铁继续读取已安装主题的角色图库，绝区零读取旧资源的 `images/panel/`，再按原图鉴的同角色立绘与头像回退。普通同名记录保持各自原图，开拓者和三月七按已核对的性别与命途目录选图。
+
+## 装备旧指令和别名
+
+旧版会为武器、光锥和音擎的准确名称生成可省略「图鉴」的捷径。宿主只对相应游戏的唯一装备记录处理裸捷径。武器和光锥的别名分别摘自固定版 Miao-Plugin 的 [原神武器表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-gs/weapon/alias.js) 和 [星铁光锥表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-sr/weapon/alias.js)，按各自分类中的名称核对。原许可随附于 [LICENSES/Miao-Plugin-MIT.txt](../LICENSES/Miao-Plugin-MIT.txt)。
