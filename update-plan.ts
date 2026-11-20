@@ -43,8 +43,8 @@ function targetVersion(manifest: unknown, game: Game): string | undefined {
   if (version(latest) && (game === "zzz" || !latest.includes("+")) && Array.isArray(available) && available.includes(latest)) return latest;
 }
 
-function publishedZzzVersion(manifest: unknown): string | undefined {
-  const { live, available } = object(object(manifest).zzz);
+function publishedVersion(manifest: unknown, game: Game): string | undefined {
+  const { live, available } = object(object(manifest)[game]);
   if (version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live)) return live;
 }
 
@@ -94,8 +94,9 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       entries.push({ ...current, kind, action: "audit-rotation" });
       continue;
     }
-    const target = game === "zzz" && (pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")
-      ? publishedZzzVersion(manifest) : targetVersion(manifest, game);
+    const requireLive = (game === "zzz" && (pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
+      (game === "hsr" && pageId === "relicset");
+    const target = requireLive ? publishedVersion(manifest, game) : targetVersion(manifest, game);
     entries.push(planVersionedPage(current, local, target));
   }
   return buildPlan(entries);
@@ -106,7 +107,7 @@ export function planPublishedZzzRefresh(manifest: unknown, local: AtlasCandidate
   const scope = { game: "zzz", pageId } as const;
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
-  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedZzzVersion(manifest))]);
+  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedVersion(manifest, "zzz"))]);
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {

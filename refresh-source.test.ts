@@ -611,3 +611,96 @@ test("绝区零成就更新保留一级分类、空子分类、条目与互斥�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("星铁遗器只更新正式版并保留旧记录、部件、套装效果及真实原图", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-relicset-refresh-"));
+  const root = join(work, "atlas");
+  const iconName = "SpriteOutput/ItemIcon/71000.png";
+  const setName = "原样套装";
+  const pageId = "relicset";
+  const selection = "hsr/relicset";
+  const original = {
+    name: setName, icon: iconName,
+    parts: {
+      "31011": { name: "头部" }, "31012": { name: "手部" },
+      "31013": { name: "躯干" }, "31014": { name: "脚部" },
+    },
+    require_num: {
+      "2": { desc: "治疗量提高<unbreak>#1[i]%</unbreak>。", param_list: [0.1] },
+      "4": { desc: "恢复战技点。", param_list: [] },
+    },
+  };
+  let candidate = structuredClone(original);
+  let live = "4.6";
+  let id = "101";
+  let iconMissing = false;
+  let detailMismatch = false;
+  const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+  const requests: string[] = [];
+  const request = async (url: string) => {
+    requests.push(url);
+    if (url === `https://static.nanoka.cc/hsr/${live}/relicset.json`) {
+      const set = Object.fromEntries(Object.entries(candidate.require_num)
+        .map(([pieces, { desc, param_list }]) => [pieces, { zh: desc, ParamList: param_list }]));
+      return Response.json({ [id]: { zh: setName, icon: iconName, set } });
+    }
+    if (url === `https://static.nanoka.cc/hsr/${live}/zh/relicset/${id}.json`) {
+      return Response.json(detailMismatch ? { ...candidate, name: "错误套装" } : candidate);
+    }
+    if (url === "https://static.nanoka.cc/assets/hsr/itemfigures/71000.webp") {
+      return iconMissing ? missing() : new Response(new Uint8Array(webp));
+    }
+    throw new Error(`不应请求 ${url}`);
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
+    const catalog = createAtlasRuntimeCatalog(root);
+    const activeSet = async () => {
+      const [set] = findSets(await catalog.read(), setName, "hsr");
+      return set && catalog.setDetails(set);
+    };
+    const before = await activeSet();
+    if (!before) throw new Error("旧版星铁遗器测试数据未加载。");
+    expect(before?.parts).toHaveLength(4);
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "hsr=relicset"] },
+    });
+    live = "4.7";
+    requests.length = 0;
+    const owner = { atlasMaintenance: true } as const;
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    expect(requests).toEqual([]);
+
+    id = "102";
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: ["星铁遗器 101 缺少已有条目。"],
+    });
+    id = "101";
+    candidate.parts["31014"] = { name: "不同部位" };
+    Object.assign(candidate.parts, { "31015": candidate.parts["31014"] });
+    Reflect.deleteProperty(candidate.parts, "31014");
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: ["星铁遗器 101 缺少已有部位或套装效果。"],
+    });
+    candidate = structuredClone(original);
+    iconMissing = true;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("更新未完成");
+    iconMissing = false;
+    detailMismatch = true;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("更新未完成");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    expect(await activeSet()).toEqual(before);
+    detailMismatch = false;
+    requests.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(await activeSet()).toEqual({ ...before, version: "4.7" });
+    expect(requests).toEqual([
+      "https://static.nanoka.cc/hsr/4.7/relicset.json",
+      "https://static.nanoka.cc/hsr/4.7/zh/relicset/101.json",
+      "https://static.nanoka.cc/assets/hsr/itemfigures/71000.webp",
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

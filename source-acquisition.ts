@@ -31,6 +31,7 @@ const pages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
+  "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
   "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
@@ -107,6 +108,16 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
+    if (category === "hsr/relicset") {
+      const match = typeof icon === "string" && /^SpriteOutput\/ItemIcon\/([1-9]\d{0,9})\.png$/u.exec(icon);
+      const effects = object(list.set);
+      if (!match || !Object.hasOwn(effects, "2") ||
+          Object.entries(effects).some(([count, value]) => {
+            const { zh, ParamList } = object(value);
+            return (count !== "2" && count !== "4") || !Array.isArray(ParamList) || !effectText(zh, ParamList);
+          })) throw new Error("星铁遗器来源索引条目结构无效。");
+      return { id, list, name, rarity: "未分类", iconName: `itemfigures/${match[1]}` };
+    }
     if (category === "hsr/lightcone") {
       const rarity = typeof rank === "string" ? lightconeRarities.get(rank) : undefined;
       if (!rarity || typeof list.baseType !== "string" || !lightconePaths.has(list.baseType)) {
@@ -237,6 +248,20 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   const item = object(detail);
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
+  if (category === "hsr/relicset") {
+    const listed = object(list.set);
+    const effects = object(item.require_num);
+    const parts = Object.entries(object(item.parts));
+    return item.icon === list.icon && parts.length === (Object.hasOwn(listed, "4") ? 4 : 2) &&
+      parts.every(([key, value]) => /^[1-9]\d{0,9}$/u.test(key) && label(object(value).name)) &&
+      Object.keys(effects).length === Object.keys(listed).length &&
+      Object.entries(listed).every(([count, value]) => {
+        const summary = object(value);
+        const { desc, param_list } = object(effects[count]);
+        return Array.isArray(param_list) && summary.zh === desc &&
+          JSON.stringify(summary.ParamList) === JSON.stringify(param_list);
+      });
+  }
   if (category === "gi/weapon") return genshinWeaponDetail(item, id, list);
   if (category === "zzz/equipment") {
     const { name: sourceName, desc2, desc4 } = object(list.zh);
@@ -358,6 +383,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
           const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
           if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error(`${folder}来源图标缺失（${id}）。`);
+          if (!icon && category === "hsr/relicset") throw new Error(`星铁遗器来源图标缺失（${id}）。`);
           if (!icon && localized) throw new Error(`${folder}来源图标缺失（${id}）。`);
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
             throw new Error(`原神武器来源图标缺失（${id}）。`);
