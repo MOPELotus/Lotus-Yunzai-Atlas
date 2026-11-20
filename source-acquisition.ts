@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { branchAndBladeIcon, effectText, label, object } from "./source-values.ts";
+import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
 import { readAchievementCategories } from "./achievements.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
@@ -39,6 +40,9 @@ const pages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
+  "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "Elite Group", folder: "星铁精英组", timeout: 60_000, maxRecords: 4096 },
+  "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "Difficulty Group", folder: "星铁难度组", timeout: 60_000, maxRecords: 4096 },
+  "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: "星铁无限精英组", timeout: 60_000, maxRecords: 4096 },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
@@ -115,8 +119,22 @@ function monsterStatsIndexRow(value: Record<string, unknown>): boolean {
 }
 
 function sourceIndex(category: SourcePage, value: unknown) {
+  const { folder, maxRecords, pageId } = pages[category];
+  if (isMonsterGroupPage(pageId)) {
+    if (!Array.isArray(value) || !value.length || value.length > maxRecords) {
+      throw new Error(`${folder}索引必须是完整数组。`);
+    }
+    const keys = new Set<string>();
+    return value.map((row, position) => {
+      const key = monsterGroupKey(pageId, row);
+      if (!key || keys.has(key)) throw new Error(`${folder}存在结构错误或重复主键（第 ${position} 项）。`);
+      keys.add(key);
+      const id = String(position);
+      return { id, list: object(row), name: id, rarity: "未分类", rank: undefined, iconName: undefined, pathName: undefined };
+    });
+  }
+
   const entries = Object.entries(object(value));
-  const { folder, maxRecords } = pages[category];
   if (entries.length === 0 || entries.length > maxRecords) throw new Error(`${folder}索引条目数无效。`);
   if (category === "zzz/achievement/achievement") {
     const tables = ["category", "achievement", "mutual_type"];
@@ -406,7 +424,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
   await mkdir(target, { mode: 0o700 });
   try {
     const localized = pageId === "achievement/achievement";
-    const indexOnly = localized || pageId === "monstervalue";
+    const indexOnly = localized || pageId === "monstervalue" || isMonsterGroupPage(pageId);
     const sourceLocale = localized ? locale : null;
     const localeMode = localized ? "path" : "embedded";
     const sourcePath = `${version}/${localized ? locale + "/" : ""}${pageId}.json`;

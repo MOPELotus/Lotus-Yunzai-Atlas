@@ -1,5 +1,6 @@
 import type { Game } from "./catalog.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes } from "./source-transport.ts";
+import { isMonsterGroupPage } from "./monster-group-data.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
@@ -95,7 +96,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       continue;
     }
     const requireLive = (game === "zzz" && (pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
-      (game === "hsr" && (pageId === "relicset" || pageId === "monstervalue")) || (game === "gi" && pageId === "artifact");
+      (game === "hsr" && (pageId === "relicset" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
     const target = requireLive ? publishedVersion(manifest, game) : targetVersion(manifest, game);
     entries.push(planVersionedPage(current, local, target));
   }

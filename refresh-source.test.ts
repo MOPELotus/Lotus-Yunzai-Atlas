@@ -834,3 +834,74 @@ test("星铁敌人数值更新只读正式索引并保留已有敌人、变体�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test.each(["EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"] as const)(
+  "星铁 %s 保留原组键与字段，允许重排或插入",
+  async (pageId) => {
+    const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-group-refresh-"));
+    const root = join(work, "atlas");
+    const selection = `hsr/${pageId}` as const;
+    const stats = { AttackRatio: 1, DefenceRatio: 1, HPRatio: 1, SpeedRatio: 1, StanceRatio: 1 };
+    const hard = pageId === "HardLevelGroup";
+    const row = (id: number, level: number) => hard
+      ? { ...stats, HardLevelGroup: id, Level: level, CombatPowerList: [1, 2, 3, 4], StatusResistance: 0.2 }
+      : { ...stats, EliteGroup: id };
+    const first = row(11, 1);
+    const second = row(hard ? 11 : 12, 2);
+    const added = row(13, 1);
+    let candidate = [first, second];
+    let live = "4.6";
+    const requests: string[] = [];
+    const request = async (url: string) => {
+      requests.push(url);
+      if (url !== `https://static.nanoka.cc/hsr/${live}/${pageId}.json`) throw new Error(`不应请求 ${url}`);
+      return Response.json(candidate);
+    };
+    try {
+      await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
+      const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+      const { commands } = createAtlasMaintenance(root, {
+        manifest, request, updateConfig: { update_args: ["--pages", `hsr=${pageId}`] },
+      });
+      const owner = { atlasMaintenance: true } as const;
+      live = "4.7";
+      requests.length = 0;
+      expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+      expect(requests).toEqual([]);
+
+      candidate = [second, added];
+      expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+        status: "invalid", issues: [expect.stringContaining(`${hard ? "11/1" : "11"} 缺少已有条目`)],
+      });
+      candidate = [added, first, first];
+      await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("重复主键");
+      candidate = [{ ...first, HPRatio: -1 }, second];
+      await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("结构错误");
+      if (hard) {
+        const withoutStatus = { ...first };
+        Reflect.deleteProperty(withoutStatus, "StatusResistance");
+        candidate = [second, added, withoutStatus];
+        expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+          status: "invalid", issues: [expect.stringContaining("11/1 缺少已有字段")],
+        });
+      }
+      expect(await readAtlasSnapshotVersion(root)).toBeNull();
+
+      candidate = [added, second, { ...first, AttackRatio: 1.1 }];
+      requests.length = 0;
+      expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+      expect(await readAtlasSnapshotVersion(root)).toBe(1);
+      const published = join(root, "snapshots/1/data");
+      const map = await Bun.file(join(published, "map.json")).json();
+      const page = map.games.hsr.locales.zh.pages[pageId];
+      expect(Object.keys(page.records)).toEqual(["0", "1", "2"]);
+      for (const [position, row] of candidate.entries()) {
+        const record = await Bun.file(join(published, page.records[position].path)).json();
+        expect(record.content).toEqual({ list: row, detail: null });
+        expect(record.meta.images).toEqual([]);
+      }
+      expect(requests).toEqual([`https://static.nanoka.cc/hsr/4.7/${pageId}.json`]);
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
