@@ -15,6 +15,7 @@ import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const itemIcons = ["icon", "detail.icon"] as const;
 const sourcePages = {
+  "zzz/character": { game: "zzz", pageId: "character", title: "绝区零角色", iconFields: [] },
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "邦布", iconFields: itemIcons },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "音擎", iconFields: itemIcons },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
@@ -108,7 +109,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const maze = pageId === "maze" ? mazeSourceOutline(content.detail, typeof name === "string" ? name : "") : undefined;
     if (pageId === "maze" && !maze) throw new Error(`混沌回忆 ${id} 关卡身份或结构无效。`);
     assets.set(key, { name, window, maze, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
-      icons: mode || pageId === "artifact" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
+      icons: mode || pageId === "artifact" || pageId === "character" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
     version: "", sourceUrl: "", sources: achievementSources,
@@ -143,7 +144,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "character" || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;
@@ -152,6 +153,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       (next.window?.from !== "live" || old.window.begin !== next.window.begin || old.window.end !== next.window.end)))) {
       issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
     }
+    if (pageId === "character" && old.name !== next.name) issues.push(`${title} ${id} 与已有角色身份不符。`);
     if (old.parts?.some(part => !next.parts?.includes(part)) || old.effects?.some(effect => !next.effects?.includes(effect))) {
       issues.push(`${title} ${id} 缺少已有部位或套装效果。`);
     }

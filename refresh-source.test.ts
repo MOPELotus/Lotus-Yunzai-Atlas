@@ -1067,3 +1067,64 @@ test("混沌回忆更新保留实装窗口、历史期次和同版战斗倍率�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("绝区零角色只从正式版更新，已有条目、等级和原图必须完整", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "lotus-atlas-zzz-character-"));
+  const root = join(workspace, "atlas");
+  try {
+    const old = "3.2";
+    const live = "3.3";
+    const icon = "IconRole01";
+    const role = { zh: "安比", rank: 3, icon, code: "Anby" };
+    const second = { zh: "比利", rank: 3, icon: "IconRole04", code: "Billy" };
+    const level = Object.fromEntries(Array.from({ length: 6 }, (_, i) =>
+      [i + 1, { level_min: i * 10, level_max: (i + 1) * 10, hp_max: 0, attack: 0, defence: 0 }]));
+    const stats = { hp_max: 603, hp_growth: 818426, attack: 95, attack_growth: 54230, defence: 49, defence_growth: 66882,
+      crit: 500, crit_damage: 5000 };
+    let failure: "record" | "rank" | "portrait" | "mindscape" | undefined;
+    const urls: string[] = [];
+    const request = async (url: string) => {
+      urls.push(url);
+      if (url.endsWith("/character.json")) return Response.json(failure === "record" ? { "1061": second }
+        : { "1011": role, ...(url.includes("/3.3/") ? { "1061": second } : {}) });
+      const detail = /\/character\/(1011|1061).json$/u.exec(url);
+      if (detail) {
+        const id = Number(detail[1]);
+        const listed = id === 1011 ? role : second;
+        return Response.json({ id, name: listed.zh, icon: listed.icon, code_name: listed.code.toUpperCase(),
+          rarity: failure === "rank" ? 4 : 3, stats, level, partner_info: { inter_knot_icon: "IconInterKnotRole0001" },
+          skill: { basic: {} } });
+      }
+      if (failure === "portrait" && url.endsWith("/IconRole01.webp") || failure === "mindscape" && url.endsWith("/Mindscape_1011_1.webp")) return missing();
+      return new Response(new Uint8Array(webp));
+    };
+    await acquireAtlasSource(root, [{ game: "zzz", pageId: "character", version: old }], undefined, request);
+    urls.length = 0;
+    const selection = "zzz/character" as const;
+    const manifest = async () => ({ zzz: { live, latest: "3.4.1+20000001", available: [old, live, "3.4.1+20000001"] } });
+    for (const [mode, message] of [["record", "缺少已有条目"], ["mindscape", "缺少已下载图标"]] as const) {
+      failure = mode;
+      const result = await refreshAtlasSource(root, { selection, manifest, request });
+      expect(result).toMatchObject({ status: "invalid", issues: expect.arrayContaining([expect.stringContaining(message)]) });
+      expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    }
+    for (const [mode, message] of [["rank", "身份或等级不符"], ["portrait", "来源原图缺失"]] as const) {
+      failure = mode;
+      await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow(message);
+      expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    }
+    failure = undefined;
+    const { commands } = createAtlasMaintenance(root, { updateConfig: { update_args: ["--page", "zzz=character"] }, manifest, request });
+    expect(await commands["#检查图鉴更新"]("", { atlasMaintenance: true })).toContain(`${old} → ${live}`);
+    expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain(`绝区零角色 · 已更新至 ${live}`);
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(urls.some(url => url.includes("3.4.1+20000001"))).toBe(false);
+    const catalog = createAtlasRuntimeCatalog(root);
+    const page = (await catalog.read()).pages.find(page => page.game === "zzz" && page.kind === "character");
+    expect(page?.entries.map(entry => entry.id)).toEqual(["1011", "1061"]);
+    const details = await catalog.roleDetails(page!.entries[0]!);
+    expect(details?.overview).toMatchObject({ rarity: "A级", artwork: "gallery/zzz/IconRole01.webp" });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
