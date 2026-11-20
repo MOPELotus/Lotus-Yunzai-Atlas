@@ -9,6 +9,7 @@ import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, find
 import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
+import { atlasHelp, atlasHelpAliases } from "./help.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findMonsters } from "./catalog.ts";
@@ -538,6 +539,7 @@ export const apps = traditionalAtlasApps((argument, kind, game) => {
 const atlas = {
   aliases: {
     ...atlasMaintenanceAliases,
+    ...atlasHelpAliases,
     "图鉴": "#图鉴", "#荷花图鉴": "#图鉴", "荷花图鉴": "#图鉴", "#Lotus图鉴": "#图鉴", "Lotus图鉴": "#图鉴",
     "#lotus图鉴": "#图鉴", "lotus图鉴": "#图鉴",
     "图鉴状态": "#图鉴状态", "#荷花图鉴状态": "#图鉴状态", "荷花图鉴状态": "#图鉴状态",
@@ -601,6 +603,7 @@ const atlas = {
     "#成就图鉴": achievementQuery,
     "#成就分类": achievementCategoryQuery,
     "#挑战图鉴": challengeQuery,
+    "#图鉴帮助": atlasHelp,
     "#本期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     "#本期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
     "#本期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
