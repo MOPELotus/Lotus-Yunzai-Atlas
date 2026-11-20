@@ -1,11 +1,11 @@
 import type { Game } from "./catalog.ts";
+import { atlasSourceOrigin, readAtlasSourceBytes } from "./source-transport.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
-export const atlasManifestUrl = "https://static.nanoka.cc/manifest.json";
+export const atlasManifestUrl = `${atlasSourceOrigin}/manifest.json`;
 
 const maxManifestBytes = 1024 * 1024;
-const manifestTimeoutMs = 10_000;
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 
 const pageIds = {
@@ -111,31 +111,9 @@ export function planPublishedZzzRefresh(manifest: unknown, local: AtlasCandidate
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {
-  const timeout = AbortSignal.timeout(manifestTimeoutMs);
-  const response = await fetch(atlasManifestUrl, {
-    redirect: "error", credentials: "omit", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok || !response.body) {
-    await response.body?.cancel().catch(() => {});
-    throw new Error("图鉴版本清单不可用。");
-  }
-  const reader = response.body.getReader();
-  try {
-    let size = 0;
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maxManifestBytes) throw new Error("图鉴版本清单超出大小上限。");
-      chunks.push(value);
-    }
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))) as unknown;
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
+  const bytes = await readAtlasSourceBytes(atlasManifestUrl, "application/json", maxManifestBytes, false, signal, fetch, { retry: true });
+  if (!bytes) throw new Error("图鉴版本清单不可用。");
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
 }
 
 if (import.meta.main) {

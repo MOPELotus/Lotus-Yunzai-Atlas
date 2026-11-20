@@ -75,7 +75,7 @@ export interface AtlasAcquiredSource {
 }
 
 async function sourceJson(url: string, optional: boolean, signal: AbortSignal, request: AtlasSourceFetch, limit = maxJsonBytes) {
-  const bytes = await readAtlasSourceBytes(url, "application/json", limit, optional, signal, request);
+  const bytes = await readAtlasSourceBytes(url, "application/json", limit, optional, signal, request, { retry: true });
   return bytes === undefined ? undefined : JSON.parse(utf8.decode(bytes)) as unknown;
 }
 
@@ -370,7 +370,7 @@ async function readIcon(name: string, paths: readonly string[], category: Source
   const localPath = `gallery/${game}/${name}.webp`;
   for (const path of paths) {
     const remoteUrl = `${atlasSourceOrigin}/assets/${game}/${path}.webp`;
-    const bytes = await readAtlasSourceBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request);
+    const bytes = await readAtlasSourceBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request, { retry: true });
     if (!bytes) continue;
     if (!isAtlasSourceWebp(bytes)) throw new Error(`${folder}来源图标不是有效的 WebP 文件。`);
     await mkdir(dirname(join(target, localPath)), { recursive: true });
