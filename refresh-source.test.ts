@@ -449,7 +449,7 @@ test("驱动盘来源未正式发布、缺原图或丢失既有资料时保留�
   })).rejects.toThrow("详情与来源索引");
   expect(await run(discSource(discLive, [34200]))).toMatchObject({ status: "invalid", issues: ["驱动盘 31000 缺少已有套装资料。"] });
   expect(await readAtlasSnapshotVersion(root)).toBeNull();
-  expect(await readdir(workspace)).toEqual(["atlas", "drive-disc"]);
+  expect((await readdir(workspace)).sort()).toEqual(["atlas", "drive-disc"]);
 }));
 
 test("刷新 CLI 接受已支持的游戏和分类组合", () => fixture(async (workspace) => {
