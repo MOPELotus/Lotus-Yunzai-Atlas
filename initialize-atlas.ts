@@ -34,20 +34,40 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
 }
 
 if (import.meta.main) {
-  const [root, source, ...extra] = Bun.argv.slice(2);
-  if (!root || extra.length) {
-    console.error("用法：bun initialize-atlas.ts <已有的本地图鉴目标目录> [包含 data/map.json 和 gallery/ 的原图鉴导出目录]");
+  const [root, mode, workspace, ...extra] = Bun.argv.slice(2);
+  const publicData = mode === "--public";
+  if (!root || extra.length || (publicData ? !workspace : workspace !== undefined)) {
+    console.error("用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录]");
     process.exitCode = 2;
   } else {
+    const controller = new AbortController();
+    const stop = () => controller.abort(new Error("图鉴初始化已中止，下载工作目录已保留。"));
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
     try {
-      const donor = source ?? await findLegacyAtlasExport(root);
-      if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");
-      const result = await initializeAtlas(root, donor);
+      let result: AtlasPublication;
+      if (publicData) {
+        const current = await readAtlasSnapshotVersion(root);
+        if (current !== null) result = { status: "stale", current };
+        else if (await hasLegacyAtlasData(root)) result = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
+        else {
+          const { downloadLegacyAtlas } = await import("./download-legacy-atlas.ts");
+          result = await downloadLegacyAtlas(workspace!, root,
+            donor => initializeAtlas(root, donor, controller.signal), controller.signal);
+        }
+      } else {
+        const donor = mode ?? await findLegacyAtlasExport(root);
+        if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");
+        result = await initializeAtlas(root, donor, controller.signal);
+      }
       console.log(JSON.stringify(result, null, 2));
       if (result.status !== "published") process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法从本地原图鉴导出初始化。");
+      console.error(error instanceof Error ? error.message : "无法从原图鉴导出初始化。");
       process.exitCode = 1;
+    } finally {
+      process.removeListener("SIGINT", stop);
+      process.removeListener("SIGTERM", stop);
     }
   }
 }

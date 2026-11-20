@@ -33,6 +33,17 @@ bun plugins/atlas/initialize-atlas.ts data/atlas
 
 发现两份不同的旧导出时，在命令最后指定要迁入的导出根目录。根目录需要含 `data/map.json` 和 `gallery/`。原位置只读，校验通过后才在主目录发布快照。已有主数据时初始化会退出。
 
+## 从公网准备首版
+
+空安装可使用独立的工作目录准备固定首版。此命令需要 Git、Node.js 及提供 Yarn 的 Corepack。
+
+```sh
+mkdir -p data/atlas
+bun plugins/atlas/initialize-atlas.ts data/atlas --public /path/to/atlas-download
+```
+
+原导出程序按三款游戏的固定版本逐类获取简体中文索引、详情和原图，素材请求仅访问原版 Nanoka 域名，无需账号。网络中断后可用同一命令继续，保留已下载图片及完整的分类。初始化校验全部 29 类、条目、详情和原图后，才在目标目录原子发布首版。下载工作目录须在发布目录之外。[原导出程序的固定提交](https://github.com/MOPELotus/nanoka-atlas-backend/tree/0496f9cf725d815b89f118b30f681cae82ad2f4e)
+
 ## 详情候选队列
 
 ```sh
