@@ -35,10 +35,11 @@ function numbered(value: unknown) {
     ? [{ key: Number(key), row: object(row) }] : []);
 }
 
-function refinement(rank: number, name: unknown, source: unknown, params: unknown): WeaponDetails["refinements"] {
+function refinement(rank: number, name: unknown, source: unknown, params: unknown,
+  truncateInteger = false): WeaponDetails["refinements"] {
   if (!Number.isInteger(rank) || rank < 1 || rank > 5) return [];
   const title = label(name);
-  const description = effectText(source, Array.isArray(params) ? params : undefined, true);
+  const description = effectText(source, Array.isArray(params) ? params : undefined, true, truncateInteger);
   return title || description ? [{ rank, name: title, description }] : [];
 }
 
@@ -90,7 +91,7 @@ function starRail(detail: Record<string, unknown>) {
   });
   const effect = object(detail.refinements);
   const refinements = numbered(effect.level).flatMap(({ key, row }) =>
-    refinement(row.level === undefined ? key : sourceNumber(row.level) ?? 0, effect.name, effect.desc, row.param_list));
+    refinement(row.level === undefined ? key : sourceNumber(row.level) ?? 0, effect.name, effect.desc, row.param_list, true));
   return { stats, refinements };
 }
 

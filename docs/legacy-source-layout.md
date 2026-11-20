@@ -88,3 +88,5 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 ## 装备旧指令和别名
 
 旧版会为武器、光锥和音擎的准确名称生成可省略「图鉴」的捷径。宿主只对相应游戏的唯一装备记录处理裸捷径。武器和光锥的别名分别摘自固定版 Miao-Plugin 的 [原神武器表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-gs/weapon/alias.js) 和 [星铁光锥表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-sr/weapon/alias.js)，按各自分类中的名称核对。原许可随附于 [LICENSES/Miao-Plugin-MIT.txt](../LICENSES/Miao-Plugin-MIT.txt)。
+
+光锥叠影沿用游戏文本的格式占位。整数占位向零截断，带小数位的占位保留来源指定精度。嘉果的整数回能和同一种心情的整数治疗加成按游戏图鉴显示，「片刻，留在眼底」保留 0.36% 等两位小数。此规则仅用于星铁光锥叠影。

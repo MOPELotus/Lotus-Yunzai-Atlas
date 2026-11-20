@@ -111,3 +111,19 @@ test("音擎按等级和晋阶数据计算首末属性，改装保留自身效�
     { rank: 5, name: "技能", description: "冰属性伤害提升50%。" },
   ]);
 });
+
+test("光锥叠影的整数占位按游戏截断，保留浮点占位显示精度", () => {
+  const details = normalizeWeapon({ ...entry, game: "hsr" }, { detail: {
+    refinements: { name: "测试", desc: "恢复#1[i]点能量，治疗量提高#2[i]%，倍率#3[f2]%，阈值#4[i]%。",
+      level: { 2: { param_list: [7.5, 0.125, 0.0036, 0.29] }, 4: { param_list: [10.5, 0.175, 0.0054, 0.27] } },
+    },
+  } }, []);
+  expect(details?.refinements).toEqual([
+    { rank: 2, name: "测试", description: "恢复7点能量，治疗量提高12%，倍率0.36%，阈值29%。" },
+    { rank: 4, name: "测试", description: "恢复10点能量，治疗量提高17%，倍率0.54%，阈值27%。" },
+  ]);
+  const weapon = normalizeWeapon(entry, { detail: {
+    refinement: { 1: { name: "别的游戏", desc: "比例#1[i]%。", param_list: [0.125] } },
+  } }, []);
+  expect(weapon?.refinements[0]?.description).toBe("比例13%。");
+});

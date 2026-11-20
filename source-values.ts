@@ -37,7 +37,7 @@ export function galleryArtwork(images: unknown, game: string) {
 }
 
 export function effectText(
-  value: unknown, parameters?: readonly unknown[], bareParameters = false,
+  value: unknown, parameters?: readonly unknown[], bareParameters = false, truncateInteger = false,
 ): string {
   const text = label(value).replace(/<\/?(?:unbreak|color(?:=[^>]*)?|u)>/giu, "").replace(/\\n/gu, "\n");
   const resolved = text.replace(/#(\d+)(?:\[(i|m|f[0-4])\])?(%?)(?![\d%\[])/gu,
@@ -45,7 +45,13 @@ export function effectText(
       const parameter = parameters?.[Number(index) - 1];
       if (typeof parameter !== "number" || !Number.isFinite(parameter)) return placeholder;
       // A bare percentage is stored in percentage points, a typed one as a ratio.
-      if (format === "i") return (parameter * (unit ? 100 : 1)).toFixed(0) + unit;
+      if (format === "i") {
+        const value = parameter * (unit ? 100 : 1);
+        if (!truncateInteger) return value.toFixed(0) + unit;
+        // Neutralize binary rounding noise in ratios such as 0.29 before truncating.
+        const tolerance = Number.EPSILON * Math.max(1, Math.abs(value));
+        return Math.trunc(value + Math.sign(value) * tolerance) + unit;
+      }
       if (typeof format === "string" && format.startsWith("f")) {
         return (parameter * (unit ? 100 : 1)).toFixed(Number(format.slice(1))) + unit;
       }
