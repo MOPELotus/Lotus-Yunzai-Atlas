@@ -179,7 +179,10 @@ test("辉卷之月 123 仅补已有独立证据的房间阵容", async () => {
   const rendered = await normalizeAbyss(entry123, source, [], lookup);
   expect(rendered?.rooms.map(({ sides }) => sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork])))).toEqual([
-    [[], []],
+    [[["镀金旅团·魔岩役使", 1, "gallery/gi/25410101.webp"], ["凝冰戍卫", 1, "gallery/gi/25135101.webp"],
+      ["凝冰秘法师", 2, "gallery/gi/25135001.webp"], ["苍遒的木灵长", 1, "gallery/gi/25137001.webp"],
+      ["幼嫩的分节树", 2, "gallery/gi/25138001.webp"]],
+      [["浊水粉碎幻灵", 1, "gallery/gi/20051001.webp"], ["历经百战的浊水喷吐幻灵", 1, "gallery/gi/UI_MonsterIcon_Necalevia_Big.webp"]]],
     [[["建造特化型机关·荒", 1, "gallery/gi/UI_MonsterIcon_MachinaIustitia_Excavator.webp"],
       ["遗迹龙兽·地巡", 1, "gallery/gi/24030201.webp"]],
       [["荒野幽徒", 2, "gallery/gi/22130001.webp"], ["荒野狂狩士", 1, "gallery/gi/22131001.webp"]]],

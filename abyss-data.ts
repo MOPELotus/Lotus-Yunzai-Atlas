@@ -113,6 +113,14 @@ const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
 const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
   // https://timesaver.gg/blog/genshin-spiral-abyss-floor-11-7-0
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  // Tower 109 preserves the veteran Phantasm portrait under its exact combat name.
+  "11-2": { level: 90, first: [
+    ["25410101", "镀金旅团·魔岩役使", 1], ["25135101", "凝冰戍卫", 1], ["25135001", "凝冰秘法师", 2],
+    ["25137001", "苍遒的木灵长", 1], ["25138001", "幼嫩的分节树", 2],
+  ], second: [
+    ["20051001", "浊水粉碎幻灵", 1],
+    [undefined, "历经百战的浊水喷吐幻灵", 1, "gallery/gi/UI_MonsterIcon_Necalevia_Big.webp"],
+  ] },
   // The Ousia Mek's portrait is preserved in Tower 121 and 122 under the exact combat name.
   "11-3": { level: 92, first: [
     [undefined, "建造特化型机关·荒", 1, "gallery/gi/UI_MonsterIcon_MachinaIustitia_Excavator.webp"],
