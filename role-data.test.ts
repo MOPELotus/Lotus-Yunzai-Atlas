@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, type Character, type Game } from "./catalog.ts";
-import { normalizeRoleDetails } from "./role-data.ts";
+import { characterGalleryName, normalizeRoleDetails } from "./role-data.ts";
 
 const entry = (game: Game): Character => ({ game, id: "42", version: "1", name: "角色样例", rarity: "五星", path: "items/role.json" });
 
@@ -233,4 +233,20 @@ test("角色总览保留同角色、同游戏的原图加载备选及其优先�
     artwork: "gallery/zzz/card.webp", portraitFallbacks: ["gallery/zzz/role.webp"],
     icon: "gallery/zzz/detail.webp", iconFallback: "gallery/zzz/index.webp",
   });
+});
+
+test("图库文件夹按游戏与已核形态选择，同名记录无法互借立绘", () => {
+  const base = { game: "gi", id: "10000089", name: "芙宁娜", path: "", rarity: "", version: "7.2" } as const;
+  const sameName = { ...base, id: "10000090", name: "芙寧娜" };
+  expect(characterGalleryName(base, [base, { ...sameName, game: "hsr", name: base.name }])).toBe(base.name);
+  expect(characterGalleryName(base, [base, { ...sameName, name: base.name }])).toBeUndefined();
+  const trailblazer = { ...base, game: "hsr", id: "8008", name: "{NICKNAME}" } as const;
+  const sibling = { ...trailblazer, id: "8007" };
+  expect(characterGalleryName(trailblazer, [sibling, trailblazer])).toBe("星·记忆");
+  expect(characterGalleryName(sibling, [sibling, trailblazer])).toBe("穹·记忆");
+  expect(characterGalleryName({ ...trailblazer, id: "8099" }, [])).toBeUndefined();
+  const march = { ...trailblazer, id: "1001", name: "三月七" };
+  const hunt = { ...march, id: "1224" };
+  expect(characterGalleryName(march, [march, hunt])).toBe("三月七");
+  expect(characterGalleryName(hunt, [march, hunt])).toBe("三月七·巡猎");
 });

@@ -475,6 +475,24 @@ function overviewStats(game: Game, detail: RecordValue) {
   return stats.length ? stats : undefined;
 }
 
+// The existing Star Rail gallery uses the roster's gender and path names for the Trailblazer.
+const trailblazerGalleryNames = new Map([
+  ["8001", "穹·毁灭"], ["8002", "星·毁灭"], ["8003", "穹·存护"], ["8004", "星·存护"],
+  ["8005", "穹·同谐"], ["8006", "星·同谐"], ["8007", "穹·记忆"], ["8008", "星·记忆"],
+  ["8009", "穹·欢愉"], ["8010", "星·欢愉"],
+]);
+
+export function characterGalleryName(character: Character, roster: readonly Character[]): string | undefined {
+  const { game, id, name } = character;
+  if (game === "hsr") {
+    if (name === "{NICKNAME}") return trailblazerGalleryNames.get(id);
+    if (name === "三月七" && id === "1001") return name;
+    if (name === "三月七" && id === "1224") return "三月七·巡猎";
+  }
+  const folded = name.normalize("NFKC").toLowerCase();
+  if (roster.filter(entry => entry.game === game && entry.name.normalize("NFKC").toLowerCase() === folded).length === 1) return name;
+}
+
 export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
   const { game, id, version, name } = character;
   const detail = object(content.detail);

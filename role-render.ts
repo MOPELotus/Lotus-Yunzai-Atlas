@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
-import { basename, dirname, join, sep } from "node:path";
+import { open, readdir, realpath } from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
@@ -25,6 +25,7 @@ export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
   readonly scale?: number;
   readonly assetRoot?: string;
+  readonly galleryName?: string;
 }
 
 const width = 800;
@@ -273,6 +274,54 @@ async function localAsset(path: string, maxBytes: number): Promise<Buffer | unde
   }
 }
 
+const characterGalleryDirectories: Readonly<Record<Game, string>> = {
+  gi: "gs-character", hsr: "sr-character", zzz: "zzz-character",
+};
+const characterGalleryExtensions = [".webp", ".png", ".jpg", ".jpeg"];
+const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function isRaster(data: Buffer) {
+  return data.subarray(0, 8).equals(pngSignature) ||
+    data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WEBP" ||
+    data[0] === 255 && data[1] === 216;
+}
+
+export async function readCharacterGalleryPortrait(game: Game, name: string | undefined,
+  configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim()): Promise<Image | undefined> {
+  if (!name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return;
+  const roots = configured ? [{ root: configured, paths: [characterGalleryDirectories[game]] }] : [];
+  if (game === "zzz") {
+    const legacyRoot = Bun.env.LOTUS_ZZZ_LEGACY_RESOURCES_DIR?.trim();
+    if (legacyRoot) roots.push({ root: legacyRoot, paths: ["images/panel"] });
+  } else {
+    const paths = game === "gi" ? ["profile/normal-character", "profile"] : ["profile/normal-character"];
+    for (const root of themeDirectories) roots.push({ root, paths });
+  }
+  for (const { root, paths } of roots) {
+    const resolved = await realpath(resolve(root)).catch(() => undefined);
+    if (!resolved) continue;
+    for (const path of paths) {
+      const base = join(resolved, path);
+      if (await realpath(base).catch(() => undefined) !== base) continue;
+      const folder = join(base, name);
+      const children = await realpath(folder).catch(() => undefined) === folder
+        ? await readdir(folder, { withFileTypes: true }).catch(() => []) : [];
+      const candidates = [
+        ...characterGalleryExtensions.map(extension => join(base, name + extension)),
+        ...children.filter(child => child.isFile() && /\.(?:webp|png|jpe?g)$/iu.test(child.name))
+          .map(child => join(folder, child.name)),
+      ];
+      while (candidates.length) {
+        const [candidate] = candidates.splice(randomInt(candidates.length), 1);
+        const data = await localAsset(candidate!, maxImageBytes).catch(() => undefined);
+        if (!data || !isRaster(data)) continue;
+        const image = await loadImage(data).catch(() => undefined);
+        if (image?.width && image.height) return image;
+      }
+    }
+  }
+}
+
 async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undefined> {
   if (role.game !== "gi") return;
   const id = role.id.split("-", 1)[0];
@@ -363,12 +412,13 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
   const element = role.game === "gi" ? role.overview.element : undefined;
   const backdrop = element ?? backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
-  const [images, background, texture, originalPortrait] = await Promise.all([
+  const [images, background, texture, galleryPortrait, originalPortrait] = await Promise.all([
     galleryImages(role.game, [role.overview.icon, role.overview.iconFallback, role.overview.artwork,
       ...(role.overview.portraitFallbacks ?? []),
       ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
       ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
+    readCharacterGalleryPortrait(role.game, options.galleryName),
     originalGenshinPortrait(role),
     themeFonts ??= loadThemeFonts(),
   ]);
@@ -377,7 +427,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
-  const portrait = originalPortrait ?? image(role.overview.artwork) ??
+  const portrait = galleryPortrait ?? originalPortrait ?? image(role.overview.artwork) ??
     role.overview.portraitFallbacks?.map(image).find((candidate) => candidate !== undefined) ?? icon;
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
   const overview: Block[] = [];

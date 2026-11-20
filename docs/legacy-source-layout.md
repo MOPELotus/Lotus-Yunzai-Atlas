@@ -76,3 +76,7 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 ## 十月幻想真境剧诗首领补全
 
 记录 30 的已实装十月月谕数据保留第六、八幕标题与机制，但敌人预览为空。以[当期月谕实录第六幕](https://www.youtube.com/watch?v=20KjpqXJbKw&t=517s)及[第八幕](https://www.youtube.com/watch?v=20KjpqXJbKw&t=680s)核对历经百战的嵌合兽怪箭士和嵌合翼骏狮。两张原头像已经在旧快照的第 124 期深境使用，分别为 `gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp` 和 `gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp`。图鉴沿用旧快照的等级和机制，缺图时显示敌人名称。
+
+## 角色总览原画
+
+角色总览优先从 `LOTUS_CHARACTER_GALLERY_DIR` 的 `gs-character/`、`sr-character/` 或 `zzz-character/` 选择同角色原画。支持角色名文件、角色名子目录，遇到坏图继续尝试同角色候选。未匹配指定图库时，原神与星铁继续读取已安装主题的角色图库，绝区零读取旧资源的 `images/panel/`，再按原图鉴的同角色立绘与头像回退。普通同名记录保持各自原图，开拓者和三月七按已核对的性别与命途目录选图。

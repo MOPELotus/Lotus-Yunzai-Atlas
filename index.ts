@@ -1,3 +1,4 @@
+import { characterGalleryName } from "./role-data.ts";
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
   findChallengeMode, findCurrentChallenge, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
@@ -117,12 +118,12 @@ async function bangbooQuery(argument: string): Promise<AtlasReply> {
   }
 }
 
-async function characterBook(entry: AtlasEntry): Promise<AtlasReply> {
+async function characterBook(entry: AtlasEntry, galleryName: string | undefined): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
   if (!role) return characterLine(entry, true);
   try {
     const { renderRoleBook } = await import("./role-render.ts");
-    const pages = await renderRoleBook(role, { assetRoot: catalog.assetRoot(entry) });
+    const pages = await renderRoleBook(role, { assetRoot: catalog.assetRoot(entry), galleryName });
     const sections = pages.map(({ section }) => section).join(" → ");
     const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
     return { type: "forward", nodes: [title, ...pages.map(({ png }) => ({ type: "image" as const, file: png }))] };
@@ -267,7 +268,11 @@ async function traditionalQuery(
     }
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
     const first = matches[0]!;
-    if (matches.length === 1 && first.kind === "character") return characterBook(first.entry);
+    if (matches.length === 1 && first.kind === "character") {
+      const { entry } = first;
+      const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
+      return characterBook(entry, characterGalleryName(entry, roster));
+    }
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(first.entry);
       if (image) return image;
