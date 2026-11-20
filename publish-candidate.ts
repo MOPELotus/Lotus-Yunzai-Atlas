@@ -3,7 +3,8 @@ import { lstat, mkdir, readdir, readFile, realpath, rename, rmdir, stat, symlink
 import { basename, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
-import { atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
+import { atlasResetTarget, atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasPublicationPointer,
+  readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
@@ -58,17 +59,36 @@ async function lockPublication(path: string, signal?: AbortSignal): Promise<Data
   }
 }
 
-async function commitPointer(root: string, version: number, signal?: AbortSignal) {
+async function commitPointer(root: string, target: string, signal?: AbortSignal) {
   const pending = join(root, ".current-next");
   // Only writers holding the database lock touch this link. A killed writer may leave it behind.
-  if (await readAtlasSnapshotPointer(pending) !== null) await unlink(pending);
-  await symlink(atlasSnapshotTarget(version), pending, "dir");
+  if (await readAtlasPublicationPointer(pending) !== null) await unlink(pending);
+  await symlink(target, pending, "dir");
   try {
     signal?.throwIfAborted();
     await rename(pending, join(root, "current"));
   } catch (error) {
     await unlink(pending);
     throw error;
+  }
+}
+
+export async function resetAtlasSnapshot(root: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const directory = await realpath(root).catch((error: unknown) => {
+    if (errorCode(error) !== "ENOENT") throw error;
+  });
+  if (!directory) return { status: "empty" } as const;
+  const database = await lockPublication(join(directory, ".publication.sqlite"), signal);
+  if (!database) return { status: "busy" } as const;
+  try {
+    const pointer = await readAtlasPublicationPointer(join(directory, "current"));
+    if (pointer === "reset") return { status: "reset", previous: null } as const;
+    if (pointer === null && !await hasLegacyAtlasData(directory)) return { status: "empty" } as const;
+    await commitPointer(directory, atlasResetTarget, signal);
+    return { status: "reset", previous: pointer } as const;
+  } finally {
+    database.close();
   }
 }
 
@@ -102,7 +122,9 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
   const database = await lockPublication(join(directory, ".publication.sqlite"), signal);
   if (!database) return { status: "busy" };
   try {
-    const current = await readAtlasSnapshotPointer(join(directory, "current"));
+    const pointer = await readAtlasPublicationPointer(join(directory, "current"));
+    const current = pointer === "reset" ? null : pointer;
+    if (pointer === "reset" && !initialize) return { status: "stale", current };
     if (current !== expected) return { status: "stale", current };
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
 
@@ -130,7 +152,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     signal?.throwIfAborted();
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
     await promote?.();
-    await commitPointer(directory, version, signal);
+    await commitPointer(directory, atlasSnapshotTarget(version), signal);
     return { status: "published", version, directory: join(directory, atlasSnapshotTarget(version)) };
   } finally {
     database.close();
@@ -140,6 +162,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
 const existingLegacyData = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] } as const;
 
 export async function hasLegacyAtlasData(root: string): Promise<boolean> {
+  if (await readAtlasPublicationPointer(join(root, "current")) === "reset") return false;
   try {
     await lstat(join(root, "data"));
     return true;

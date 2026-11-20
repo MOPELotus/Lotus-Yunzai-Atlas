@@ -14,7 +14,7 @@ import { normalizeStarrailChallenge, type StarrailChallengeMode } from "./starra
 import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
-import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
+import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import equipmentAliasData from "./equipment-aliases.json";
 import { zzzCharacterAliases } from "./zzz-role-names.ts";
@@ -337,6 +337,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
+      if (error instanceof AtlasSnapshotReset) {
+        snapshot = undefined;
+        throw error;
+      }
       if (snapshot && !snapshot.legacy && !(error instanceof LegacyAtlasSourceConflict)) return { pages: snapshot.pages, stale: true };
       throw error;
     }

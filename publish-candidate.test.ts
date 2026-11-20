@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, readlink, realpath, rename, rm, stat, symlink, writeFil
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createAtlasRuntimeCatalog, findEquipment } from "./catalog.ts";
-import { atlasApplyStagingPrefix, publishAtlasCandidate, publishPreparedAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
+import { atlasApplyStagingPrefix, publishAtlasCandidate, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
+  resetAtlasSnapshot } from "./publish-candidate.ts";
 
 const itemPath = "items/weapon.json";
 const imagePath = "gallery/gi/weapon.webp";
@@ -100,6 +101,49 @@ test("无效发布指针保持最近可用快照，冷启动拒绝读取错误�
   expect((await createAtlasRuntimeCatalog(root).read()).pages.map(({ version }) => version)).toEqual(["10"]);
   await symlink("snapshots/2/data", pointer, "dir");
   expect(await catalog.read()).toEqual(good);
+}));
+
+test("主动重置停止读取缓存和旧 data，重建后发布为更高编号", () => fixture(async (work) => {
+  const root = join(work, "atlas");
+  const legacy = await snapshot(root, 10, "WEAPON_CLAYMORE");
+  await rename(legacy.data, join(root, "data"));
+  const current = await snapshot(root, 11);
+  const pending = await snapshot(root, 12);
+  await mkdir(join(root, "theme"));
+  await writeFile(join(root, "theme/original"), "原主题");
+  await publishAtlasCandidate(root, null, 11, pages(11));
+  const catalog = createAtlasRuntimeCatalog(root);
+  const [entry] = findEquipment(await catalog.read(), "样例剑 11", "gi");
+  expect(entry).toBeDefined();
+
+  expect(await resetAtlasSnapshot(root)).toEqual({ status: "reset", previous: 11 });
+  expect(await resetAtlasSnapshot(root)).toEqual({ status: "reset", previous: null });
+  await expect(catalog.read()).rejects.toThrow("图鉴已重置");
+  await expect(createAtlasRuntimeCatalog(root).read()).rejects.toThrow("图鉴已重置");
+  expect(await publishAtlasCandidate(root, null, 12, pages(12))).toEqual({ status: "stale", current: null });
+  expect((await catalog.equipmentFacts(entry!)).scope).toBe("单手剑");
+  expect(await Bun.file(current.image).text()).toBe("image 11");
+  expect(await Bun.file(pending.image).text()).toBe("image 12");
+  expect(await Bun.file(join(root, "theme/original")).text()).toBe("原主题");
+
+  const stage = await mkdtemp(join(work, atlasApplyStagingPrefix));
+  const candidate = await snapshot(stage, 13);
+  await rename(dirname(candidate.data), join(stage, "candidate"));
+  await rm(join(stage, "snapshots"), { recursive: true });
+  const rebuilt = await publishPreparedAtlasCandidate(root, null, join(stage, "candidate"), pages(13), undefined, true);
+  expect(rebuilt).toEqual({ status: "published", version: 13, directory: join(root, "snapshots/13/data") });
+  expect((await catalog.read()).pages.map(({ version }) => version)).toEqual(["13"]);
+  expect((await createAtlasRuntimeCatalog(root, join(root, "data")).read()).pages.map(({ version }) => version)).toEqual(["10"]);
+}));
+
+test("清空未版本化的主数据后，已经组装的旧更新不能提交", () => fixture(async (root) => {
+  const legacy = await snapshot(root, 1);
+  await rename(legacy.data, join(root, "data"));
+  const later = await snapshot(root, 2);
+  expect(await resetAtlasSnapshot(root)).toEqual({ status: "reset", previous: null });
+  expect(await publishAtlasCandidate(root, null, 2, pages(2))).toEqual({ status: "stale", current: null });
+  expect(await Bun.file(later.image).exists()).toBe(true);
+  await expect(createAtlasRuntimeCatalog(root).read()).rejects.toThrow("图鉴已重置");
 }));
 
 test("竞争发布只有一个成功，过期及较低版本保持获胜指针", () => fixture(async (root) => {

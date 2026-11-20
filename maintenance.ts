@@ -2,7 +2,8 @@ import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./
 import { realpath } from "node:fs/promises";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
   type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
-import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
+import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
+import { resetAtlasSnapshot } from "./publish-candidate.ts";
 import { fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
@@ -10,7 +11,12 @@ import { parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
-const names = [[checkCommand, "检查图鉴更新", "图鉴检查更新"], [updateCommand, "更新图鉴", "图鉴更新"]] as const;
+const resetCommand = "#重置图鉴";
+const names = [
+  [checkCommand, "检查图鉴更新", "图鉴检查更新"],
+  [updateCommand, "更新图鉴", "图鉴更新"],
+  [resetCommand, "重置图鉴", "图鉴重置", "清空图鉴"],
+] as const;
 
 export const atlasMaintenanceAliases = Object.fromEntries(names.flatMap(([target, ...words]) =>
   ["", "#"].flatMap((hash) => words.flatMap((word) => {
@@ -69,7 +75,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       if (!baseline) {
         if (!dataOverride) {
           const fallback = await discoverRuntimeAtlasDataDirectory(root).catch((error: unknown) => {
-            if (error instanceof LegacyAtlasSourceConflict) throw error;
+            if (error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset) throw error;
           });
           if (fallback?.legacy === true) return "当前图鉴只读使用旧版导出。请先运行本地初始化，再管理更新。";
         }
@@ -111,7 +117,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       if (selections.length === atlasSourceSelections.length) lines.push("其余分类尚待核对来源。");
       return lines.join("\n");
     } catch (error) {
-      if (error instanceof LegacyAtlasSourceConflict) return error.message;
+      if (error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset) return error.message;
       return signal?.aborted ? "图鉴维护已中止。" : "无法核对图鉴快照，请稍后重试。";
     } finally {
       if (kind === "update") updating = false;
@@ -124,6 +130,24 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     return run(kind, policy.version.selections);
   }
 
+  async function reset(argument: string, context: AtlasMaintenanceContext) {
+    if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以重置图鉴。";
+    if (argument) return `请直接发送 ${resetCommand}。`;
+    if (dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维管理该目录。";
+    if (updating) return "已有图鉴更新正在进行，请稍后再试。";
+    updating = true;
+    try {
+      const result = await resetAtlasSnapshot(root, signal);
+      if (result.status === "busy") return "已有图鉴发布正在进行，请稍后再试。";
+      if (result.status === "empty") return "没有可重置的主图鉴快照。";
+      return "图鉴已重置，源文件和历次快照仍可恢复。请重新初始化图鉴。";
+    } catch {
+      return signal?.aborted ? "图鉴重置已中止。" : "无法重置图鉴，保留现有资料。";
+    } finally {
+      updating = false;
+    }
+  }
+
   function scheduled(kind: AtlasScheduleKind) {
     const { cron, issue, selections } = policy[kind];
     return { cron, issue, run: () => cron ? run("update", selections) : Promise.resolve("图鉴自动更新未启用。") };
@@ -133,6 +157,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     commands: {
       [checkCommand]: (argument: string, context: AtlasMaintenanceContext) => command("check", argument, context),
       [updateCommand]: (argument: string, context: AtlasMaintenanceContext) => command("update", argument, context),
+      [resetCommand]: reset,
     },
     atlasSchedule: { version: scheduled("version"), challenge: scheduled("challenge") },
   };
