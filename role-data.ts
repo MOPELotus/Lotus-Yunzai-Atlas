@@ -61,6 +61,7 @@ export interface RoleDetails {
     readonly portraitFallbacks?: readonly string[];
     readonly iconFallback?: string;
     readonly element?: GenshinElement;
+    readonly traveler?: GenshinTraveler;
     readonly facts: readonly { label: string; value: string }[];
     readonly stats?: readonly { label: string; value: string }[];
   };
@@ -497,19 +498,27 @@ const travelerElements = new Map([
   ["6", ["geo", "岩"]], ["7", ["electro", "雷"]], ["8", ["dendro", "草"]],
 ]);
 
-function genshinTravelerName(character: Character, list: RecordValue, detail: RecordValue, element: GenshinElement | undefined) {
+interface GenshinTraveler {
+  readonly name: string;
+  readonly portraitBase?: "10000005" | "10000007";
+}
+
+function genshinTraveler(character: Character, list: RecordValue, detail: RecordValue,
+  element: GenshinElement | undefined): GenshinTraveler | undefined {
   if (character.game !== "gi" || character.name !== "旅行者" || detail.name !== character.name) return;
   const [base, suffix, extra] = character.id.split("-");
   const form = travelerForms.get(base ?? "");
   if (!form || extra !== undefined || list.icon !== form.icon || detail.icon !== form.icon) return;
   if (base === "10000134" || base === "10000135") {
     if (suffix === undefined && list.element === "None" && detail.element === "None" && detail.desc === "第三人称射击旅行者") {
-      return `旅行者·${form.name}（射击）`;
+      return { name: `旅行者·${form.name}（射击）` };
     }
     return;
   }
   const [expected, label] = travelerElements.get(suffix ?? "") ?? [];
-  if (expected && expected === element) return `旅行者·${form.name}（${label}）`;
+  if ((base === "10000005" || base === "10000007") && expected && expected === element) {
+    return { name: `旅行者·${form.name}（${label}）`, portraitBase: base };
+  }
 }
 
 export function characterGalleryName(character: Character, roster: readonly Character[]): string | undefined {
@@ -533,9 +542,11 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const fullName = label(partner.full_name);
   const verifiedName = game === "zzz" ? zzzFullNames.get(id) : undefined;
   const trailblazer = starRailTrailblazerName(character);
+  const traveler = genshinTraveler(character, list, detail, element);
   const title = verifiedName?.name === name && verifiedName.fullName === fullName ? fullName
-    : trailblazer ?? genshinTravelerName(character, list, detail, element) ?? name;
+    : trailblazer ?? traveler?.name ?? name;
   let description = text(detail.desc) ?? text(partner.profile_desc) ?? text(list.desc);
+  if (game === "hsr") description = description?.replaceAll("{NICKNAME}", "开拓者");
   if (trailblazer && description) {
     const gender = trailblazer.startsWith("星") ? "F" : "M";
     description = description.replace(/\{([FM])#([^{}]*)\}/gu, (_, speaker, alternative) => speaker === gender ? alternative : "");
@@ -554,6 +565,6 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name: title, rarity, description,
       artwork: portrait ?? icon, icon, portraitFallbacks: portraitFallbacks.length ? portraitFallbacks : undefined,
-      iconFallback, element, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
+      iconFallback, element, traveler, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };
 }

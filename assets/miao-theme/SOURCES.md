@@ -14,6 +14,8 @@
 
 原神角色沿用旧 Lotus-ReFactor 的 `resources/miao-theme/portraits/index.json` 和对应立绘。没有已登记立绘时用快照中的角色图。
 
+空和荧的常规七元素形态核对原图鉴中的角色、属性和头像 ID 后，可复用固定 Miao 版本的 `resources/meta-gs/character/空/imgs/splash.webp` 或 `荧/imgs/splash.webp`。Miao 对两位旅者都标记多元素，这两份原图与旧 Lotus-ReFactor 所存 `gi-10000005.webp`、`gi-10000007.webp` 字节一致。旧主题归档或本地 `plugins/miao-plugin` 可供只读复用，也可通过 `LOTUS_ATLAS_THEME_SOURCE_DIR` 指向旧主题。射击形态 `10000134`、`10000135` 目前只有原图鉴头像，使用独立形态的图库或立绘索引时才展示立绘。
+
 图片和字体由使用者按各自许可从本地部署提供。发布仓库保存绘图实现与来源说明。
 
 - [Miao-Plugin 固定版本素材说明](https://github.com/yoimiya-kokomi/miao-plugin/blob/1988f546f1972fd3911ca15fc1259184709f876b/README.md#L85-L89)

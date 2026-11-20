@@ -82,14 +82,28 @@ test("旅行者按同一条目确认性别、元素与射击形态，来源不�
       desc: id === "10000134" || id === "10000135" ? "第三人称射击旅行者" : "旅行者的原简介。",
     } }, "五星")?.overview;
   };
-  expect(role("10000005-4", "Anemo")).toMatchObject({ name: "旅行者·空（风）", element: "anemo" });
-  expect(role("10000007-3", "Hydro")).toMatchObject({ name: "旅行者·荧（水）", element: "hydro" });
-  expect(role("10000134", "None")?.name).toBe("旅行者·空（射击）");
-  expect(role("10000135", "None")?.name).toBe("旅行者·荧（射击）");
+  expect(role("10000005-4", "Anemo")).toMatchObject({ name: "旅行者·空（风）", element: "anemo",
+    traveler: { name: "旅行者·空（风）", portraitBase: "10000005" } });
+  expect(role("10000007-3", "Hydro")).toMatchObject({ name: "旅行者·荧（水）", element: "hydro",
+    traveler: { name: "旅行者·荧（水）", portraitBase: "10000007" } });
+  expect(role("10000134", "None")?.traveler).toEqual({ name: "旅行者·空（射击）" });
+  expect(role("10000135", "None")?.traveler).toEqual({ name: "旅行者·荧（射击）" });
   expect(role("10000007-3", "Hydro", "Pyro")?.name).toBe("旅行者");
   expect(role("10000007-3", "Hydro", "Hydro", true)?.name).toBe("旅行者");
   expect(role("10000007-3", "Pyro")?.name).toBe("旅行者");
   expect(role("10000007-3-8", "Hydro")?.name).toBe("旅行者");
+  expect(role("10000007-3", "Hydro", "Hydro", true)?.traveler).toBeUndefined();
+});
+
+test("星铁角色简介以开拓者显示原昵称宏，其他词句和未知性别保留", () => {
+  const kafka = { ...entry("hsr"), id: "1005", name: "卡芙卡" };
+  const desc = "利用言灵术，设计令{NICKNAME}吸收星核。";
+  expect(normalizeRoleDetails(kafka, { detail: { desc } }, "五星")?.overview.description)
+    .toBe("利用言灵术，设计令开拓者吸收星核。");
+  const unresolved = "{F#她}{M#他}称{NICKNAME}为同伴。";
+  expect(normalizeRoleDetails(kafka, { list: { desc: unresolved }, detail: { id: 1005 } }, "五星")?.overview.description)
+    .toBe("{F#她}{M#他}称开拓者为同伴。");
+  expect(normalizeRoleDetails(entry("gi"), { detail: { desc } }, "五星")?.overview.description).toBe(desc);
 });
 
 test("星铁开拓者只展开已核对角色原名及简介宏，并可按命途名或原 ID 查", () => {

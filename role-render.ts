@@ -2,6 +2,7 @@ import { createHash, randomInt } from "node:crypto";
 import { constants } from "node:fs";
 import { open, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
@@ -47,7 +48,10 @@ const backgrounds = [
 
 type Background = (typeof backgrounds)[number][1] | "sr";
 type ThemeAsset = `bg/bg-${Background}.webp` | "card-bg.png";
-const themeDirectories = atlasThemeDirectories(import.meta.url, Bun.env.LOTUS_ATLAS_THEME_DIR);
+const themeOverride = Bun.env.LOTUS_ATLAS_THEME_DIR?.trim();
+const themeDirectories = atlasThemeDirectories(import.meta.url, themeOverride);
+const portraitDonor = themeOverride ? undefined : Bun.env.LOTUS_ATLAS_THEME_SOURCE_DIR?.trim();
+const portraitDirectories = portraitDonor ? [...new Set([...themeDirectories, portraitDonor])] : themeDirectories;
 const themeImages = new Map<ThemeAsset, Promise<Image | undefined>>();
 let themeFonts: Promise<void> | undefined;
 
@@ -322,13 +326,16 @@ export async function readCharacterGalleryPortrait(game: Game, name: string | un
   }
 }
 
-async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undefined> {
-  if (role.game !== "gi") return;
-  const id = role.id.split("-", 1)[0];
-  if (!id || !/^[1-9]\d*$/u.test(id)) return;
+// The original Miao archive declares each of these base portraits valid across elements (`elem: "multi"`).
+const travelerPortraits = {
+  "10000005": { name: "空", digest: "a8755943c92d8027637b5b9bef17090daf89e838cf544c8307671f8c98ed20b6" },
+  "10000007": { name: "荧", digest: "4be7278c87656f59c5860263d6f8b8483a147bd5d04b840b0b7e76ad7b938a54" },
+} as const;
+
+async function indexedGenshinPortrait(id: string, digest?: string): Promise<Image | undefined> {
   const key = `gi-${id}`;
   const filename = `${key}.webp`;
-  for (const theme of themeDirectories) {
+  for (const theme of portraitDirectories) {
     try {
       const root = await realpath(theme);
       const directory = join(root, "portraits");
@@ -336,11 +343,24 @@ async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undef
       const index = await localAsset(join(directory, "index.json"), 1_048_576);
       if (!index || object(JSON.parse(index.toString("utf8")))[key] !== filename) continue;
       const bytes = await localAsset(join(directory, filename), maxImageBytes);
-      if (bytes) return await loadImage(bytes);
+      if (bytes && (!digest || createHash("sha256").update(bytes).digest("hex") === digest)) return await loadImage(bytes);
     } catch {
       // Missing original illustrations fall back to the snapshot.
     }
   }
+}
+
+async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undefined> {
+  if (role.game !== "gi" || !/^[1-9]\d*(?:-\d+)?$/u.test(role.id)) return;
+  const exact = await indexedGenshinPortrait(role.id);
+  const base = role.overview.traveler?.portraitBase;
+  if (exact || !base) return exact;
+  const { name, digest } = travelerPortraits[base];
+  const indexed = await indexedGenshinPortrait(base, digest);
+  if (indexed || themeOverride) return indexed;
+  const installed = fileURLToPath(new URL("../miao-plugin/resources/meta-gs/character/", import.meta.url));
+  const bytes = await localAsset(join(installed, name, "imgs/splash.webp"), maxImageBytes).catch(() => undefined);
+  if (bytes && createHash("sha256").update(bytes).digest("hex") === digest) return loadImage(bytes).catch(() => undefined);
 }
 
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
@@ -418,7 +438,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
       ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
-    readCharacterGalleryPortrait(role.game, options.galleryName),
+    readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
     themeFonts ??= loadThemeFonts(),
   ]);
