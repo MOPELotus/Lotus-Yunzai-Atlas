@@ -10,7 +10,7 @@ export const atlasHelpAliases = Object.fromEntries([
 ].map((alias) => [alias, command]));
 
 const title = "图鉴帮助";
-const lead = "Nanoka Atlas\n图鉴查询公开资料，个人战绩使用各游戏原命令。";
+const lead = "Lotus-Yunzai · 图鉴\n图鉴查询公开资料，个人战绩使用各游戏原命令。";
 const rows = [
   "直查：#神里绫华图鉴 / *卡芙卡星魂 / %艾莲影画",
   "显式：#图鉴 原神 元素专家·第一辑 / #荷花图鉴 绝区零 星见雅",

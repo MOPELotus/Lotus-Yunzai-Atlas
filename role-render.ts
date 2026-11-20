@@ -801,7 +801,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
         ctx.restore();
         y += 16;
       }
-      paintLines(ctx, [`Lotus-Yunzai · Nanoka Atlas · ${page}`], margin, height - 37, 14, 21, muted);
+      paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, muted);
     }, mode);
     output.push({ section, png, engine });
   }
