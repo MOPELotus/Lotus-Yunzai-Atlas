@@ -160,13 +160,16 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   expect(mismatched?.rooms.flatMap(({ sides }) => sides.flatMap(({ enemies }) => enemies))).toEqual([]);
 });
 
-test("辉卷之月 123 仅补已核的 12-2 和 12-3 阵容", async () => {
+test("辉卷之月 123 仅补已有独立证据的房间阵容", async () => {
   const entry123 = { ...entry, id: "123", name: "辉卷之月" };
   const open = "2026-09-16 04:00:00";
   const close = "2026-10-16 03:59:59";
   const source = { list: { live_begin: open, live_end: close }, detail: {
     open, close, leyline: { name: entry123.name, icon: "UI_TowerBlessing_107" },
-    floor: { "12": { room: {
+    floor: { "11": { room: {
+      "2": { level: 90, first: [], second: [] },
+      "3": { level: 92, first: [], second: [] },
+    } }, "12": { room: {
       "1": { level: 95, first: [], second: [] },
       "2": { level: 98, first: [], second: [] },
       "3": { level: 100, first: [], second: [] },
@@ -176,6 +179,10 @@ test("辉卷之月 123 仅补已核的 12-2 和 12-3 阵容", async () => {
   const rendered = await normalizeAbyss(entry123, source, [], lookup);
   expect(rendered?.rooms.map(({ sides }) => sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork])))).toEqual([
+    [[], []],
+    [[["建造特化型机关·荒", 1, "gallery/gi/UI_MonsterIcon_MachinaIustitia_Excavator.webp"],
+      ["遗迹龙兽·地巡", 1, "gallery/gi/24030201.webp"]],
+      [["荒野幽徒", 2, "gallery/gi/22130001.webp"], ["荒野狂狩士", 1, "gallery/gi/22131001.webp"]]],
     [[], []],
     [[["不灭衍生造物", 1, "gallery/gi/25140101.webp"]],
       [["深黯钓客", 4, "gallery/gi/22140101.webp"], ["深黯魇语之主", 1, "gallery/gi/22150101.webp"]]],
