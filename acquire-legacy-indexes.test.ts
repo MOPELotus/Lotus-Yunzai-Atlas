@@ -26,7 +26,7 @@ test("原始字节检查点保留大整数，并可复核、修复损坏和并�
   await writeFile(join(directory, orphan), "partial file after exit");
   expect(await cache.read(sha, 1024)).toBeUndefined();
   await Promise.all([cache.write(sha, bytes), cache.write(sha, bytes)]);
-  expect(await readdir(directory)).toEqual([orphan, `${sha}.blob`].sort());
+  expect((await readdir(directory)).sort()).toEqual([orphan, `${sha}.blob`].sort());
   expect(await (await openAtlasPinnedCache(directory)).read(sha, 1024)).toEqual(bytes);
   expect(await cache.read(sha, 1)).toBeUndefined();
   await writeFile(path, "corrupt");
