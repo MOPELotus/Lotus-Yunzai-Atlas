@@ -476,16 +476,46 @@ function overviewStats(game: Game, detail: RecordValue) {
 }
 
 // The existing Star Rail gallery uses the roster's gender and path names for the Trailblazer.
-const trailblazerGalleryNames = new Map([
+const trailblazerNames = new Map([
   ["8001", "穹·毁灭"], ["8002", "星·毁灭"], ["8003", "穹·存护"], ["8004", "星·存护"],
   ["8005", "穹·同谐"], ["8006", "星·同谐"], ["8007", "穹·记忆"], ["8008", "星·记忆"],
   ["8009", "穹·欢愉"], ["8010", "星·欢愉"],
 ]);
 
+export function starRailTrailblazerName({ game, name, id }: Character): string | undefined {
+  if (game === "hsr" && name === "{NICKNAME}") return trailblazerNames.get(id);
+}
+
+const travelerForms = new Map([
+  ["10000005", { name: "空", icon: "UI_AvatarIcon_PlayerBoy" }],
+  ["10000007", { name: "荧", icon: "UI_AvatarIcon_PlayerGirl" }],
+  ["10000134", { name: "空", icon: "UI_AvatarIcon_PlayerBoy" }],
+  ["10000135", { name: "荧", icon: "UI_AvatarIcon_PlayerGirl" }],
+]);
+const travelerElements = new Map([
+  ["2", ["pyro", "火"]], ["3", ["hydro", "水"]], ["4", ["anemo", "风"]], ["5", ["cryo", "冰"]],
+  ["6", ["geo", "岩"]], ["7", ["electro", "雷"]], ["8", ["dendro", "草"]],
+]);
+
+function genshinTravelerName(character: Character, list: RecordValue, detail: RecordValue, element: GenshinElement | undefined) {
+  if (character.game !== "gi" || character.name !== "旅行者" || detail.name !== character.name) return;
+  const [base, suffix, extra] = character.id.split("-");
+  const form = travelerForms.get(base ?? "");
+  if (!form || extra !== undefined || list.icon !== form.icon || detail.icon !== form.icon) return;
+  if (base === "10000134" || base === "10000135") {
+    if (suffix === undefined && list.element === "None" && detail.element === "None" && detail.desc === "第三人称射击旅行者") {
+      return `旅行者·${form.name}（射击）`;
+    }
+    return;
+  }
+  const [expected, label] = travelerElements.get(suffix ?? "") ?? [];
+  if (expected && expected === element) return `旅行者·${form.name}（${label}）`;
+}
+
 export function characterGalleryName(character: Character, roster: readonly Character[]): string | undefined {
   const { game, id, name } = character;
   if (game === "hsr") {
-    if (name === "{NICKNAME}") return trailblazerGalleryNames.get(id);
+    if (name === "{NICKNAME}") return starRailTrailblazerName(character);
     if (name === "三月七" && id === "1001") return name;
     if (name === "三月七" && id === "1224") return "三月七·巡猎";
   }
@@ -502,7 +532,14 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const partner = object(detail.partner_info);
   const fullName = label(partner.full_name);
   const verifiedName = game === "zzz" ? zzzFullNames.get(id) : undefined;
-  const title = verifiedName?.name === name && verifiedName.fullName === fullName ? fullName : name;
+  const trailblazer = starRailTrailblazerName(character);
+  const title = verifiedName?.name === name && verifiedName.fullName === fullName ? fullName
+    : trailblazer ?? genshinTravelerName(character, list, detail, element) ?? name;
+  let description = text(detail.desc) ?? text(partner.profile_desc) ?? text(list.desc);
+  if (trailblazer && description) {
+    const gender = trailblazer.startsWith("星") ? "F" : "M";
+    description = description.replace(/\{([FM])#([^{}]*)\}/gu, (_, speaker, alternative) => speaker === gender ? alternative : "");
+  }
   const artwork = galleryArtwork(images, game);
   const icon = artwork("detail.icon", "icon");
   const indexIcon = artwork("icon");
@@ -515,7 +552,7 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
-    overview: { name: title, rarity, description: text(detail.desc) ?? text(partner.profile_desc) ?? text(list.desc),
+    overview: { name: title, rarity, description,
       artwork: portrait ?? icon, icon, portraitFallbacks: portraitFallbacks.length ? portraitFallbacks : undefined,
       iconFallback, element, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };

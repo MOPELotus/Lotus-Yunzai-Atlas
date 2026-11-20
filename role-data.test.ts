@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAtlasCatalog, type Character, type Game } from "./catalog.ts";
+import { createAtlasCatalog, findCharacters, findTraditionalEntries, type Character, type Game } from "./catalog.ts";
 import { characterGalleryName, normalizeRoleDetails } from "./role-data.ts";
 
 const entry = (game: Game): Character => ({ game, id: "42", version: "1", name: "角色样例", rarity: "五星", path: "items/role.json" });
@@ -71,6 +71,39 @@ test("原神角色元素按同一条目的正式字段选背景，旅行者仍�
   for (const game of ["hsr", "zzz"] as const) {
     expect(normalizeRoleDetails(entry(game), content("Pyro", "Pyro"), "五星")?.overview.element).toBeUndefined();
   }
+});
+
+test("旅行者按同一条目确认性别、元素与射击形态，来源不一致时保留原名", () => {
+  const role = (id: string, indexElement: string, detailElement = indexElement, wrongIcon = false) => {
+    const character = { ...entry("gi"), id, name: "旅行者" };
+    const icon = id.startsWith("10000007") || id === "10000135" ? "UI_AvatarIcon_PlayerGirl" : "UI_AvatarIcon_PlayerBoy";
+    return normalizeRoleDetails(character, { list: { element: indexElement, icon }, detail: {
+      name: character.name, icon: wrongIcon ? "UI_AvatarIcon_PlayerBoy" : icon, element: detailElement,
+      desc: id === "10000134" || id === "10000135" ? "第三人称射击旅行者" : "旅行者的原简介。",
+    } }, "五星")?.overview;
+  };
+  expect(role("10000005-4", "Anemo")).toMatchObject({ name: "旅行者·空（风）", element: "anemo" });
+  expect(role("10000007-3", "Hydro")).toMatchObject({ name: "旅行者·荧（水）", element: "hydro" });
+  expect(role("10000134", "None")?.name).toBe("旅行者·空（射击）");
+  expect(role("10000135", "None")?.name).toBe("旅行者·荧（射击）");
+  expect(role("10000007-3", "Hydro", "Pyro")?.name).toBe("旅行者");
+  expect(role("10000007-3", "Hydro", "Hydro", true)?.name).toBe("旅行者");
+  expect(role("10000007-3", "Pyro")?.name).toBe("旅行者");
+  expect(role("10000007-3-8", "Hydro")?.name).toBe("旅行者");
+});
+
+test("星铁开拓者只展开已核对角色原名及简介宏，并可按命途名或原 ID 查", () => {
+  const man = { ...entry("hsr"), id: "8007", name: "{NICKNAME}" };
+  const woman = { ...man, id: "8010" };
+  const unknown = { ...woman, id: "8011" };
+  const source = { detail: { desc: "登上星穹列车的{F#少女}{M#少年}。" } };
+  expect(normalizeRoleDetails(man, source, "五星")?.overview).toMatchObject({ name: "穹·记忆", description: "登上星穹列车的少年。" });
+  expect(normalizeRoleDetails(woman, source, "五星")?.overview).toMatchObject({ name: "星·欢愉", description: "登上星穹列车的少女。" });
+  expect(normalizeRoleDetails(unknown, source, "五星")?.overview).toMatchObject({ name: "{NICKNAME}", description: source.detail.desc });
+  const catalog = { pages: [{ game: "hsr", kind: "character", entries: [man, woman, unknown], name: "角色", version: "1", sampled: false }], stale: false } as const;
+  expect(findCharacters(catalog, "开拓者")).toEqual([man, woman]);
+  expect(findCharacters(catalog, "8007")).toEqual([man]);
+  expect(findTraditionalEntries(catalog, "星·欢愉", "hsr", "character").map(({ entry }) => entry)).toEqual([woman]);
 });
 
 test("星铁保留技能等级、大行迹和属性小行迹，不猜测材料名或缺失星魂", () => {

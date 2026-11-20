@@ -4,7 +4,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 import { compareKey, effectText, galleryArtwork, label, object } from "./source-values.ts";
 import { readAchievementCategories, type AchievementCategory } from "./achievements.ts";
-import { normalizeRoleDetails, type RoleDetails } from "./role-data.ts";
+import { normalizeRoleDetails, starRailTrailblazerName, type RoleDetails } from "./role-data.ts";
 import { normalizeWeapon } from "./weapon-data.ts";
 import { normalizeSet, setEffects } from "./set-data.ts";
 import { normalizeOnslaught } from "./onslaught-data.ts";
@@ -158,8 +158,10 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
     return page.entries.map((entry) => {
       const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key, literal);
+      const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
       // A verified name ranks below an exact record name and above a partial match.
       const alias = (aliasTarget?.id === entry.id && aliasTarget.name === entry.name) ||
+        (trailblazer !== undefined && (literal === "开拓者" || exactName(trailblazer) === literal)) ||
         weaponNames?.has(compareKey(entry.name)) ||
         (kind === "set" && page.game === "gi" && literal === "冰封迷途的勇士" &&
           entry.id === "14001" && entry.name === "冰风迷途的勇士");

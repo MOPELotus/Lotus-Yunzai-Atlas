@@ -1,6 +1,6 @@
 import { LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { AtlasSnapshotReset } from "./snapshot-pointer.ts";
-import { characterGalleryName } from "./role-data.ts";
+import { characterGalleryName, starRailTrailblazerName } from "./role-data.ts";
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
   findChallengeMode, findCurrentChallenge, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
@@ -50,7 +50,9 @@ async function setLines(item: AtlasEntry, showEffects: boolean): Promise<string>
 async function characterLine(character: AtlasEntry, showCategory = false): Promise<string> {
   const rarity = await catalog.characterRarity(character);
   const rank = rarity || (character.game === "zzz" ? "等级待核对" : "");
-  return [gameNames[character.game], showCategory ? "角色" : "", character.name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
+  const traveler = character.game === "gi" && character.name === "旅行者" ? await catalog.roleDetails(character) : undefined;
+  const name = starRailTrailblazerName(character) ?? traveler?.overview.name ?? character.name;
+  return [gameNames[character.game], showCategory ? "角色" : "", name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
 }
 
 async function bangbooLine(item: AtlasEntry): Promise<string> {
