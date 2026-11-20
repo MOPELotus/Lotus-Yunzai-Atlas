@@ -25,6 +25,7 @@ const sourcePages = {
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "星铁无限精英组", iconFields: [] },
   "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "星铁虚构叙事", iconFields: [] },
   "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "星铁末日幻影", iconFields: [] },
+  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: "星铁异相仲裁", iconFields: [] },
   "hsr/maze": { game: "hsr", pageId: "maze", title: "星铁混沌回忆", iconFields: [] },
   "hsr/monster": { game: "hsr", pageId: "monster", title: "星铁敌人", iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
@@ -155,7 +156,10 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       continue;
     }
     const unnamedPreview = pageId === "maze_boss" && id === "3024" && old.name === id && old.window?.from !== "live";
-    if (preserveRotation && ((!unnamedPreview && effectText(old.name) !== effectText(next.name)) || (old.window?.from === "live" &&
+    // The archived index used the version as a provisional name for period 8.
+    const arbitrationPreview = pageId === "maze_peak" && id === "8" && effectText(old.name) === "4.4异相仲裁" &&
+      effectText(next.name) === "尘世卷中" && old.window?.from !== "live";
+    if (preserveRotation && ((!unnamedPreview && !arbitrationPreview && effectText(old.name) !== effectText(next.name)) || (old.window?.from === "live" &&
       (next.window?.from !== "live" || old.window.begin !== next.window.begin || old.window.end !== next.window.end)))) {
       issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
     }
@@ -248,19 +252,30 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     }
     if (isStarrailRotationPage(page.pageId)) {
       const links = [
-        { selection: "hsr/monstervalue", field: "battleEnemies" },
-        { selection: "hsr/EliteGroup", field: "eliteGroups" },
-        { selection: "hsr/HardLevelGroup", field: "difficultyGroups" },
+        { selections: ["hsr/monstervalue"], field: "battleEnemies" },
+        { selections: ["hsr/EliteGroup"], field: "eliteGroups" },
+        { selections: ["hsr/HardLevelGroup"], field: "difficultyGroups" },
+        { selections: ["hsr/EliteGroup", "hsr/InfiniteEliteGroup"], field: "waveEliteGroups" },
       ] as const;
-      for (const link of links) {
-        const linkedPage = sourcePages[link.selection];
-        if (!local.pages.some(({ game, pageId, version }) =>
-          game === "hsr" && pageId === linkedPage.pageId && version === entry.targetVersion)) continue;
-        const linked = await pageAssets(baseline.root, linkedPage, signal);
-        const known = new Set([...linked.assets].flatMap(([id, record]) => [id, ...(record.variants ?? []).map(String)]));
+      const knownByPage = new Map<SourceSelection, Set<string>>();
+      for (const { selections, field } of links) {
+        if (field === "waveEliteGroups" && page.pageId !== "maze_peak") continue;
+        if (!selections.every((selection) => local.pages.some(({ game, pageId, version }) =>
+          game === "hsr" && pageId === sourcePages[selection].pageId && version === entry.targetVersion))) continue;
+        const permitted: Set<string>[] = [];
+        for (const selection of selections) {
+          let known = knownByPage.get(selection);
+          if (!known) {
+            const linked = await pageAssets(baseline.root, sourcePages[selection], signal);
+            known = new Set([...linked.assets].flatMap(([id, record]) => [id, ...(record.variants ?? []).map(String)]));
+            knownByPage.set(selection, known);
+          }
+          permitted.push(known);
+        }
+        const linkedTitle = selections.map(selection => sourcePages[selection].title).join("或");
         for (const [id, record] of after.assets) {
-          const missing = [...record.maze?.[link.field] ?? []].find(key => !known.has(key));
-          if (missing) issues.push(`${starrailSourceRotation(page.pageId).mode.name} ${id} 无法关联同版本${linkedPage.title} ${missing}。`);
+          const missing = [...record.maze?.[field] ?? []].find(key => !permitted.some(known => known.has(key)));
+          if (missing) issues.push(`${starrailSourceRotation(page.pageId).mode.name} ${id} 无法关联同版本${linkedTitle} ${missing}。`);
         }
       }
     }

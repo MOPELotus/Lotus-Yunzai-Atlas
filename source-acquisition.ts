@@ -50,6 +50,7 @@ const pages = {
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: "星铁无限精英组", timeout: 60_000, maxRecords: 4096 },
   "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "Pure Fiction", folder: "虚构叙事", timeout: 180_000, maxRecords: 256 },
   "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "Apocalyptic Shadow", folder: "末日幻影", timeout: 180_000, maxRecords: 256 },
+  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: "Anomaly Arbitration", folder: "异相仲裁", timeout: 180_000, maxRecords: 256 },
   "hsr/maze": { game: "hsr", pageId: "maze", title: "Memory of Chaos", folder: "混沌回忆", timeout: 180_000, maxRecords: 256 },
   "hsr/monster": { game: "hsr", pageId: "monster", title: "Monster", folder: "星铁敌人", timeout: 900_000, maxRecords: 4096 },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },

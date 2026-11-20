@@ -1263,3 +1263,83 @@ test("绝区零敌人正式更新保留原图、变体和旧条目", async () =>
     await rm(workspace, { recursive: true, force: true });
   }
 });
+
+test("异相仲裁由正式索引更新，并保留已有期次、窗口、骑士与两类王棋资料", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-peak-refresh-"));
+  const root = join(work, "atlas");
+  const selection = "hsr/maze_peak";
+  const pageId = "maze_peak";
+  const original = {
+    "1": { zh: "历史期", live_begin: "2026-07-01 04:00:00", live_end: "2026-08-01 04:00:00" },
+    "8": { zh: "<unbreak>4.4</unbreak>异相仲裁" },
+  };
+  const official = { ...original, "8": { zh: "尘世卷中" } };
+  let candidate: Partial<typeof original> = original;
+  let live = "4.6";
+  let failure: "wave" | "elite" | "knight" | "boss" | "extreme" | undefined;
+  const urls: string[] = [];
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url === `https://static.nanoka.cc/hsr/${live}/maze_peak.json`) return Response.json(candidate);
+    const id = url.match(/\/zh\/peak\/(1|8)[.]json$/u)?.[1] as keyof typeof original | undefined;
+    if (!id || !url.includes(`/${live}/`) || !candidate[id]) throw new Error(`不应请求 ${url}`);
+    const row = (suffix: number, name: string, stage_name: number) => {
+      const stage_id = Number(id) * 1_000 + suffix;
+      return { id: Number(id) * 100 + suffix, name, tag_list: [],
+        event_id_list: [{ stage_id, stage_name, level: 95, hard_level_group: 3, monster_list: [{ monster0: 1002011 }] }],
+        infinite_list: { [stage_id * 10 + 1]: { infinite_wave_id: stage_id * 10 + 1,
+          elite_group: failure === "elite" ? 346 : suffix === 1 ? 169 : 345, monster_group_id_list: [failure === "wave" ? 1002012 : 1002011] } } };
+    };
+    const boss_level = row(4, "将杀王棋", 40);
+    const { id: _, name: __, ...extreme } = row(5, "", failure === "extreme" ? 50 : 40);
+    const knights = [row(1, "骑士（一）", 10), row(2, "骑士（二）", 20), row(3, "骑士（三）", 30)];
+    return Response.json({ id: Number(id), name: candidate[id].zh, pre_level: failure === "knight" ? knights.slice(1) : knights,
+      boss_level: failure === "boss" ? {} : boss_level, boss_config: { ...extreme, hard_name: "将杀王棋•绝境", buff_list: [] } });
+  };
+  const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+  const refresh = () => refreshAtlasSource(root, { selection, manifest, request });
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
+    for (const [pageId, EliteGroup] of [["EliteGroup", 169], ["InfiniteEliteGroup", 345]] as const) {
+      const groupSource = join(work, pageId);
+      const groupPlan = [{ game: "hsr", pageId, version: "4.7" }] as const;
+      await acquireAtlasSource(groupSource, groupPlan, undefined, async () => Response.json([{
+        EliteGroup, AttackRatio: 1, DefenceRatio: 1, HPRatio: 1, SpeedRatio: 1, StanceRatio: 1,
+      }]));
+      expect((await applyAtlasCandidate(root, groupSource, groupPlan)).status).toBe("published");
+    }
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "hsr=maze_peak"] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "4.7";
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    candidate = { "8": official["8"] };
+    expect(await refresh()).toMatchObject({ status: "invalid", issues: [expect.stringContaining("1 缺少已有轮换资料")] });
+    candidate = { ...official, "1": { ...official["1"], live_end: "2026-08-02 04:00:00" } };
+    expect(await refresh()).toMatchObject({ status: "invalid", issues: [expect.stringContaining("1 与已有身份或实装窗口冲突")] });
+    candidate = official;
+    failure = "wave";
+    expect(await refresh()).toMatchObject({ status: "invalid", issues: expect.arrayContaining([expect.stringContaining("缺少已有楼层、战斗或敌人")]) });
+    failure = "elite";
+    expect(await refresh()).toMatchObject({ status: "invalid", issues: expect.arrayContaining([
+      expect.stringContaining("无法关联同版本星铁精英组或星铁无限精英组 346"),
+    ]) });
+    for (const variant of ["knight", "boss", "extreme"] as const) {
+      failure = variant;
+      expect(await commands["#更新图鉴"]("", owner)).toContain("更新未完成");
+      expect(await readAtlasSnapshotVersion(root)).toBe(2);
+    }
+    failure = undefined;
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("异相仲裁 · 已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(3);
+    expect(urls).toEqual([
+      "https://static.nanoka.cc/hsr/4.7/maze_peak.json",
+      "https://static.nanoka.cc/hsr/4.7/zh/peak/1.json",
+      "https://static.nanoka.cc/hsr/4.7/zh/peak/8.json",
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

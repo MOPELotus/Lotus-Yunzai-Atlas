@@ -5,11 +5,11 @@ test("明确的旧图鉴配置沿用两种周期，新部署只启用手动", ()
   const unconfigured = parseAtlasUpdatePolicy(undefined);
   expect(unconfigured.version.cron).toBeUndefined();
   expect(unconfigured.challenge.cron).toBeUndefined();
-  expect(unconfigured.version.selections).toHaveLength(22);
+  expect(unconfigured.version.selections).toHaveLength(23);
   const legacy = parseAtlasUpdatePolicy({});
   expect(legacy.version.cron).toBe("0 0 */6 * * *");
   expect(legacy.challenge.cron).toBe("0 15 */2 * * *");
-  expect(legacy.challenge.selections).toEqual(["zzz/boss", "zzz/shiyu", "hsr/maze", "hsr/maze_extra", "hsr/maze_boss"]);
+  expect(legacy.challenge.selections).toEqual(["zzz/boss", "zzz/shiyu", "hsr/maze", "hsr/maze_extra", "hsr/maze_boss", "hsr/maze_peak"]);
   const disabled = parseAtlasUpdatePolicy({ auto_update: { enable: false } });
   expect(disabled.version.cron).toBeUndefined();
   expect(disabled.challenge.cron).toBeUndefined();
