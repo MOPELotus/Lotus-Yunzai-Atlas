@@ -116,7 +116,7 @@ async function copyPages(pages: readonly SelectedPage[], target: string, signal?
 }
 
 export async function copyAtlasCandidate(source: string, destination: string, scope: readonly Page[],
-  counts: { readonly imageCount: number; readonly detailCount: number }, signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
+  counts: { readonly imageCount: number; readonly detailCount: number } | undefined, signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
   signal?.throwIfAborted();
   const resolved = resolve(destination);
   const [base, parent] = await Promise.all([realpath(source), realpath(dirname(resolved))]);
@@ -131,7 +131,7 @@ export async function copyAtlasCandidate(source: string, destination: string, sc
   await mkdir(target, { mode: 0o700 });
   try {
     const { imageCount, detailCount } = await copyPages(pages, target, signal);
-    if (imageCount !== counts.imageCount || detailCount !== counts.detailCount) {
+    if (counts && (imageCount !== counts.imageCount || detailCount !== counts.detailCount)) {
       throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
     }
     const data = join(target, "data");

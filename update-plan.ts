@@ -6,6 +6,7 @@ import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
 export const atlasManifestUrl = `${atlasSourceOrigin}/manifest.json`;
+export type AtlasVersionChannel = "live" | "latest";
 
 const maxManifestBytes = 1024 * 1024;
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
@@ -40,14 +41,11 @@ function version(value: unknown): value is string {
   return typeof value === "string" && versions.test(value);
 }
 
-function targetVersion(manifest: unknown, game: Game): string | undefined {
-  const { latest, available } = object(object(manifest)[game]);
-  if (version(latest) && (game === "zzz" || !latest.includes("+")) && Array.isArray(available) && available.includes(latest)) return latest;
-}
-
-function publishedVersion(manifest: unknown, game: Game): string | undefined {
-  const { live, available } = object(object(manifest)[game]);
-  if (version(live) && !live.includes("+") && Array.isArray(available) && available.includes(live)) return live;
+export function atlasManifestVersion(manifest: unknown, game: Game, channel: AtlasVersionChannel): string | undefined {
+  const listing = object(object(manifest)[game]);
+  const selected = listing[channel];
+  if (version(selected) && (!selected.includes("+") || game === "zzz" && channel === "latest") &&
+    Array.isArray(listing.available) && listing.available.includes(selected)) return selected;
 }
 
 function newer(target: string, local: string, game: Game): boolean {
@@ -82,7 +80,7 @@ function buildPlan(entries: AtlasPlanEntry[]): AtlasUpdatePlan {
 
 /** Pass undefined only for an explicitly empty installation. An invalid snapshot never authorizes writes. */
 export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidation | undefined,
-  scope?: readonly AtlasPlanPage[]): AtlasUpdatePlan {
+  scope?: readonly AtlasPlanPage[], channel?: AtlasVersionChannel): AtlasUpdatePlan {
   const entries: AtlasPlanEntry[] = [];
   if (scope?.some(({ game, pageId }) => !trackedPages.some((page) => page.game === game && page.pageId === pageId))) {
     throw new TypeError("图鉴更新范围包含未识别的游戏或分类。");
@@ -99,7 +97,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
     const requireLive = (game === "zzz" && (pageId === "character" || pageId === "monster" ||
       pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
       (game === "hsr" && (pageId === "relicset" || pageId === "monster" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
-    const target = requireLive ? publishedVersion(manifest, game) : targetVersion(manifest, game);
+    const target = atlasManifestVersion(manifest, game, channel ?? (requireLive ? "live" : "latest"));
     entries.push(planVersionedPage(current, local, target));
   }
   return buildPlan(entries);
@@ -107,10 +105,11 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
 
 /** ZZZ challenge acquisition uses the published build and verifies each source window separately. */
 export function planPublishedChallengeRefresh(manifest: unknown, local: AtlasCandidateValidation,
-  scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: StarrailRotationPage }): AtlasUpdatePlan {
+  scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: StarrailRotationPage },
+  channel: AtlasVersionChannel = "live"): AtlasUpdatePlan {
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
-  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedVersion(manifest, scope.game))]);
+  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, atlasManifestVersion(manifest, scope.game, channel))]);
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {

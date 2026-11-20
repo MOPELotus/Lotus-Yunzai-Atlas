@@ -5,6 +5,8 @@ import { atlasApplyStagingPrefix, hasLegacyAtlasData, publishPreparedAtlasCandid
   type AtlasPublication } from "./publish-candidate.ts";
 import { findLegacyAtlasExport } from "./legacy-atlas-directory.ts";
 import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
+import type { AtlasCandidatePage } from "./validate-candidate.ts";
 
 function contains(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -13,6 +15,11 @@ function contains(parent: string, child: string): boolean {
 
 /** Initialize once from an operator-supplied local export. Existing data and published snapshots are never replaced. */
 export async function initializeAtlas(root: string, source: string, signal?: AbortSignal): Promise<AtlasPublication> {
+  return publishInitialAtlas(root, source, legacyAtlasSourcePages, legacyAtlasCounts, signal);
+}
+
+async function publishInitialAtlas(root: string, source: string, pages: readonly Required<AtlasCandidatePage>[],
+  counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
     throw new Error("请提供已有的本地图鉴目标目录和原导出目录。");
@@ -25,7 +32,7 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
   const stage = await mkdtemp(join(dirname(directory), atlasApplyStagingPrefix));
   let result: AtlasPublication | undefined;
   try {
-    const prepared = await copyAtlasCandidate(donor, join(stage, "candidate"), legacyAtlasSourcePages, legacyAtlasCounts, signal);
+    const prepared = await copyAtlasCandidate(donor, join(stage, "candidate"), pages, counts, signal);
     result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, prepared.validation.pages, signal, true);
     return result;
   } finally {
@@ -33,20 +40,32 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
   }
 }
 
-export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal): Promise<AtlasPublication> {
+export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal,
+  channel?: AtlasVersionChannel): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   const current = await readAtlasSnapshotVersion(root);
   if (current !== null) return { status: "stale", current };
   if (await hasLegacyAtlasData(root)) return { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
-  const { downloadLegacyAtlas } = await import("./download-legacy-atlas.ts");
+  const { downloadLegacyAtlas, downloadAtlasVersion } = await import("./download-legacy-atlas.ts");
+  if (channel) {
+    const manifest = await fetchAtlasManifest(signal);
+    const gi = atlasManifestVersion(manifest, "gi", channel);
+    const hsr = atlasManifestVersion(manifest, "hsr", channel);
+    const zzz = atlasManifestVersion(manifest, "zzz", channel);
+    if (!gi || !hsr || !zzz) throw new Error("原站清单未列出三款游戏所选的图鉴版本。");
+    return downloadAtlasVersion(workspace, root, { gi, hsr, zzz },
+      (donor, pages) => publishInitialAtlas(root, donor, pages, undefined, signal), signal);
+  }
   return downloadLegacyAtlas(workspace, root, donor => initializeAtlas(root, donor, signal), signal);
 }
 
 if (import.meta.main) {
   const [root, mode, workspace, ...extra] = Bun.argv.slice(2);
   const publicData = mode === "--public";
-  if (!root || extra.length || (publicData ? !workspace : workspace !== undefined)) {
-    console.error("用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录]");
+  const [flag, channel] = extra;
+  const chosenChannel = publicData && extra.length === 2 && flag === "--channel" && (channel === "live" || channel === "latest");
+  if (!root || (extra.length && !chosenChannel) || (publicData ? !workspace : workspace !== undefined)) {
+    console.error("用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录 [--channel live|latest]]");
     process.exitCode = 2;
   } else {
     const controller = new AbortController();
@@ -56,7 +75,7 @@ if (import.meta.main) {
     try {
       let result: AtlasPublication;
       if (publicData) {
-        result = await initializeAtlasFromPublic(root, workspace!, controller.signal);
+        result = await initializeAtlasFromPublic(root, workspace!, controller.signal, chosenChannel ? channel as AtlasVersionChannel : undefined);
       } else {
         const donor = mode ?? await findLegacyAtlasExport(root);
         if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");
