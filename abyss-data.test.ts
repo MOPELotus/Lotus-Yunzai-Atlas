@@ -112,6 +112,7 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
     open, close, leyline: { name: entry124.name, icon: "UI_TowerBlessing_107" },
     floor: { "11": { room: {
       "1": { level: 88, first: [], second: [] },
+      "2": { level: 90, first: [], second: [] },
       "3": { level: 92, first: [], second: [] },
     } }, "12": { room: {
       "1": { level: 95, first: [], second: [] },
@@ -121,29 +122,35 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   } };
   const lookup = async (id: string, name: string) => ({ name, artwork: `gallery/gi/${id}.webp` });
   const rendered = await normalizeAbyss(entry124, source, [], lookup);
-  expect(rendered?.rooms[0]?.sides.map(({ enemies }) =>
+  const room = (name: string) => rendered?.rooms.find((room) => room.name === name);
+  expect(room("11-1")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [], [["大型水史莱姆", 24, "gallery/gi/20011101.webp"]],
   ]);
-  expect(rendered?.rooms[1]?.sides.map(({ enemies }) =>
+  expect(room("11-2")?.sides.map(({ enemies }) =>
+    enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
+    [["丘丘水行游侠", 2, "gallery/gi/21040201.webp"], ["蕴光刃犀", 1, "gallery/gi/26300201.webp"]],
+    [["嗜雷·兽境猎犬", 2, "gallery/gi/22050201.webp"], ["嗜岩·兽境猎犬", 2, "gallery/gi/22050101.webp"]],
+  ]);
+  expect(room("11-3")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [["愚人众特辖队·雷霰近卫军", 1, "gallery/gi/23079301.webp"], ["愚人众特辖队·火刃突击队", 1, "gallery/gi/23079101.webp"],
       ["蕴光奇羊", 1, "gallery/gi/26300101.webp"]],
     [["千年珍珠骏麟", 1, "gallery/gi/26180101.webp"]],
   ]);
-  expect(rendered?.rooms[2]?.sides.map(({ enemies }) =>
+  expect(room("12-1")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [["历经百战的嵌合兽怪箭士", 1, "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp"]],
     [["深罪浸礼者·水火雷驱役者", 1, "gallery/gi/UI_MonsterIcon_Invoker_Archdeacon.webp"],
       ["黯色空壳·旗令", 1, "gallery/gi/22070101.webp"], ["黯色空壳·近卫", 1, "gallery/gi/22070301.webp"]],
   ]);
-  expect(rendered?.rooms[3]?.sides.map(({ enemies }) =>
+  expect(room("12-2")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [["蕴光月幻蝶", 1, "gallery/gi/26301101.webp"]],
     [["历经百战的盗宝团精锐", 1, "gallery/gi/UI_MonsterIcon_Thoarder_Elder_Standard_Hildegard_01.webp"]],
   ]);
-  expect(rendered?.rooms[3]?.sides[1]?.enemies[0]?.hp).toBeUndefined();
-  expect(rendered?.rooms[4]?.sides.map(({ enemies }) =>
+  expect(room("12-2")?.sides[1]?.enemies[0]?.hp).toBeUndefined();
+  expect(room("12-3")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [["嵌合翼骏狮", 1, "gallery/gi/26310501.webp"]], [["秘源机兵·统御械", 1, "gallery/gi/24090501.webp"]],
   ]);

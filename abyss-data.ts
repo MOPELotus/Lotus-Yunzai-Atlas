@@ -83,6 +83,10 @@ const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
   // https://genshinflex.com/en/abyss/history/
   "11-1": { level: 88, first: [], second: [["20011101", "大型水史莱姆", 24]] },
+  // The October 7.1 GenshinLab table and the 7.X archive agree on two hounds of each type.
+  // https://genshinlab.com/genshin-spiral-abyss-team-comps/
+  "11-2": { level: 90, first: [["21040201", "丘丘水行游侠", 2], ["26300201", "蕴光刃犀", 1]],
+    second: [["22050201", "嗜雷·兽境猎犬", 2], ["22050101", "嗜岩·兽境猎犬", 2]] },
   // The October 16 in-game preview identifies the same enemies as the 7.X wave table.
   // https://trivia.k-oshiro.com/2026/10/16/genshin-spiral-abyss-2026-10/
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
