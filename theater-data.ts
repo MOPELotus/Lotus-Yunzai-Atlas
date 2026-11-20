@@ -110,6 +110,7 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     const id = positiveInteger(row.id ?? row.avatar_id ?? row.value ?? value);
     if (!id) return [];
     return [lookup.character(String(id)).then((known) => ({
+      id,
       name: known?.name ?? `角色 ID ${id}（待核对）`,
       artwork: known?.artwork,
       description: singleLine(row.desc),

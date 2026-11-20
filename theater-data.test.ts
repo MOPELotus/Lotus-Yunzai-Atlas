@@ -43,6 +43,7 @@ test("theater data preserves official lineup mapping, source order and the exact
   expect(data?.groups.map(({ name, cards }) => [name, cards.map((card) => card.name)])).toEqual([
     ["开幕角色", ["夜兰"]], ["特邀角色", ["七七", "角色 ID 10000150（待核对）"]], ["首领阵容", ["翠翎恐蕈"]],
   ]);
+  expect(data?.groups.slice(0, 2).map(({ cards }) => cards.map(({ id }) => id))).toEqual([[10000060], [10000035, 10000150]]);
   expect(data?.groups[0]?.cards[0]?.description).toBe("获得幻境祝福。");
   expect(data?.acts.map(({ name, subtitle }) => [name, subtitle])).toEqual([
     ["第一幕", "Lv84"], ["第三幕", "Lv89 · 翠翎恐蕈"], ["圣牌一", "Lv95"], ["圣牌二", "Lv99"],
