@@ -79,8 +79,13 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
 // https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
 // https://www.miyoushe.com/ys/article/78933070
 const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
-  // https://www.bilibili.com/video/BV1mopE6xEkd/
+  // The October 16 in-game preview identifies the same enemies as the 7.X wave table.
+  // https://trivia.k-oshiro.com/2026/10/16/genshin-spiral-abyss-2026-10/
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  "11-3": { level: 92, first: [
+    ["23079301", "愚人众特辖队·雷霰近卫军", 1], ["23079101", "愚人众特辖队·火刃突击队", 1], ["26300101", "蕴光奇羊", 1],
+  ], second: [["26180101", "千年珍珠骏麟", 1]] },
+  // https://www.bilibili.com/video/BV1mopE6xEkd/
   // Tower 122 and RoleCombat 5/25 supply the matching Archer and Baptist portraits.
   "12-1": { level: 95,
     first: [[undefined, "历经百战的嵌合兽怪箭士", 1, "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp"]],
