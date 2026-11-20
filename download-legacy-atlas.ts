@@ -3,13 +3,53 @@ import { lstat, mkdir, readdir, realpath, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { candidateFile, candidateImageReference, hashCandidateFile } from "./candidate-gallery.ts";
+import type { Game } from "./catalog.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
-import { validateAtlasCandidate } from "./validate-candidate.ts";
+import { type AtlasCandidatePage, validateAtlasCandidate } from "./validate-candidate.ts";
 
 const originalExporter = "https://github.com/MOPELotus/nanoka-atlas-backend.git";
 const exporterRevision = "0496f9cf725d815b89f118b30f681cae82ad2f4e";
 const networkPolicy = fileURLToPath(new URL("./public-atlas-network.mjs", import.meta.url));
+const atlasVersion = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
+const maxExportIndexBytes = 16 * 1024 * 1024;
+
+export type AtlasExportVersions = Readonly<Record<Game, string>>;
+type ExportPage = Required<AtlasCandidatePage>;
+type VerifiedIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
+type ExportScope = ExportPage & { readonly rows?: VerifiedIndex["rows"] };
+
+function selectedExporterPages(versions: AtlasExportVersions) {
+  return legacyAtlasSourcePages.map(({ game, pageId, indexPath, indexShape }) => {
+    const version = versions[game];
+    if (typeof version !== "string" || !atlasVersion.test(version) || (game !== "zzz" && version.includes("+"))) {
+      throw new Error(`请选择图鉴原站提供的 ${game} 版本。`);
+    }
+    return { game, pageId, version, indexShape, indexPath: `/${game}/${version}/${indexPath.split("/").slice(3).join("/")}` };
+  });
+}
+
+export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
+  request: AtlasSourceFetch = fetch): Promise<readonly VerifiedIndex[]> {
+  const selected = selectedExporterPages(versions);
+  const indexes: VerifiedIndex[] = [];
+  for (let start = 0; start < selected.length; start += 4) {
+    const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexPath, indexShape }) => {
+      const bytes = await readAtlasSourceBytes(`${atlasSourceOrigin}${indexPath}`, "application/json",
+        maxExportIndexBytes, false, signal, request, { retry: true });
+      const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      const listing = indexShape === "array" && Array.isArray(value) ? value : object(value);
+      const entries = Object.entries(listing);
+      if ((indexShape === "array" && !Array.isArray(listing)) || !entries.length ||
+          entries.some(([, row]) => row !== object(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
+      return { game, pageId, version, recordCount: entries.length,
+        rows: new Map(entries.map(([id, row]) => [id, JSON.stringify(row)])) };
+    }));
+    indexes.push(...batch);
+  }
+  return indexes;
+}
 
 function contains(parent: string, child: string) {
   const location = relative(parent, child);
@@ -103,7 +143,24 @@ async function verifyExporterOutput(directory: string, signal?: AbortSignal) {
   }
 }
 
-export async function inspectExporterPages(root: string, signal?: AbortSignal) {
+async function matchesExportIndex(directory: string, map: Record<string, unknown>, { game, pageId, rows }: ExportScope,
+  signal?: AbortSignal): Promise<boolean> {
+  if (!rows) return true;
+  const gameData = object(object(map.games)[game]);
+  const localized = object(object(gameData.locales).zh);
+  const records = object(object(object(localized.pages)[pageId]).records);
+  for (const [id, row] of rows) {
+    signal?.throwIfAborted();
+    const { path } = object(records[id]);
+    if (typeof path !== "string" || !path.startsWith("items/")) return false;
+    const file = await candidateFile(directory, path);
+    const item = object(await Bun.file(file).json());
+    if (JSON.stringify(object(item.content).list) !== row) return false;
+  }
+  return true;
+}
+
+export async function inspectExporterPages(root: string, signal?: AbortSignal, scope: readonly ExportScope[] = legacyAtlasSourcePages) {
   const data = join(root, "data");
   await verifyExporterOutput(data, signal);
   await verifyExporterOutput(join(root, "gallery"), signal);
@@ -111,14 +168,16 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal) {
   const references = object(gallery).images;
   const completed = new Set<string>();
   const corruptImages = new Set<string>();
-  if (!Array.isArray(references)) return { completed, corruptImages };
-  const { pages } = await validateAtlasCandidate(data, [], signal);
-  const profiles = new Map(legacyAtlasSourcePages.map((page) => [`${page.game}/${page.pageId}`, page]));
+  if (!Array.isArray(references)) return { completed, corruptImages, exactScope: false };
+  const { pages, ok } = await validateAtlasCandidate(data, [], signal);
+  const profiles = new Map(scope.map((page) => [`${page.game}/${page.pageId}`, page]));
+  const map = scope.some(({ rows }) => rows) ? object(await Bun.file(join(data, "map.json")).json().catch(() => undefined)) : {};
   const images = new Map<string, { file: string; sha256: string } | null>();
   for (const { game, pageId, version, recordCount } of pages) {
     const key = `${game}/${pageId}`;
     const expected = profiles.get(key);
-    if (expected?.version === version && expected.recordCount === recordCount) completed.add(key);
+    if (expected?.version === version && expected.recordCount === recordCount &&
+        await matchesExportIndex(data, map, expected, signal)) completed.add(key);
   }
   let placeholderRepairPage: string | undefined;
   // The original exporter also flags confirmed placeholders for future refreshes.
@@ -157,12 +216,11 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal) {
   }
   // Any exporter invocation rewrites the shared placeholder.
   if (placeholderRepairPage && completed.size === profiles.size) completed.delete(placeholderRepairPage);
-  return { completed, corruptImages };
+  return { completed, corruptImages, exactScope: ok && pages.length === scope.length };
 }
 
-/** Keep the pinned backend separate from the runtime, and reuse its incremental export on retries. */
-export async function downloadLegacyAtlas<T>(path: string, target: string,
-  consume: (source: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
+async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly ExportScope[]>,
+  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
@@ -184,19 +242,41 @@ export async function downloadLegacyAtlas<T>(path: string, target: string,
     const node = executable("node");
     const root = await prepareExporter(workspace, git, signal);
     await child([corepack, "yarn", "install", "--immutable", "--mode=skip-build"], root, signal);
-    const { completed, corruptImages } = await inspectExporterPages(root, signal);
+    const scope = await selected();
+    const initial = await inspectExporterPages(root, signal, scope);
+    const { completed, corruptImages } = initial;
     for (const file of corruptImages) {
       signal?.throwIfAborted();
       // Incremental mode trusts the recorded hash as long as an existing file has bytes.
       await unlink(file);
     }
-    for (const { game, pageId, version } of legacyAtlasSourcePages) {
+    for (const { game, pageId, version } of scope) {
       if (completed.has(`${game}/${pageId}`)) continue;
       await child([node, "--import", networkPolicy, "src/scrape.mjs", "--mode", "incremental", "--game", game,
         "--locale", "zh", "--version", `${game}=${version}`, "--pages", `${game}=${pageId}`], root, signal);
     }
-    return await consume(root);
+    if (scope.some(({ rows }) => rows)) {
+      const verified = completed.size === scope.length ? initial : await inspectExporterPages(root, signal, scope);
+      const missing = scope.filter(({ game, pageId }) => !verified.completed.has(`${game}/${pageId}`));
+      if (missing.length) throw new Error(`原导出未完成所选图鉴：${missing.map(({ game, pageId }) => `${game}/${pageId}`).join("、")}。`);
+      if (!verified.exactScope) throw new Error("原导出的分类范围与所选图鉴不符。");
+    }
+    const pages = scope.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
+    return await consume(root, pages);
   } finally {
     lock.close();
   }
+}
+
+/** Replay the original fixed export with its audited per-page counts. */
+export function downloadLegacyAtlas<T>(path: string, target: string, consume: (source: string) => Promise<T>,
+  signal?: AbortSignal): Promise<T> {
+  return downloadAtlasExport(path, target, async () => legacyAtlasSourcePages, consume, signal);
+}
+
+/** Run all supported pages at the versions already selected from the original website manifest. */
+export function downloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
+  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
+  request?: AtlasSourceFetch): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request), consume, signal);
 }
