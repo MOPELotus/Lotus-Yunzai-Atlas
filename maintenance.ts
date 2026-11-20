@@ -1,9 +1,11 @@
-import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
-import { realpath } from "node:fs/promises";
+import { discoverRuntimeAtlasDataDirectory, findLegacyAtlasExport, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
+import { mkdir, realpath } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
   type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
-import { resetAtlasSnapshot } from "./publish-candidate.ts";
+import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot } from "./publish-candidate.ts";
+import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.ts";
 import { fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
@@ -12,10 +14,12 @@ import { parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
 const resetCommand = "#重置图鉴";
+const fullCommand = "#全量更新图鉴";
 const names = [
   [checkCommand, "检查图鉴更新", "图鉴检查更新"],
   [updateCommand, "更新图鉴", "图鉴更新"],
   [resetCommand, "重置图鉴", "图鉴重置", "清空图鉴"],
+  [fullCommand, "全量更新图鉴", "图鉴全量更新"],
 ] as const;
 
 export const atlasMaintenanceAliases = Object.fromEntries(names.flatMap(([target, ...words]) =>
@@ -148,6 +152,38 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     }
   }
 
+  async function fullUpdate(argument: string, context: AtlasMaintenanceContext) {
+    if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以操作图鉴更新。";
+    if (argument) return `请直接发送 ${fullCommand}。`;
+    if (dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
+    if (signal?.aborted) return "图鉴维护已中止。";
+    try {
+      await mkdir(root, { recursive: true, mode: 0o700 });
+      if (await readAtlasSnapshotVersion(root) !== null || await hasLegacyAtlasData(root)) {
+        return run("update", atlasSourceSelections.map(({ selection }) => selection));
+      }
+    } catch {
+      return "图鉴发布目录不可用，保留现有资料。";
+    }
+    if (updating) return "已有图鉴更新正在进行，请稍后再试。";
+    updating = true;
+    try {
+      const donor = await findLegacyAtlasExport(root);
+      const result = donor ? await initializeAtlas(root, donor, signal)
+        : await initializeAtlasFromPublic(root, join(dirname(root), "atlas-download"), signal);
+      if (result.status === "published") return `图鉴初始化完成，已发布第 ${result.version} 版。`;
+      if (result.status === "stale") return "现用快照已切换，本次候选未发布。";
+      if (result.status === "busy") return "已有图鉴发布正在进行，请稍后再试。";
+      return "图鉴候选校验未通过，保留现有资料。";
+    } catch (error) {
+      if (error instanceof LegacyAtlasSourceConflict) return error.message;
+      if (signal?.aborted) return "图鉴维护已中止。";
+      return "图鉴初始化未完成，已保留现有资料和下载工作目录。";
+    } finally {
+      updating = false;
+    }
+  }
+
   function scheduled(kind: AtlasScheduleKind) {
     const { cron, issue, selections } = policy[kind];
     return { cron, issue, run: () => cron ? run("update", selections) : Promise.resolve("图鉴自动更新未启用。") };
@@ -158,6 +194,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       [checkCommand]: (argument: string, context: AtlasMaintenanceContext) => command("check", argument, context),
       [updateCommand]: (argument: string, context: AtlasMaintenanceContext) => command("update", argument, context),
       [resetCommand]: reset,
+      [fullCommand]: fullUpdate,
     },
     atlasSchedule: { version: scheduled("version"), challenge: scheduled("challenge") },
   };

@@ -33,6 +33,15 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
   }
 }
 
+export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal): Promise<AtlasPublication> {
+  signal?.throwIfAborted();
+  const current = await readAtlasSnapshotVersion(root);
+  if (current !== null) return { status: "stale", current };
+  if (await hasLegacyAtlasData(root)) return { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
+  const { downloadLegacyAtlas } = await import("./download-legacy-atlas.ts");
+  return downloadLegacyAtlas(workspace, root, donor => initializeAtlas(root, donor, signal), signal);
+}
+
 if (import.meta.main) {
   const [root, mode, workspace, ...extra] = Bun.argv.slice(2);
   const publicData = mode === "--public";
@@ -47,14 +56,7 @@ if (import.meta.main) {
     try {
       let result: AtlasPublication;
       if (publicData) {
-        const current = await readAtlasSnapshotVersion(root);
-        if (current !== null) result = { status: "stale", current };
-        else if (await hasLegacyAtlasData(root)) result = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
-        else {
-          const { downloadLegacyAtlas } = await import("./download-legacy-atlas.ts");
-          result = await downloadLegacyAtlas(workspace!, root,
-            donor => initializeAtlas(root, donor, controller.signal), controller.signal);
-        }
+        result = await initializeAtlasFromPublic(root, workspace!, controller.signal);
       } else {
         const donor = mode ?? await findLegacyAtlasExport(root);
         if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");
