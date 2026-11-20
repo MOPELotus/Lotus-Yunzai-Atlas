@@ -30,6 +30,15 @@ test("无原主题时可稍后重试，已有主题文件和自定义主题目�
     const repeated = await prepareAtlasTheme(checkout);
     expect(repeated.copied).toEqual([]);
     expect(await Bun.file(join(persisted, "card-bg.png")).exists()).toBe(false);
+
+    await rm(join(donor, "card-bg.png"));
+    const nativeDonor = join(root, "miao-plugin/resources");
+    await mkdir(join(nativeDonor, "common/cont"), { recursive: true });
+    await writeFile(join(nativeDonor, "common/cont/card-bg.png"), Buffer.alloc(2594));
+    const native = await prepareAtlasTheme(checkout, { source: nativeDonor });
+    expect(native.copied).toEqual([]);
+    expect(native.missing).toContain("card-bg.png");
+    await expect(lstat(join(persisted, "card-bg.png"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

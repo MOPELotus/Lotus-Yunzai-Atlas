@@ -4,7 +4,7 @@
 
 主题依次从宿主的 `data/atlas/theme/`、模块内的 `assets/miao-theme/` 和旧部署 `plugins/Lotus-ReFactor/resources/miao-theme/`、`plugins/Lotus-Plugin/resources/miao-theme/` 读取。公开首装的图鉴下载只准备数据与原词条图片。启动入口也检查原主题，从已有的本地部署恢复已核对的九个背景、标题纹理和两份字体。恢复只补齐缺失文件，原文件以固定提交的文件摘要核验。宿主持久目录中的已有文件仍然优先。
 
-独立迁移时，部署者可以用 `LOTUS_ATLAS_THEME_SOURCE_DIR` 指定已获授权的旧版 `resources/miao-theme/` 目录供本地恢复。也可把已获授权的主题文件及可选的 `relic-parts/`、`portraits/` 放到 `data/atlas/theme/`。该目录会随宿主数据保留。没有可用本地来源时，图鉴仍可使用，补齐文件后重启即可再次检查。
+独立迁移时，部署者可以用 `LOTUS_ATLAS_THEME_SOURCE_DIR` 指定已获授权的旧版 `resources/miao-theme/`，也可以直接指向已有喵喵的 `resources/`。启动会核对两种目录结构中的原文件。喵喵布局可补齐背景、纹理和其中自带的字体，MiSans 按原目录从已获授权的本地文件提供。也可把原主题文件及可选的 `relic-parts/`、`portraits/` 放到 `data/atlas/theme/`。该目录会随宿主数据保留。补齐文件后重启即可再次检查。
 
 设置 `LOTUS_ATLAS_THEME_DIR` 可指定唯一使用的主题目录，例如 Lotus-ReFactor 的 `resources/miao-theme/`。此目录仅供读取。`fonts/` 下支持 `HYWH-65W.ttf` 和 `MiSans-VF.ttf`。旧布局也从主题旁的 `fonts/` 读取 MiSans。MiSans 由小米提供，汉仪文黑由汉仪字库提供。
 
@@ -18,6 +18,6 @@
 
 图片和字体由使用者按各自许可从本地部署提供。发布仓库保存绘图实现与来源说明。
 
-- [Miao-Plugin 固定版本素材说明](https://github.com/yoimiya-kokomi/miao-plugin/blob/1988f546f1972fd3911ca15fc1259184709f876b/README.md#L85-L89)
+- [Miao-Plugin 固定版本素材说明](https://github.com/yoimiya-kokomi/miao-plugin/blob/1988f546f1972fd3911ca15fc1259184709f876b/README.md#L93-L97)
 - [小米 MiSans 许可](https://hyperos.mi.com/font/en/download/)
 - [汉仪文黑 65W](https://www.hanyi.com.cn/productdetail?id=990)

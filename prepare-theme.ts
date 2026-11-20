@@ -25,6 +25,14 @@ function paths(directory: string, asset: string): readonly string[] {
   return asset === "fonts/MiSans-VF.ttf" ? [direct, join(dirname(directory), asset)] : [direct];
 }
 
+function donorPaths(directory: string, asset: (typeof assets)[number][0]): readonly string[] {
+  const candidates = paths(directory, asset);
+  const original = asset.startsWith("bg/") ? `common/${asset}`
+    : asset === "card-bg.png" ? "common/cont/card-bg.png"
+    : asset === "fonts/HYWH-65W.ttf" ? "common/font/HYWH-65W.ttf" : undefined;
+  return original ? [...candidates, join(directory, original)] : candidates;
+}
+
 async function available(directory: string, asset: string) {
   for (const file of paths(directory, asset)) {
     if (await stat(file).then((entry) => entry.isFile() && entry.size > 0).catch(() => false)) return true;
@@ -67,7 +75,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
     const target = join(theme, asset);
     for (const directory of sources) {
       if (await lstat(target).catch(() => undefined)) break;
-      for (const file of paths(directory, asset)) {
+      for (const file of donorPaths(directory, asset)) {
         try {
           if (!await stat(file).then((entry) => entry.isFile() && entry.size === size)) continue;
           const bytes = await readFile(file, { signal });
