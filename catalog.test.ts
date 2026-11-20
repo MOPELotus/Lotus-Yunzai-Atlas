@@ -375,3 +375,50 @@ test("通用图鉴只纳入旧幽境危战分类，保留其他挑战的专属�
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("裸装备入口读取在原位覆写、原子替换和发布指针换代后刷新索引", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-equipment-cache-"));
+  try {
+    const stamp = new Date("2026-01-01T00:00:00.000Z");
+    const root = join(directory, "data");
+    const file = join(root, "map.json");
+    const createMap = async (path: string, name: string) => {
+      const weapon = { version: "1", recordCount: 1,
+        records: { one: { id: "1", name, path: "items/one.json" } } };
+      await writeFile(path, JSON.stringify({ games: { gi: { locales: { zh: { pages: { weapon } } } } } }));
+      await utimes(path, stamp, stamp);
+    };
+    const query = async (name: string) => {
+      const current = await catalog.readForEquipmentShortcut();
+      expect(current.stale).toBe(false);
+      const matches = findTraditionalEntries(current, name, "gi", "weapon");
+      expect(matches.map(({ entry }) => entry.name)).toEqual([name]);
+      return current.pages;
+    };
+    await mkdir(root);
+    await createMap(file, "刀剑甲");
+    const catalog = createAtlasCatalog(root, directory);
+    const first = await query("刀剑甲");
+    expect(await query("刀剑甲")).toBe(first);
+
+    const original = await stat(file, { bigint: true });
+    await createMap(file, "刀剑乙");
+    const overwritten = await stat(file, { bigint: true });
+    expect([overwritten.ino, overwritten.size, overwritten.mtimeNs]).toEqual([original.ino, original.size, original.mtimeNs]);
+    expect(await query("刀剑乙")).not.toBe(first);
+
+    const candidate = join(root, "candidate.json");
+    await createMap(candidate, "刀剑丙");
+    await rename(candidate, file);
+    expect((await stat(file, { bigint: true })).ino).not.toBe(original.ino);
+    expect(await query("刀剑丙")).toBe((await catalog.read()).pages);
+
+    const published = join(directory, "snapshots", "1", "data");
+    await mkdir(published, { recursive: true });
+    await createMap(join(published, "map.json"), "刀剑丁");
+    await symlink("snapshots/1/data", join(directory, "current"), "dir");
+    await query("刀剑丁");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

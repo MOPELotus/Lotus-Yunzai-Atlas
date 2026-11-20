@@ -246,7 +246,7 @@ async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
   try {
-    const result = await catalog.read();
+    const result = mode === "weapon" ? await catalog.readForEquipmentShortcut() : await catalog.read();
     const matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
     if (mode === "character" && !game && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {

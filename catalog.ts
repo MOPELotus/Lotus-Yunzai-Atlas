@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
@@ -20,6 +20,8 @@ import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
+
+const shortcutIdentityAgeNs = 100_000_000n;
 
 const equipmentPages = {
   gi: { id: "weapon", name: "武器" },
@@ -88,6 +90,7 @@ interface Catalog {
 
 interface Snapshot extends Catalog {
   readonly map: Buffer;
+  readonly mapIdentity: string;
   readonly root: string;
   readonly version: number | null;
 }
@@ -240,24 +243,32 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
   const entryRoots = new WeakMap<AtlasEntry, string>();
   let snapshot: Snapshot | undefined;
   let reading: Promise<Catalog> | undefined;
+  let checkingShortcuts: Promise<Catalog> | undefined;
 
   async function locate() {
     if (publishedRoot) return discoverAtlasDataDirectory(publishedRoot);
     return { root: await realpath(configuredRoot), version: null };
   }
 
-  async function read(): Promise<Catalog> {
+  async function read(shortcut = false): Promise<Catalog> {
     try {
       const { root, version } = await locate();
       if (snapshot?.version && (version === null || version < snapshot.version)) {
         throw new Error("图鉴发布指针丢失或版本倒退。");
       }
       const mapPath = join(root, "map.json");
-      if (version !== null && !(await lstat(mapPath)).isFile()) {
-        throw new Error("已发布图鉴索引须为实体文件。");
+      const info = version === null ? await stat(mapPath, { bigint: true }) : await lstat(mapPath, { bigint: true });
+      if (version !== null && !info.isFile()) throw new Error("已发布图鉴索引须为实体文件。");
+      const mapIdentity = [info.dev, info.ino, info.ctimeNs, info.mtimeNs, info.size].join(":");
+      // Recent writes can share a filesystem clock tick. Compare bytes until they are outside that window.
+      // Explicit queries always compare bytes.
+      const settledIdentity = info.ctimeNs < BigInt(Date.now()) * 1_000_000n - shortcutIdentityAgeNs;
+      if (shortcut && settledIdentity && snapshot && !snapshot.stale && root === snapshot.root &&
+          version === snapshot.version && mapIdentity === snapshot.mapIdentity) {
+        return { pages: snapshot.pages, stale: false };
       }
       const map = await readFile(mapPath);
-      if (!snapshot || snapshot.stale || root !== snapshot.root || !map.equals(snapshot.map)) {
+      if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version || !map.equals(snapshot.map)) {
         const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
         let stale = false;
@@ -314,7 +325,9 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
           }
         }
         if (!pages.length || (version !== null && stale)) throw new Error("图鉴索引缺少可用分类。");
-        snapshot = { map, root, version, pages, stale };
+        snapshot = { map, mapIdentity, root, version, pages, stale };
+      } else if (mapIdentity !== snapshot.mapIdentity) {
+        snapshot = { ...snapshot, mapIdentity };
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
@@ -403,7 +416,11 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
     read(): Promise<Catalog> {
-      return reading ??= read().finally(() => { reading = undefined; });
+      return reading ??= (checkingShortcuts ? checkingShortcuts.then(() => read(), () => read()) : read())
+        .finally(() => { reading = undefined; });
+    },
+    readForEquipmentShortcut(): Promise<Catalog> {
+      return reading ?? (checkingShortcuts ??= read(true).finally(() => { checkingShortcuts = undefined; }));
     },
     async characterRarity(character: Character): Promise<string> {
       if (character.game !== "zzz") return character.rarity;
