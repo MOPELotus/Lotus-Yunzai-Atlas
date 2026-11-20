@@ -390,7 +390,7 @@ async function achievementCategoryQuery(argument: string): Promise<string> {
   }
 }
 
-async function challengeQuery(argument: string): Promise<string | AtlasImage> {
+async function challengeQuery(argument: string, at?: number): Promise<string | AtlasImage> {
   const { game, query } = searchTerms(argument);
   if (!game) return "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]";
   const [modeName = "", ...terms] = query.split(/\s+/u);
@@ -445,8 +445,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       const matched = forecast
         ? await (mode.id === shiyuMode.id
           ? findNextShiyu(category.entries, readFacts) : findAnnouncedChallengeNext(mode, category.entries, readFacts))
-        : previous ? await findPreviousChallenge(mode, category.entries, readFacts)
-        : await findCurrentChallenge(mode, category.entries, readFacts);
+        : previous ? await findPreviousChallenge(mode, category.entries, readFacts, at)
+        : await findCurrentChallenge(mode, category.entries, readFacts, at);
       if (!matched) return unverifiedRotation;
       ({ entry, facts } = matched);
     } else {
@@ -483,7 +483,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
       }
     }
     if (mode.id === abyssMode.id) {
-      const abyss = await catalog.abyssDetails(entry, result, currentRequested);
+      const abyss = await catalog.abyssDetails(entry, result, currentRequested && at === undefined);
       if (abyss) {
         try {
           const { renderAbyss } = await import("./role-render.ts");
@@ -522,7 +522,7 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
         }
       }
     }
-    const lines = await challengeDetails(entry, mode, currentRequested, facts, forecast);
+    const lines = await challengeDetails(entry, mode, currentRequested && at === undefined, facts, forecast);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
   } catch {
@@ -534,7 +534,7 @@ export const apps = traditionalAtlasApps((argument, kind, game) => {
   if (kind !== "glued") return traditionalQuery(argument, game, kind);
   const { query, game: statedGame } = searchTerms(argument);
   return traditionalQuery(query, statedGame, "name");
-});
+}, (period, at) => challengeQuery(`原神 深境螺旋 ${period}`, at));
 
 const atlas = {
   aliases: {

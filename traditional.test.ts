@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
-import { parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
+import { parseDatedAbyssShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -28,6 +28,23 @@ test("旧显式入口接受紧连名称，预留状态、维护和帮助指令",
     expect(parseGluedLookup(command)).toBeUndefined();
     expect(parseEquipmentShortcut(command)).toBeUndefined();
   }
+});
+
+test("旧深境螺旋日期语法以中国服当天中午查询，只接带图鉴后缀的本期和上期", () => {
+  const at = Date.parse("2026-11-16T12:00:00+08:00");
+  for (const command of [
+    "#2026年11月16日本期深渊图鉴", "#2026.11.16当期深境螺旋图鉴",
+    "#原神2026/11/16本期深渊图鉴",
+  ]) expect(parseDatedAbyssShortcut(command)).toEqual({ period: "本期", at });
+  expect(parseDatedAbyssShortcut("#2026-11-16上期深境螺旋图鉴")).toEqual({ period: "上期", at });
+  expect(parseDatedAbyssShortcut("#2026年2月29日本期深渊图鉴")).toEqual({ period: "本期", at: undefined });
+  expect(parseDatedAbyssShortcut("#2024年2月29日本期深渊图鉴")).toEqual({
+    period: "本期", at: Date.parse("2024-02-29T12:00:00+08:00"),
+  });
+  for (const command of [
+    "#本期深渊图鉴", "#2026-11-16本期深渊", "#2026-11-16下期深渊图鉴",
+    "#2026-11-16本期幻想图鉴", "*2026-11-16本期深渊图鉴",
+  ]) expect(parseDatedAbyssShortcut(command)).toBeUndefined();
 });
 
 test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", () => {

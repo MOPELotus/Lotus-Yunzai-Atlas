@@ -12,6 +12,18 @@ const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
+const datedAbyss = /^#(?:原神)?(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)(?:深渊|深境螺旋)图鉴$/u;
+
+export function parseDatedAbyssShortcut(message: string) {
+  const match = datedAbyss.exec(message.trim());
+  if (!match) return;
+  const [, year, month, day, period] = match;
+  const date = `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}`;
+  // Lotus-ReFactor's extractExplicitDate uses noon in the China server timezone.
+  const at = Date.parse(`${date}T12:00:00+08:00`);
+  const valid = Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === date;
+  return { period: period === "上期" ? "上期" as const : "本期" as const, at: valid ? at : undefined };
+}
 
 export function parseGluedLookup(message: string): string | undefined {
   const input = message.trim();
@@ -57,7 +69,10 @@ interface ShortcutEvent {
 
 type PluginConstructor = new (options: { name: string; rule: { reg: RegExp; fnc: string }[] }) => { e?: ShortcutEvent };
 
-export function traditionalAtlasApps(findReply: (query: string, kind: Lookup, game?: Game) => Promise<AtlasReply | undefined>) {
+export function traditionalAtlasApps(
+  findReply: (query: string, kind: Lookup, game?: Game) => Promise<AtlasReply | undefined>,
+  findDatedAbyssReply: (period: "本期" | "上期", at: number) => Promise<AtlasReply>,
+) {
   return {
     // The host installs the V3 base before it enumerates the exported apps.
     get AtlasTraditionalCommands() {
@@ -73,6 +88,10 @@ export function traditionalAtlasApps(findReply: (query: string, kind: Lookup, ga
           if (query) return this.send(event, await findReply(query, "glued"));
           const role = parseRoleShortcut(event.msg);
           if (role) return this.send(event, await findReply(role.query, "character", role.game));
+          const dated = parseDatedAbyssShortcut(event.msg);
+          if (dated) return this.send(event, dated.at === undefined
+            ? "日期无效，请输入有效日期，例如 #2026-11-16本期深渊图鉴。"
+            : await findDatedAbyssReply(dated.period, dated.at));
           const target = parseEquipmentShortcut(event.msg);
           if (!target) return false;
           return this.send(event, await findReply(target.query, "shortcut", target.game));
