@@ -1,4 +1,4 @@
-import { prismSlimeArtwork } from "./challenge-artwork.ts";
+import { churinArtwork, prismSlimeArtwork } from "./challenge-artwork.ts";
 import type { AtlasEntry } from "./catalog.ts";
 import { abyssMode, hasChallengeScheduleConflict, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
@@ -155,7 +155,7 @@ const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
   // Tower 112/115 has Sigurd's original portrait. The optional Churin PNG is from HoYoWiki.
   // https://act-webstatic.hoyoverse.com/event-static-hoyowiki-admin/2026/08/03/71c24dd790c4fb4ead7003c4ad38f6d1_8199721012512592432.png
   "12-3": { level: 100,
-    first: [[undefined, "历经百战的矮灵雕刻师", 1, "gallery/gi/UI_MonsterIcon_Karzelek_Tsereteli_01.png"]],
+    first: [[undefined, "历经百战的矮灵雕刻师", 1, churinArtwork.path]],
     second: [[undefined, "历经百战的执灯人", 1, "gallery/gi/UI_MonsterIcon_WildHunt_Male_Sigurd.webp"]] },
 };
 

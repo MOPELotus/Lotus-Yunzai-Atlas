@@ -61,6 +61,10 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 
 索引中的 `icon` 必须逐条对应旧图库的 75 个文件，整份路径、大小和 SHA-256 映射也须匹配已核对旧图库的固定摘要。下载限额为每次 0 至 8 张，`0` 只复核已有文件。CDN 图片路径不含版本，响应只有通过旧 WebP 大小、格式及 SHA-256 校验才会进入检查点。重新生成隔离预览即可使用本批原图。
 
+## 第 123 期深境螺旋补充原图
+
+第 12 层第 3 间上半的「历经百战的矮灵雕刻师」可由[当期实录](https://www.youtube.com/watch?v=EXbRiGhMLjc)核对。旧导出的敌人头像缺失，可将[HoYoWiki 的丘林原始 PNG](https://act-webstatic.hoyoverse.com/event-static-hoyowiki-admin/2026/08/03/71c24dd790c4fb4ead7003c4ad38f6d1_8199721012512592432.png)保存到持久主题目录的 `gallery/gi/UI_MonsterIcon_Karzelek_Tsereteli_01.png`。图鉴优先检查旧快照原路径，再检查主题目录。两处均要求 256 × 256 原图的 SHA-256 为 `74ae70bfdd1630f3134d559a5b53d94a28e6c2d45b183f8ddb81bbff896c30af`，未找到可验证原图时保留敌人名称。
+
 ## 第 125 期深境螺旋补充原图
 
 第 12 层第 1 间上半的历经百战的虹彩史莱姆（敌人 ID `20012301`）已由[第 59 期阵容记录](https://wiki.biligame.com/ys/渊月螺旋/7.X)确认。[同期阵容卡](https://www.u7buy.com/blog/genshin-impact-spiral-abyss/)展示该形态所用头像，与 [HoYoWiki 的虹彩史莱姆条目](https://wiki.hoyolab.com/pc/genshin/entry/11052?lang=zh-cn)头像一致。HoYoWiki 原始 PNG 和 BWIKI 头像的字节相同。
