@@ -79,6 +79,15 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
 // https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
 // https://www.miyoushe.com/ys/article/78933070
 const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  // https://www.bilibili.com/video/BV1mopE6xEkd/
+  // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  // Tower 122 and RoleCombat 5/25 supply the matching Archer and Baptist portraits.
+  "12-1": { level: 95,
+    first: [[undefined, "历经百战的嵌合兽怪箭士", 1, "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp"]],
+    second: [
+      [undefined, "深罪浸礼者·水火雷驱役者", 1, "gallery/gi/UI_MonsterIcon_Invoker_Archdeacon.webp"],
+      ["22070101", "黯色空壳·旗令", 1], ["22070301", "黯色空壳·近卫", 1],
+    ] },
   // Tower 117 and RoleCombat 24/28 use the same Hildegard portrait, with different encounter IDs.
   "12-2": { level: 98, first: [["26301101", "蕴光月幻蝶", 1]],
     second: [[undefined, "历经百战的盗宝团精锐", 1, "gallery/gi/UI_MonsterIcon_Thoarder_Elder_Standard_Hildegard_01.webp"]] },
