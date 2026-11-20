@@ -41,6 +41,23 @@ test("所选版本或任一原索引无效时整组准备失败", async () => {
     .rejects.toThrow("HTTP 404");
 });
 
+test("可只准备点名的原站分类，并拒绝无效或重复范围", async () => {
+  const requests: string[] = [];
+  const request = async (url: string) => {
+    const { pathname } = new URL(url);
+    requests.push(pathname);
+    return Response.json(pathname.endsWith("/EliteGroup.json") ? [row] : { "202": row });
+  };
+  const scope = [{ game: "gi", pageId: "monster" }, { game: "hsr", pageId: "EliteGroup" }] as const;
+  const pages = await readSelectedExporterIndexes(selected, undefined, request, scope);
+  expect(requests).toEqual(["/gi/7.2/monster.json", "/hsr/4.7/EliteGroup.json"]);
+  expect(pages.map(({ game, pageId }) => ({ game, pageId }))).toEqual([...scope]);
+  for (const selection of [[], [scope[0], scope[0]], [{ game: "gi", pageId: "other" }] as const]) {
+    await expect(readSelectedExporterIndexes(selected, undefined, request, selection)).rejects.toThrow("图鉴分类");
+  }
+  expect(requests).toHaveLength(2);
+});
+
 test("同版相同数量但内容或条目身份改变时不能复用，完全一致时保留现有条目", async () => {
   const root = await mkdtemp(join(tmpdir(), "lotus-atlas-version-index-"));
   try {
@@ -64,6 +81,19 @@ test("同版相同数量但内容或条目身份改变时不能复用，完全�
     expect((await inspectExporterPages(root, undefined, scope("203", row))).completed.size).toBe(0);
     expect((await inspectExporterPages(root, undefined, scope("202", { ...row, icon: "updated" }))).completed.size).toBe(0);
     expect((await inspectExporterPages(root)).completed.size).toBe(0);
+
+    const other = "items/other.json";
+    const otherPage = { ...page, id: "weapon", records: { "202": { ...page.records["202"], path: other } } };
+    await writeFile(join(data, "map.json"), JSON.stringify({
+      games: { gi: { locales: { zh: { pages: { monster: page, weapon: otherPage } } } } },
+    }));
+    await writeFile(join(data, other), JSON.stringify({
+      meta: { gameId: game, pageId: "weapon", version, recordId: "202", name: "旧条目", locale: "zh", hasDetail: true },
+      content: { list: row, detail: { desc: "另一分类详情" } },
+    }));
+    const checked = await inspectExporterPages(root, undefined, scope("202", row));
+    expect([...checked.completed]).toEqual(["gi/monster"]);
+    expect(checked.exactScope).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

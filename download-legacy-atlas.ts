@@ -16,12 +16,21 @@ const atlasVersion = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1
 const maxExportIndexBytes = 16 * 1024 * 1024;
 
 export type AtlasExportVersions = Readonly<Record<Game, string>>;
+export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
 type ExportPage = Required<AtlasCandidatePage>;
 type VerifiedIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
 type ExportScope = ExportPage & { readonly rows?: VerifiedIndex["rows"] };
 
-function selectedExporterPages(versions: AtlasExportVersions) {
-  return legacyAtlasSourcePages.map(({ game, pageId, indexPath, indexShape }) => {
+function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly AtlasExportPageSelection[]) {
+  let profiles = legacyAtlasSourcePages;
+  if (scope !== undefined) {
+    const keys = new Set(scope.map(({ game, pageId }) => `${game}/${pageId}`));
+    profiles = profiles.filter(({ game, pageId }) => keys.has(`${game}/${pageId}`));
+    if (!scope.length || keys.size !== scope.length || profiles.length !== keys.size) {
+      throw new Error("请选择已识别且不重复的图鉴分类。");
+    }
+  }
+  return profiles.map(({ game, pageId, indexPath, indexShape }) => {
     const version = versions[game];
     if (typeof version !== "string" || !atlasVersion.test(version) || (game !== "zzz" && version.includes("+"))) {
       throw new Error(`请选择图鉴原站提供的 ${game} 版本。`);
@@ -31,8 +40,8 @@ function selectedExporterPages(versions: AtlasExportVersions) {
 }
 
 export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
-  request: AtlasSourceFetch = fetch): Promise<readonly VerifiedIndex[]> {
-  const selected = selectedExporterPages(versions);
+  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[]): Promise<readonly VerifiedIndex[]> {
+  const selected = selectedExporterPages(versions, scope);
   const indexes: VerifiedIndex[] = [];
   for (let start = 0; start < selected.length; start += 4) {
     const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexPath, indexShape }) => {
@@ -259,7 +268,9 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       const verified = completed.size === scope.length ? initial : await inspectExporterPages(root, signal, scope);
       const missing = scope.filter(({ game, pageId }) => !verified.completed.has(`${game}/${pageId}`));
       if (missing.length) throw new Error(`原导出未完成所选图鉴：${missing.map(({ game, pageId }) => `${game}/${pageId}`).join("、")}。`);
-      if (!verified.exactScope) throw new Error("原导出的分类范围与所选图鉴不符。");
+      if (scope.length === legacyAtlasSourcePages.length && !verified.exactScope) {
+        throw new Error("原导出的分类范围与所选图鉴不符。");
+      }
     }
     const pages = scope.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
     return await consume(root, pages);
@@ -277,6 +288,6 @@ export function downloadLegacyAtlas<T>(path: string, target: string, consume: (s
 /** Run all supported pages at the versions already selected from the original website manifest. */
 export function downloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request), consume, signal);
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[]): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal);
 }
