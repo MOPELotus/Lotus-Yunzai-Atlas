@@ -354,7 +354,8 @@ function measurePage(head: number, panels: readonly Block[][], trailingGap: bool
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
-  const backdrop = backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
+  const element = role.game === "gi" ? role.overview.element : undefined;
+  const backdrop = element ?? backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
   const [images, background, texture, originalPortrait] = await Promise.all([
     galleryImages(role.game, [role.overview.icon, role.overview.artwork,
       ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),

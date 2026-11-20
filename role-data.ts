@@ -58,6 +58,7 @@ export interface RoleDetails {
     readonly description?: string;
     readonly artwork?: string;
     readonly icon?: string;
+    readonly element?: GenshinElement;
     readonly facts: readonly { label: string; value: string }[];
     readonly stats?: readonly { label: string; value: string }[];
   };
@@ -68,6 +69,17 @@ export interface RoleDetails {
 
 type RecordValue = Record<string, unknown>;
 type Artwork = (...fields: string[]) => string | undefined;
+
+const genshinElements = {
+  Pyro: "pyro", Hydro: "hydro", Anemo: "anemo", Cryo: "cryo", Geo: "geo", Electro: "electro", Dendro: "dendro",
+} as const;
+type GenshinElement = typeof genshinElements[keyof typeof genshinElements];
+
+function genshinElement(list: RecordValue, detail: RecordValue): GenshinElement | undefined {
+  const code = label(detail.element);
+  if (code !== label(list.element) || !Object.hasOwn(genshinElements, code)) return;
+  return genshinElements[code as keyof typeof genshinElements];
+}
 
 const starRailPaths: Readonly<Record<string, string>> = {
   Warrior: "毁灭", Rogue: "巡猎", Mage: "智识", Warlock: "虚无", Shaman: "同谐", Knight: "存护", Priest: "丰饶", Memory: "记忆", Elation: "欢愉",
@@ -465,6 +477,8 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
+  const list = object(content.list);
+  const element = game === "gi" ? genshinElement(list, detail) : undefined;
   const partner = object(detail.partner_info);
   const fullName = label(partner.full_name);
   const verifiedName = game === "zzz" ? zzzFullNames.get(id) : undefined;
@@ -475,7 +489,7 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
-    overview: { name: title, rarity, description: text(detail.desc) ?? text(partner.profile_desc) ?? text(object(content.list).desc),
-      artwork: artwork(...focusFields[game]) ?? icon, icon, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
+    overview: { name: title, rarity, description: text(detail.desc) ?? text(partner.profile_desc) ?? text(list.desc),
+      artwork: artwork(...focusFields[game]) ?? icon, icon, element, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };
 }

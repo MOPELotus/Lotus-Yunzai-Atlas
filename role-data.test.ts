@@ -52,6 +52,27 @@ test("原神同版本角色组合战斗和固有天赋，保留六命与有记�
   }
 });
 
+test("原神角色元素按同一条目的正式字段选背景，旅行者仍显示没有神之眼", () => {
+  const elements = [
+    ["Pyro", "pyro"], ["Hydro", "hydro"], ["Anemo", "anemo"], ["Cryo", "cryo"],
+    ["Geo", "geo"], ["Electro", "electro"], ["Dendro", "dendro"],
+  ] as const;
+  const content = (list: string, detail: string) => ({
+    list: { element: list }, detail: { element: detail, chara_info: { vision: "无" } },
+  });
+  for (const [code, element] of elements) {
+    const role = normalizeRoleDetails(entry("gi"), content(code, code), "五星");
+    expect(role?.overview.element).toBe(element);
+    expect(role?.overview.facts).toEqual([{ label: "神之眼", value: "无" }]);
+  }
+  expect(normalizeRoleDetails(entry("gi"), content("Hydro", "Pyro"), "五星")?.overview.element).toBeUndefined();
+  expect(normalizeRoleDetails(entry("gi"), content("None", "None"), "五星")?.overview.element).toBeUndefined();
+  expect(normalizeRoleDetails(entry("gi"), content("", "Pyro"), "五星")?.overview.element).toBeUndefined();
+  for (const game of ["hsr", "zzz"] as const) {
+    expect(normalizeRoleDetails(entry(game), content("Pyro", "Pyro"), "五星")?.overview.element).toBeUndefined();
+  }
+});
+
 test("星铁保留技能等级、大行迹和属性小行迹，不猜测材料名或缺失星魂", () => {
   const role = normalizeRoleDetails(entry("hsr"), { detail: {
     base_type: "Warlock", damage_type: "Thunder",

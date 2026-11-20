@@ -62,7 +62,8 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     await writeFile(join(root, "map.json"), JSON.stringify({
       games: {
         gi: { locales: { zh: { pages: {
-          character: page({ id: "10", name: "西风剑客" }),
+          character: page({ id: "10", name: "西风剑客" },
+            { id: "10000005-2", name: "旅行者" }, { id: "10000007-3", name: "旅行者" }),
           weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" }),
           artifact: page({ id: "202", name: "索引名应由详情修正" }),
         } } } },
@@ -76,6 +77,11 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("西风剑")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"], ["hsr", "equipment", "300"]]);
     expect(hits("100")).toEqual([["gi", "equipment", "100"]]);
     expect(hits("西风剑客")).toEqual([["gi", "character", "10"]]);
+    expect(hits("10000005-2", "gi")).toEqual([["gi", "character", "10000005-2"]]);
+    expect(hits("１００００００７－３", "gi")).toEqual([["gi", "character", "10000007-3"]]);
+    expect(hits("100000052", "gi")).toEqual([]);
+    expect(hits("10000005-2", "hsr")).toEqual([]);
+    expect(hits("旅行者", "gi")).toEqual([["gi", "character", "10000005-2"], ["gi", "character", "10000007-3"]]);
     expect(hits("企鹅布")).toEqual([["zzz", "bangboo", "400"]]);
     expect(hits("西风剑", "hsr", "equipment")).toEqual([["hsr", "equipment", "300"]]);
     expect(hits("西风剑", "gi", "equipment")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"]]);

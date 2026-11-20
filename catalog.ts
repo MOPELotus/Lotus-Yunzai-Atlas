@@ -116,9 +116,9 @@ function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPa
   return { game, kind, name, version, sampled: page.sampled === true, entries };
 }
 
-function score(entry: AtlasEntry, key: string): number {
+function score(entry: AtlasEntry, key: string, literal: string): number {
   const name = compareKey(entry.name);
-  if (entry.id === key || name === key) return 3;
+  if (entry.id === literal || entry.id === key || name === key) return 3;
   if (name.startsWith(key)) return 2;
   return name.includes(key) ? 1 : 0;
 }
@@ -143,7 +143,7 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal)
       : page.game === "gi" && genshinAlias?.kind === kind ? genshinAlias : undefined;
     return page.entries.map((entry) => {
-      const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key);
+      const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key, literal);
       // A verified name ranks below an exact record name and above a partial match.
       const alias = aliasTarget?.id === entry.id && aliasTarget.name === entry.name;
       return { kind, entry, score: alias ? 2.5 : direct };
