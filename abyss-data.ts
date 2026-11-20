@@ -113,6 +113,12 @@ const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
 const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
   "12-2": { level: 98, first: [["25140101", "不灭衍生造物", 1]],
     second: [["22140101", "深黯钓客", 4], ["22150101", "深黯魇语之主", 1]] },
+  // https://www.youtube.com/watch?v=EXbRiGhMLjc
+  // Tower 112/115 has Sigurd's original portrait. The optional Churin PNG is from HoYoWiki.
+  // https://act-webstatic.hoyoverse.com/event-static-hoyowiki-admin/2026/08/03/71c24dd790c4fb4ead7003c4ad38f6d1_8199721012512592432.png
+  "12-3": { level: 100,
+    first: [[undefined, "历经百战的矮灵雕刻师", 1, "gallery/gi/UI_MonsterIcon_Karzelek_Tsereteli_01.png"]],
+    second: [[undefined, "历经百战的执灯人", 1, "gallery/gi/UI_MonsterIcon_WildHunt_Male_Sigurd.webp"]] },
 };
 
 const verifiedPeriods = {

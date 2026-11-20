@@ -160,7 +160,7 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   expect(mismatched?.rooms.flatMap(({ sides }) => sides.flatMap(({ enemies }) => enemies))).toEqual([]);
 });
 
-test("辉卷之月 123 仅补 12-2 的已核阵容", async () => {
+test("辉卷之月 123 仅补已核的 12-2 和 12-3 阵容", async () => {
   const entry123 = { ...entry, id: "123", name: "辉卷之月" };
   const open = "2026-09-16 04:00:00";
   const close = "2026-10-16 03:59:59";
@@ -179,7 +179,8 @@ test("辉卷之月 123 仅补 12-2 的已核阵容", async () => {
     [[], []],
     [[["不灭衍生造物", 1, "gallery/gi/25140101.webp"]],
       [["深黯钓客", 4, "gallery/gi/22140101.webp"], ["深黯魇语之主", 1, "gallery/gi/22150101.webp"]]],
-    [[], []],
+    [[["历经百战的矮灵雕刻师", 1, "gallery/gi/UI_MonsterIcon_Karzelek_Tsereteli_01.png"]],
+      [["历经百战的执灯人", 1, "gallery/gi/UI_MonsterIcon_WildHunt_Male_Sigurd.webp"]]],
   ]);
   const mismatched = await normalizeAbyss(entry123, {
     ...source, list: { ...source.list, live_end: "2026-10-16 04:00:00" },
