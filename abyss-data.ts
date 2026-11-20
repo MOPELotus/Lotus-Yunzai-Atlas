@@ -79,6 +79,10 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
 // https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
 // https://www.miyoushe.com/ys/article/78933070
 const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  // The 7.X table and the October historical guides agree on 24 slimes in the lower half.
+  // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  // https://genshinflex.com/en/abyss/history/
+  "11-1": { level: 88, first: [], second: [["20011101", "大型水史莱姆", 24]] },
   // The October 16 in-game preview identifies the same enemies as the 7.X wave table.
   // https://trivia.k-oshiro.com/2026/10/16/genshin-spiral-abyss-2026-10/
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
@@ -138,7 +142,7 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
       const sides = await Promise.all((["first", "second"] as const).map(async (half, position) => {
         const rows = Array.isArray(room[half]) ? room[half] : [];
         const name = position === 0 ? "上半" : "下半";
-        if (verified && verified.level === room.level && Array.isArray(room[half]) && !rows.length) {
+        if (verified?.[half].length && verified.level === room.level && Array.isArray(room[half]) && !rows.length) {
           const enemies = await Promise.all(verified[half].map(async ([id, enemyName, count, originalArtwork]) => {
             const original = id ? await enemy(id, enemyName) : undefined;
             return { name: enemyName, count, artwork: originalArtwork ?? original?.artwork, description: original?.description };

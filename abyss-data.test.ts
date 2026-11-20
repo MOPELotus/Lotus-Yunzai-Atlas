@@ -104,7 +104,7 @@ test("凌振之月 125 仅补经核实的 11、12 层空半场，保留源阵容
   }
 });
 
-test("骇星之月 124 仅补第 11 层第三间及第 12 层原阵容", async () => {
+test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   const entry124 = { ...entry, id: "124", name: "骇星之月", version: "7.2" };
   const open = "2026-10-16 04:00:00";
   const close = "2026-11-16 03:59:59";
@@ -121,7 +121,10 @@ test("骇星之月 124 仅补第 11 层第三间及第 12 层原阵容", async (
   } };
   const lookup = async (id: string, name: string) => ({ name, artwork: `gallery/gi/${id}.webp` });
   const rendered = await normalizeAbyss(entry124, source, [], lookup);
-  expect(rendered?.rooms[0]?.sides.flatMap(({ enemies }) => enemies)).toEqual([]);
+  expect(rendered?.rooms[0]?.sides.map(({ enemies }) =>
+    enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
+    [], [["大型水史莱姆", 24, "gallery/gi/20011101.webp"]],
+  ]);
   expect(rendered?.rooms[1]?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
     [["愚人众特辖队·雷霰近卫军", 1, "gallery/gi/23079301.webp"], ["愚人众特辖队·火刃突击队", 1, "gallery/gi/23079101.webp"],
