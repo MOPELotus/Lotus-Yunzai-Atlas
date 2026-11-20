@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findEquipment, findSets } from "./catalog.ts";
 import { publishAtlasCandidate, readAtlasSnapshotVersion } from "./publish-candidate.ts";
+import { mazeSourceOutline } from "./maze-source-data.ts";
 import { refreshAtlasSource } from "./refresh-source.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
@@ -1127,4 +1128,89 @@ test("绝区零角色只从正式版更新，已有条目、等级和原图必�
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
+});
+
+test.each(["maze_extra", "maze_boss"] as const)("%s 缺少历史期、实装窗口、原详情或关联敌人时不发布", async pageId => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-rotation-refresh-"));
+  const root = join(work, "atlas");
+  const fiction = pageId === "maze_extra";
+  const selection = `hsr/${pageId}` as const;
+  const detailPath = fiction ? "story" : "boss";
+  const original = {
+    "2001": { id: 2001, zh: "历史期", begin: "", end: "", live_begin: "2024-01-01 04:00:00", live_end: "2024-02-01 04:00:00" },
+    "2002": { id: 2002, zh: "当前期", begin: "", end: "", live_begin: "2024-02-01 04:00:00", live_end: "2024-03-01 04:00:00" },
+  };
+  let candidate = structuredClone(original);
+  let live = "4.6";
+  let detailMissing = false;
+  let enemyMissing = false;
+  const urls: string[] = [];
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url === `https://static.nanoka.cc/hsr/${live}/${pageId}.json`) return Response.json(candidate);
+    const id = url.match(new RegExp(`/zh/${detailPath}/(200[12])[.]json$`))?.[1] as keyof typeof original | undefined;
+    if (!id || !url.includes(`/${live}/`)) throw new Error(`不应请求 ${url}`);
+    if (detailMissing && id === "2001") return missing();
+    const retained = enemyMissing && id === "2001" ? 1002012 : 1002011;
+    const level = {
+      id: 1001, name: "首层", challenge: [],
+      event_id_list1: [{ stage_id: 11, level: 60, hard_level_group: 1, monster_list: [{ monster0: 1002011 }] }],
+      event_id_list2: [],
+      ...(fiction ? { infinite_list1: { "201": { infinite_wave_id: 201, monster_group_id_list: [retained], elite_group: 1 } },
+        infinite_list2: {} } : { boss_monster_id1: retained, boss_monster_id2: 1002011 }),
+    };
+    return Response.json({ id: Number(id), name: original[id].zh, level: [level], buff: {},
+      ...(fiction ? { option: [], sub_option: [] } : { buff_list1: [], buff_list2: [], buff_list3: [] }) });
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
+    const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", `hsr=${pageId}`] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "4.7";
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    Reflect.deleteProperty(candidate, "2001");
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("2001 缺少已有轮换资料")],
+    });
+    candidate = structuredClone(original);
+    candidate["2001"].live_end = "2024-02-02 04:00:00";
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("2001 与已有身份或实装窗口冲突")],
+    });
+    candidate = structuredClone(original);
+    enemyMissing = true;
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("2001 缺少已有楼层、战斗或敌人")],
+    });
+    enemyMissing = false;
+    detailMissing = true;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("更新未完成");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    detailMissing = false;
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(urls).toEqual([
+      `https://static.nanoka.cc/hsr/4.7/${pageId}.json`,
+      `https://static.nanoka.cc/hsr/4.7/zh/${detailPath}/2001.json`,
+      `https://static.nanoka.cc/hsr/4.7/zh/${detailPath}/2002.json`,
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+
+test("星铁轮换校验兼容原导出历史名称标记和已记录的未命名末日预告", () => {
+  const stage = { stage_id: 11, level: 60, hard_level_group: 1, monster_list: [{ monster0: 1002011 }] };
+  const floor = { id: 1, group_name: "弦外之声(<unbreak>2.2</unbreak>)", name: "首层", challenge: [],
+    event_id_list1: [stage], event_id_list2: [] };
+  expect(mazeSourceOutline("maze", [floor], "弦外之声(2.2)", "1015")).toBeDefined();
+  const preview = { id: 3024, name: null, buff: {}, buff_list1: [], buff_list2: [], buff_list3: [],
+    level: [{ ...floor, name: null, boss_monster_id1: 1002011, boss_monster_id2: 1002011 }] };
+  expect(mazeSourceOutline("maze_boss", preview, "3024", "3024")).toBeDefined();
+  expect(mazeSourceOutline("maze_boss", { ...preview, id: 3025 }, "3025", "3025")).toBeUndefined();
 });

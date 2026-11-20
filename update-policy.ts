@@ -125,5 +125,5 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
     return rule ? { selections: selected, cron: rule }
       : { selections: selected, issue: `图鉴 auto_update.${cronKey} 无效或无法等价转换。` };
   }
-  return { version: policy("version", entries), challenge: policy("challenge", ["zzz/boss", "zzz/shiyu", "hsr/maze"]) };
+  return { version: policy("version", entries), challenge: policy("challenge", ["zzz/boss", "zzz/shiyu", "hsr/maze", "hsr/maze_extra", "hsr/maze_boss"]) };
 }

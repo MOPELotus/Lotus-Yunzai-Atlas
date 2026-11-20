@@ -1,5 +1,6 @@
 import type { Game } from "./catalog.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes } from "./source-transport.ts";
+import type { StarrailRotationPage } from "./maze-source-data.ts";
 import { isMonsterGroupPage } from "./monster-group-data.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
@@ -105,7 +106,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
 
 /** ZZZ challenge acquisition uses the published build and verifies each source window separately. */
 export function planPublishedChallengeRefresh(manifest: unknown, local: AtlasCandidateValidation,
-  scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: "maze" }): AtlasUpdatePlan {
+  scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: StarrailRotationPage }): AtlasUpdatePlan {
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
   return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedVersion(manifest, scope.game))]);

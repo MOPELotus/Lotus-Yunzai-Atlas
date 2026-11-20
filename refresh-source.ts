@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
-import { mazeSourceOutline } from "./maze-source-data.ts";
+import { isStarrailRotationPage, mazeSourceOutline, starrailSourceRotation } from "./maze-source-data.ts";
 import { readAchievementCategories } from "./achievements.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { candidateFile } from "./candidate-gallery.ts";
-import { chaosMode, deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
+import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
@@ -22,6 +22,8 @@ const sourcePages = {
   "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "星铁精英组", iconFields: [] },
   "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "星铁难度组", iconFields: [] },
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "星铁无限精英组", iconFields: [] },
+  "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "星铁虚构叙事", iconFields: [] },
+  "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "星铁末日幻影", iconFields: [] },
   "hsr/maze": { game: "hsr", pageId: "maze", title: "星铁混沌回忆", iconFields: [] },
   "hsr/monster": { game: "hsr", pageId: "monster", title: "星铁敌人", iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
@@ -64,7 +66,7 @@ async function readJson(root: string, path: string): Promise<unknown> {
 }
 
 async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal) {
-  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : pageId === "maze" ? chaosMode : undefined;
+  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).mode : undefined;
   const map = object(await readJson(root, "map.json"));
   const gameData = object(object(map.games)[game]);
   const pages = object(object(object(gameData.locales).zh).pages);
@@ -106,8 +108,8 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
       key = semanticKey;
       groupFields = Object.keys(values);
     }
-    const maze = pageId === "maze" ? mazeSourceOutline(content.detail, typeof name === "string" ? name : "") : undefined;
-    if (pageId === "maze" && !maze) throw new Error(`混沌回忆 ${id} 关卡身份或结构无效。`);
+    const maze = isStarrailRotationPage(pageId) ? mazeSourceOutline(pageId, content.detail, typeof name === "string" ? name : "", id) : undefined;
+    if (isStarrailRotationPage(pageId) && !maze) throw new Error(`${starrailSourceRotation(pageId).mode.name} ${id} 关卡身份或结构无效。`);
     assets.set(key, { name, window, maze, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
       icons: mode || pageId === "artifact" || pageId === "character" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
@@ -130,7 +132,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
 
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
   after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean) {
-  const preserveRotation = pageId === "boss" || pageId === "shiyu" || pageId === "maze";
+  const preserveRotation = pageId === "boss" || pageId === "shiyu" || isStarrailRotationPage(pageId);
   const issues: string[] = [];
   for (const id of before.achievementIds) {
     if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
@@ -149,7 +151,8 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       }
       continue;
     }
-    if (preserveRotation && (old.name !== next.name || (old.window?.from === "live" &&
+    const unnamedPreview = pageId === "maze_boss" && id === "3024" && old.name === id && old.window?.from !== "live";
+    if (preserveRotation && ((!unnamedPreview && effectText(old.name) !== effectText(next.name)) || (old.window?.from === "live" &&
       (next.window?.from !== "live" || old.window.begin !== next.window.begin || old.window.end !== next.window.end)))) {
       issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
     }
@@ -181,7 +184,7 @@ export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
   local: Awaited<ReturnType<typeof validateAtlasCandidate>>) {
   const { game, pageId } = sourcePages[selection];
   if (!local.pages.some((page) => page.game === game && page.pageId === pageId)) local = { ...local, ok: false };
-  if (pageId === "maze") return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId });
+  if (isStarrailRotationPage(pageId)) return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId });
   return pageId === "boss" || pageId === "shiyu" ? planPublishedChallengeRefresh(listing, local, { game: "zzz", pageId })
     : planAtlasUpdate(listing, local, [{ game, pageId }]);
 }
@@ -237,7 +240,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
         }
       }
     }
-    if (selection === "hsr/maze") {
+    if (isStarrailRotationPage(page.pageId)) {
       const links = [
         { selection: "hsr/monstervalue", field: "battleEnemies" },
         { selection: "hsr/EliteGroup", field: "eliteGroups" },
@@ -251,7 +254,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
         const known = new Set([...linked.assets].flatMap(([id, record]) => [id, ...(record.variants ?? []).map(String)]));
         for (const [id, record] of after.assets) {
           const missing = [...record.maze?.[link.field] ?? []].find(key => !known.has(key));
-          if (missing) issues.push(`混沌回忆 ${id} 无法关联同版本${linkedPage.title} ${missing}。`);
+          if (missing) issues.push(`${starrailSourceRotation(page.pageId).mode.name} ${id} 无法关联同版本${linkedPage.title} ${missing}。`);
         }
       }
     }
