@@ -16,6 +16,14 @@ const driveDiscImages = "UI/Sprite/A1DynamicLoad/IconSuit/UnPacker";
 const bangbooIcon = new RegExp(`^${bangbooImages}/([A-Za-z0-9_-]{1,120})\\.png$`, "u");
 const driveDiscIcon = new RegExp(`^${driveDiscImages}/(Suit[A-Za-z0-9_-]{1,116}|${branchAndBladeIcon})\\.png$`, "u");
 const weaponIcon = /^Weapon_[A-Za-z0-9_-]{1,113}$/u;
+const genshinArtifactIcon = /^UI_RelicIcon_[A-Za-z0-9_]{1,100}$/u;
+// Both sets have the same confirmed original 404s in the legacy export and the formal release.
+const missingGenshinArtifactIcons = new Map([
+  ["15004", new Set(["UI_RelicIcon_15004_1", "UI_RelicIcon_15004_2", "UI_RelicIcon_15004_3",
+    "UI_RelicIcon_15004_4", "UI_RelicIcon_15004_5"])],
+  ["15012", new Set(["UI_RelicIcon_15012_3"])],
+]);
+const genshinArtifactSlots = ["equip_ring", "equip_necklace", "equip_dress", "equip_bracer", "equip_shoes"] as const;
 const genshinWeaponIcon = /^[A-Za-z0-9_]{1,120}$/u;
 const genshinWeaponTypes = new Set(["WEAPON_SWORD_ONE_HAND", "WEAPON_CLAYMORE", "WEAPON_POLE", "WEAPON_CATALYST", "WEAPON_BOW", "ITEM_TPS_WEAPON"]);
 const genshinRarities = ["", "一星", "二星", "三星", "四星", "五星"] as const;
@@ -36,6 +44,7 @@ const pages = {
   "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: "星铁成就", timeout: 60_000, maxRecords: 256 },
+  "gi/artifact": { game: "gi", pageId: "artifact", title: "Artifact Set", folder: "原神圣遗物", timeout: 360_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "Shiyu Defense", folder: "式舆防卫战", timeout: 360_000, maxRecords: 256 },
@@ -105,6 +114,20 @@ function sourceIndex(category: SourcePage, value: unknown) {
       if (!/^[1-9]\d{0,9}$/u.test(id) || typeof name !== "string" || !name.trim() || !iconName ||
           !effectText(texts.desc2) || !effectText(texts.desc4)) throw new Error("驱动盘来源索引条目结构无效。");
       return { id, list, name: name.trim(), rarity: "未分类", iconName };
+    }
+    if (category === "gi/artifact") {
+      const effects = Object.entries(object(list.set));
+      const name = label(object(object(effects[0]?.[1]).name).zh);
+      if (!/^[1-9]\d{0,9}$/u.test(id) || list.id !== Number(id) || !name ||
+          typeof icon !== "string" || !genshinArtifactIcon.test(icon) ||
+          !Array.isArray(rank) || rank.length === 0 || new Set(rank).size !== rank.length ||
+          rank.some(value => !Number.isInteger(value) || value < 1 || value > 5) ||
+          (effects.length !== 1 && effects.length !== 2) ||
+          effects.some(([key, value]) => !/^[1-9]\d{0,9}$/u.test(key) ||
+            label(object(object(value).name).zh) !== name || !effectText(object(object(value).desc).zh))) {
+        throw new Error("原神圣遗物来源索引条目结构无效。");
+      }
+      return { id, list, name, rarity: "未分类", iconName: icon };
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
@@ -243,9 +266,37 @@ function genshinWeaponDetail(item: Record<string, unknown>, id: string, list: Re
     });
 }
 
+function genshinArtifactDetail(item: Record<string, unknown>, id: string, list: Record<string, unknown>): boolean {
+  const listed = object(list.set);
+  const single = Object.keys(listed).length === 1;
+  const parts = object(item.parts);
+  const slots = single ? ["equip_dress"] : genshinArtifactSlots;
+  const needed = single ? [1] : [2, 4];
+  const { affix, need, rank } = item;
+  if (item.id !== Number(id) || item.icon !== list.icon || JSON.stringify(rank) !== JSON.stringify(list.rank) ||
+      !Array.isArray(affix) || affix.length !== needed.length || JSON.stringify(need) !== JSON.stringify(needed) ||
+      Object.keys(parts).length !== slots.length) return false;
+  if (!slots.every(slot => {
+    const { name, icon } = object(parts[slot]);
+    return label(name) && typeof icon === "string" && genshinArtifactIcon.test(icon);
+  })) return false;
+
+  const affixIds = new Set<string>();
+  for (const value of affix) {
+    const { affix_id, name, desc } = object(value);
+    if (typeof affix_id !== "number" || !Number.isSafeInteger(affix_id)) return false;
+    const key = String(affix_id);
+    const source = object(listed[key]);
+    if (affixIds.has(key) || name !== object(source.name).zh || desc !== object(source.desc).zh) return false;
+    affixIds.add(key);
+  }
+  return true;
+}
+
 function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<typeof sourceIndex>[number]) {
   const { id, name, rank, iconName, list } = entry;
   const item = object(detail);
+  if (category === "gi/artifact") return genshinArtifactDetail(item, id, list);
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
   if (category === "hsr/relicset") {
@@ -383,6 +434,9 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
           const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
           if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error(`${folder}来源图标缺失（${id}）。`);
+          if (!icon && category === "gi/artifact" && !missingGenshinArtifactIcons.get(id)?.has(iconName)) {
+            throw new Error(`原神圣遗物来源主图缺失（${id}）。`);
+          }
           if (!icon && category === "hsr/relicset") throw new Error(`星铁遗器来源图标缺失（${id}）。`);
           if (!icon && localized) throw new Error(`${folder}来源图标缺失（${id}）。`);
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
@@ -393,6 +447,17 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const { icon: detailIcon, icon2 } = object(detail);
           if (typeof detailIcon === "string" && (pageId === "weapon" || detailIcon === list.icon)) {
             references.push(imageReference("detail.icon", detailIcon, icon));
+          }
+          if (category === "gi/artifact") {
+            for (const [slot, part] of Object.entries(object(object(detail).parts))) {
+              const name = object(part).icon as string;
+              const artwork = await loadIcon(name);
+              if (!artwork && !missingGenshinArtifactIcons.get(id)?.has(name)) {
+                throw new Error(`原神圣遗物来源部位图缺失（${id}，${slot}）。`);
+              }
+              usedPlaceholder ||= !artwork;
+              references.push(imageReference(`detail.parts.${slot}.icon`, name, artwork));
+            }
           }
           if (category === "zzz/equipment") references.push(imageReference("detail.icon2", icon2, icon));
         }

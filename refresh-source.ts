@@ -22,6 +22,7 @@ const sourcePages = {
   "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "绝区零成就", iconFields: [] },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "原神成就", iconFields: ["icon"] },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "星铁成就", iconFields: [] },
+  "gi/artifact": { game: "gi", pageId: "artifact", title: "原神圣遗物", iconFields: itemIcons },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
@@ -76,11 +77,11 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     }
     const window = mode ? readChallengeFacts(mode, object(item.content)).window : undefined;
     const detail = object(object(item.content).detail);
-    const relicset = pageId === "relicset" ? {
-      parts: Object.keys(object(detail.parts)), effects: Object.keys(object(detail.require_num)),
-    } : undefined;
-    assets.set(id, { name, window, hasDetail: hasDetail === true, ...relicset,
-      icons: mode ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
+    const setParts = pageId === "relicset" || pageId === "artifact" ? Object.keys(object(detail.parts)) : undefined;
+    const effects = pageId === "relicset" ? Object.keys(object(detail.require_num))
+      : pageId === "artifact" && Array.isArray(detail.need) ? detail.need.map(String) : undefined;
+    assets.set(id, { name, window, hasDetail: hasDetail === true, parts: setParts, effects,
+      icons: mode || pageId === "artifact" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
     version: "", sourceUrl: "", sources: achievementSources,
@@ -115,7 +116,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset") && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact") && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;

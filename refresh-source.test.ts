@@ -704,3 +704,57 @@ test("星铁遗器只更新正式版并保留旧记录、部件、套装效果�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("原神圣遗物更新校验五件部位，已核原缺图例外不会让真实部位图降级", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-gi-artifact-refresh-"));
+  const root = join(work, "atlas");
+  const pageId = "artifact";
+  const selection = "gi/artifact";
+  const name = "样例套装";
+  const id = 15004;
+  const icon = "UI_RelicIcon_15004_4";
+  const rank = [4, 5];
+  const slots = ["equip_ring", "equip_necklace", "equip_dress", "equip_bracer", "equip_shoes"];
+  const sourceEffects = { "19": { name: { zh: name }, desc: { zh: "加成一" } }, "20": { name: { zh: name }, desc: { zh: "加成二" } } };
+  const original = {
+    id, icon, rank, need: [2, 4],
+    affix: Object.entries(sourceEffects).map(([key, effect]) => ({ affix_id: Number(key), name, desc: effect.desc.zh })),
+    parts: Object.fromEntries(slots.map((slot, index) => [slot, { name: slot, icon: `UI_RelicIcon_15004_${index + 1}` }])),
+  };
+  let candidate = structuredClone(original);
+  let live = "7.1";
+  let missingIcon: string | undefined;
+  const request = async (url: string) => {
+    if (url === `https://static.nanoka.cc/gi/${live}/artifact.json`) {
+      return Response.json({ [id]: { id, icon, rank, set: sourceEffects } });
+    }
+    if (url === `https://static.nanoka.cc/gi/${live}/zh/artifact/${id}.json`) return Response.json(candidate);
+    const match = /\/assets\/gi\/(UI_RelicIcon_15004_[1-5])\.webp$/u.exec(url);
+    if (!match) throw new Error(`不应请求 ${url}`);
+    return match[1] === missingIcon ? missing() : new Response(new Uint8Array(webp));
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "gi", pageId, version: live }], undefined, request);
+    const manifest = async () => ({ gi: { live, latest: "7.2.52", available: [live, "7.2.52"] } });
+    live = "7.2";
+    missingIcon = "UI_RelicIcon_15004_1";
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: ["原神圣遗物 15004 缺少已下载图标 detail.parts.equip_ring.icon。"],
+    });
+    missingIcon = undefined;
+    Reflect.deleteProperty(candidate.parts, "equip_ring");
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("详情与来源索引");
+    candidate = structuredClone(original);
+    candidate.affix[0]!.desc = "未证实效果";
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("详情与来源索引");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+
+    candidate = structuredClone(original);
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({ status: "published", version: 1 });
+    const catalog = createAtlasRuntimeCatalog(root);
+    const [entry] = findSets(await catalog.read(), name, "gi");
+    expect(await catalog.setDetails(entry!)).toMatchObject({ version: live, parts: slots.map(slot => ({ id: slot })) });
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
