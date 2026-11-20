@@ -1000,3 +1000,70 @@ test("星铁敌人正式更新校验同版本身份、原图与数值表的变�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("混沌回忆更新保留实装窗口、历史期次和同版战斗倍率关联", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-maze-refresh-"));
+  const root = join(work, "atlas");
+  const groupSource = join(work, "groups");
+  const selection = "hsr/maze";
+  const period = (id: string, name: string) => ({
+    id, zh: name, begin: "", end: "",
+    live_begin: "2026-11-01 04:00:00", live_end: "2026-12-12 04:00:00",
+  });
+  const original = { "1036": period("1036", "已有期间"), "1037": period("1037", "另一期") };
+  let candidate = structuredClone(original);
+  let live = "4.6";
+  let missingDetail = false;
+  let brokenGroup = false;
+  const staged = { stage_id: 2001, level: 60, hard_level_group: 1, monster_list: [{ monster0: 1002011 }] };
+  const request = async (url: string) => {
+    if (url === `https://static.nanoka.cc/hsr/${live}/maze.json`) return Response.json(candidate);
+    const hit = /\/zh\/maze\/(1036|1037)\.json$/u.exec(url);
+    if (!hit || !url.includes(`/${live}/`)) throw new Error(`不应请求 ${url}`);
+    const group_name = original[hit[1] as keyof typeof original].zh;
+    if (missingDetail && hit[1] === "1036") return missing();
+    return Response.json([{
+      id: 101, name: "首层", group_name, challenge: [],
+      event_id_list1: [{ ...staged, ...(brokenGroup && hit[1] === "1036" ? { level: 61 } : {}) }],
+      event_id_list2: [],
+    }]);
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId: "maze", version: live }], undefined, request);
+    const group = [{ game: "hsr", pageId: "HardLevelGroup", version: "4.7" }] as const;
+    await acquireAtlasSource(groupSource, group, undefined, async () => Response.json([{
+      HardLevelGroup: 1, Level: 60, AttackRatio: 1, HPRatio: 1, SpeedRatio: 1, StanceRatio: 1, CombatPowerList: [0, 0, 0, 0],
+    }]));
+    expect((await applyAtlasCandidate(root, groupSource, group)).status).toBe("published");
+    const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "hsr=maze"] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "4.7";
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    Reflect.deleteProperty(candidate, "1037");
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("1037 缺少已有轮换资料")],
+    });
+    candidate = structuredClone(original);
+    candidate["1036"].live_end = "2026-12-13 04:00:00";
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("1036 与已有身份或实装窗口冲突")],
+    });
+    candidate = structuredClone(original);
+    brokenGroup = true;
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [expect.stringContaining("1036 无法关联同版本星铁难度组 1/61")],
+    });
+    brokenGroup = false;
+    missingDetail = true;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("更新未完成");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    missingDetail = false;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(2);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

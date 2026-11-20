@@ -104,11 +104,11 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
 }
 
 /** ZZZ challenge acquisition uses the published build and verifies each source window separately. */
-export function planPublishedZzzRefresh(manifest: unknown, local: AtlasCandidateValidation, pageId: "boss" | "shiyu"): AtlasUpdatePlan {
-  const scope = { game: "zzz", pageId } as const;
+export function planPublishedChallengeRefresh(manifest: unknown, local: AtlasCandidateValidation,
+  scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: "maze" }): AtlasUpdatePlan {
   const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
-  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedVersion(manifest, "zzz"))]);
+  return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, publishedVersion(manifest, scope.game))]);
 }
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {

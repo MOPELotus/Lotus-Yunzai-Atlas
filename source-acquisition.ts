@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { branchAndBladeIcon, effectText, label, object } from "./source-values.ts";
+import { mazeIndexMatches, mazeSourceOutline } from "./maze-source-data.ts";
 import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
 import { readAchievementCategories } from "./achievements.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
@@ -43,6 +44,7 @@ const pages = {
   "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "Elite Group", folder: "星铁精英组", timeout: 60_000, maxRecords: 4096 },
   "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "Difficulty Group", folder: "星铁难度组", timeout: 60_000, maxRecords: 4096 },
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: "星铁无限精英组", timeout: 60_000, maxRecords: 4096 },
+  "hsr/maze": { game: "hsr", pageId: "maze", title: "Memory of Chaos", folder: "混沌回忆", timeout: 180_000, maxRecords: 256 },
   "hsr/monster": { game: "hsr", pageId: "monster", title: "Monster", folder: "星铁敌人", timeout: 900_000, maxRecords: 4096 },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
@@ -196,6 +198,10 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
+    if (category === "hsr/maze") {
+      if (!mazeIndexMatches(id, list)) throw new Error(`混沌回忆索引身份或轮换时间无效（${id}）。`);
+      return { id, list, name, rarity: "未分类", iconName: undefined };
+    }
     if (category === "hsr/monster") {
       const figure = monsterFigure(icon);
       if (!figure || typeof rank !== "string" || !monsterStatRanks.has(rank) ||
@@ -370,6 +376,7 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   const { id, name, rank, iconName, list } = entry;
   const item = object(detail);
   if (category === "gi/artifact") return genshinArtifactDetail(item, id, list);
+  if (category === "hsr/maze") return Boolean(mazeSourceOutline(detail, name));
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
   if (category === "hsr/monster") {

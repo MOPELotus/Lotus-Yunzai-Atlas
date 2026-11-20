@@ -1,15 +1,16 @@
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
+import { mazeSourceOutline } from "./maze-source-data.ts";
 import { readAchievementCategories } from "./achievements.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { candidateFile } from "./candidate-gallery.ts";
-import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
+import { chaosMode, deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import { effectText, object } from "./source-values.ts";
-import { fetchAtlasManifest, planAtlasUpdate, planPublishedZzzRefresh } from "./update-plan.ts";
+import { fetchAtlasManifest, planAtlasUpdate, planPublishedChallengeRefresh } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const itemIcons = ["icon", "detail.icon"] as const;
@@ -20,6 +21,7 @@ const sourcePages = {
   "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "星铁精英组", iconFields: [] },
   "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "星铁难度组", iconFields: [] },
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "星铁无限精英组", iconFields: [] },
+  "hsr/maze": { game: "hsr", pageId: "maze", title: "星铁混沌回忆", iconFields: [] },
   "hsr/monster": { game: "hsr", pageId: "monster", title: "星铁敌人", iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "星铁遗器", iconFields: itemIcons },
@@ -61,13 +63,13 @@ async function readJson(root: string, path: string): Promise<unknown> {
 }
 
 async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal) {
-  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : undefined;
+  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : pageId === "maze" ? chaosMode : undefined;
   const map = object(await readJson(root, "map.json"));
   const gameData = object(object(map.games)[game]);
   const pages = object(object(object(gameData.locales).zh).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
-    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[]; description?: string }>();
+    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[]; description?: string; maze?: ReturnType<typeof mazeSourceOutline> }>();
   const achievementSources: { id: string; name: string; list: unknown }[] = [];
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
@@ -103,7 +105,9 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
       key = semanticKey;
       groupFields = Object.keys(values);
     }
-    assets.set(key, { name, window, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
+    const maze = pageId === "maze" ? mazeSourceOutline(content.detail, typeof name === "string" ? name : "") : undefined;
+    if (pageId === "maze" && !maze) throw new Error(`混沌回忆 ${id} 关卡身份或结构无效。`);
+    assets.set(key, { name, window, maze, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
       icons: mode || pageId === "artifact" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
@@ -125,7 +129,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
 
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
   after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean) {
-  const preserveRotation = pageId === "boss" || pageId === "shiyu";
+  const preserveRotation = pageId === "boss" || pageId === "shiyu" || pageId === "maze";
   const issues: string[] = [];
   for (const id of before.achievementIds) {
     if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
@@ -158,6 +162,11 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       issues.push(`${title} ${id} 缺少已有字段。`);
     }
     if (old.description && !next.description) issues.push(`${title} ${id} 缺少已有说明。`);
+    const oldMaze = old.maze;
+    if (oldMaze && (["floors", "stages", "enemies"] as const).some(key =>
+      [...oldMaze[key]].some(value => !next.maze?.[key].has(value)))) {
+      issues.push(`${title} ${id} 缺少已有楼层、战斗或敌人。`);
+    }
     if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
     for (const field of old.icons) {
       if (!next.icons.has(field)) issues.push(`${title} ${id} 缺少已下载图标 ${field}。`);
@@ -170,7 +179,8 @@ export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
   local: Awaited<ReturnType<typeof validateAtlasCandidate>>) {
   const { game, pageId } = sourcePages[selection];
   if (!local.pages.some((page) => page.game === game && page.pageId === pageId)) local = { ...local, ok: false };
-  return pageId === "boss" || pageId === "shiyu" ? planPublishedZzzRefresh(listing, local, pageId)
+  if (pageId === "maze") return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId });
+  return pageId === "boss" || pageId === "shiyu" ? planPublishedChallengeRefresh(listing, local, { game: "zzz", pageId })
     : planAtlasUpdate(listing, local, [{ game, pageId }]);
 }
 
@@ -222,6 +232,24 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
         const monster = after.assets.get(id);
         if (!monster || record.variants?.some(variant => !monster.variants?.includes(variant))) {
           issues.push(`星铁敌人 ${id} 缺少同版本数值表关联的变体。`);
+        }
+      }
+    }
+    if (selection === "hsr/maze") {
+      const links = [
+        { selection: "hsr/monstervalue", field: "battleEnemies" },
+        { selection: "hsr/EliteGroup", field: "eliteGroups" },
+        { selection: "hsr/HardLevelGroup", field: "difficultyGroups" },
+      ] as const;
+      for (const link of links) {
+        const linkedPage = sourcePages[link.selection];
+        if (!local.pages.some(({ game, pageId, version }) =>
+          game === "hsr" && pageId === linkedPage.pageId && version === entry.targetVersion)) continue;
+        const linked = await pageAssets(baseline.root, linkedPage, signal);
+        const known = new Set([...linked.assets].flatMap(([id, record]) => [id, ...(record.variants ?? []).map(String)]));
+        for (const [id, record] of after.assets) {
+          const missing = [...record.maze?.[link.field] ?? []].find(key => !known.has(key));
+          if (missing) issues.push(`混沌回忆 ${id} 无法关联同版本${linkedPage.title} ${missing}。`);
         }
       }
     }
