@@ -49,12 +49,15 @@ test("可只准备点名的原站分类，并拒绝无效或重复范围", async
     return Response.json(pathname.endsWith("/EliteGroup.json") ? [row] : { "202": row });
   };
   const scope = [{ game: "gi", pageId: "monster" }, { game: "hsr", pageId: "EliteGroup" }] as const;
-  const pages = await readSelectedExporterIndexes(selected, undefined, request, scope);
+  const partial = { gi: "7.2", hsr: "4.7" };
+  const pages = await readSelectedExporterIndexes(partial, undefined, request, scope);
   expect(requests).toEqual(["/gi/7.2/monster.json", "/hsr/4.7/EliteGroup.json"]);
   expect(pages.map(({ game, pageId }) => ({ game, pageId }))).toEqual([...scope]);
   for (const selection of [[], [scope[0], scope[0]], [{ game: "gi", pageId: "other" }] as const]) {
     await expect(readSelectedExporterIndexes(selected, undefined, request, selection)).rejects.toThrow("图鉴分类");
   }
+  await expect(readSelectedExporterIndexes({ gi: "7.2" }, undefined, request, scope)).rejects.toThrow("hsr");
+  await expect(readSelectedExporterIndexes(partial, undefined, request)).rejects.toThrow("zzz");
   expect(requests).toHaveLength(2);
 });
 

@@ -15,7 +15,7 @@ const networkPolicy = fileURLToPath(new URL("./public-atlas-network.mjs", import
 const atlasVersion = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const maxExportIndexBytes = 16 * 1024 * 1024;
 
-export type AtlasExportVersions = Readonly<Record<Game, string>>;
+export type AtlasExportVersions = Readonly<Partial<Record<Game, string>>>;
 export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
 type ExportPage = Required<AtlasCandidatePage>;
 type VerifiedIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
