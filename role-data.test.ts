@@ -213,3 +213,24 @@ test("绝区零读取实际等级上限、晋阶增益和基础攻击附加值",
     { label: "冲击力", value: "93" }, { label: "暴击率", value: "5%" }, { label: "暴击伤害", value: "50%" },
   ]);
 });
+
+test("角色总览保留同角色、同游戏的原图加载备选及其优先序", () => {
+  const art = (fieldPath: string, localPath: string, placeholder = false) => ({
+    fieldPath, localPath, placeholder, status: "downloaded",
+  });
+  const images = [
+    art("detail.partner_info.role_icon", "gallery/zzz/role.webp"),
+    art("icon", "gallery/zzz/index.webp"),
+    art("detail.derived.avatarDrawCard", "gallery/hsr/other-game.webp"),
+    art("portrait", "gallery/zzz/placeholder.webp", true),
+    art("detail.portrait", "gallery/zzz/role.webp"),
+    art("derived.avatarDrawCard", "gallery/zzz/card.webp"),
+    art("detail.icon", "gallery/zzz/detail.webp"),
+    art("detail.skills.0.icon", "gallery/zzz/skill.webp"),
+  ];
+  const role = normalizeRoleDetails(entry("zzz"), { detail: { desc: "角色描述" } }, "S级", images);
+  expect(role?.overview).toMatchObject({
+    artwork: "gallery/zzz/card.webp", portraitFallbacks: ["gallery/zzz/role.webp"],
+    icon: "gallery/zzz/detail.webp", iconFallback: "gallery/zzz/index.webp",
+  });
+});

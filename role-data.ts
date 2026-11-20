@@ -58,6 +58,8 @@ export interface RoleDetails {
     readonly description?: string;
     readonly artwork?: string;
     readonly icon?: string;
+    readonly portraitFallbacks?: readonly string[];
+    readonly iconFallback?: string;
     readonly element?: GenshinElement;
     readonly facts: readonly { label: string; value: string }[];
     readonly stats?: readonly { label: string; value: string }[];
@@ -485,11 +487,18 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
   const title = verifiedName?.name === name && verifiedName.fullName === fullName ? fullName : name;
   const artwork = galleryArtwork(images, game);
   const icon = artwork("detail.icon", "icon");
+  const indexIcon = artwork("icon");
+  const iconFallback = indexIcon !== icon ? indexIcon : undefined;
+  const [portrait, ...portraitFallbacks] = [...new Set(focusFields[game].flatMap((field) => {
+    const path = artwork(field);
+    return path ? [path] : [];
+  }))];
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
   const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name: title, rarity, description: text(detail.desc) ?? text(partner.profile_desc) ?? text(list.desc),
-      artwork: artwork(...focusFields[game]) ?? icon, icon, element, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
+      artwork: portrait ?? icon, icon, portraitFallbacks: portraitFallbacks.length ? portraitFallbacks : undefined,
+      iconFallback, element, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
   };
 }

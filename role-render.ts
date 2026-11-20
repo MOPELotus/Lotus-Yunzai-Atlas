@@ -358,7 +358,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const element = role.game === "gi" ? role.overview.element : undefined;
   const backdrop = element ?? backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
   const [images, background, texture, originalPortrait] = await Promise.all([
-    galleryImages(role.game, [role.overview.icon, role.overview.artwork,
+    galleryImages(role.game, [role.overview.icon, role.overview.iconFallback, role.overview.artwork,
+      ...(role.overview.portraitFallbacks ?? []),
       ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
       ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
@@ -369,8 +370,9 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const layout = makeLayout(texture);
   const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
-  const icon = image(role.overview.icon);
-  const portrait = originalPortrait ?? image(role.overview.artwork);
+  const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
+  const portrait = originalPortrait ?? image(role.overview.artwork) ??
+    role.overview.portraitFallbacks?.map(image).find((candidate) => candidate !== undefined) ?? icon;
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
   const overview: Block[] = [];
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
