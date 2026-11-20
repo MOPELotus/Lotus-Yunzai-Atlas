@@ -79,10 +79,16 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
 // https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
 // https://www.miyoushe.com/ys/article/78933070
 const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
-  // The 7.X table and the October historical guides agree on 24 slimes in the lower half.
+  // The October 16 in-game roster identifies both recon variants. The archived 7.1 GenshinLab
+  // and 7.X wave tables agree on four of each and 24 Large Hydro Slimes below.
+  // https://trivia.k-oshiro.com/2026/10/16/genshin-spiral-abyss-2026-10/
   // https://wiki.biligame.com/ys/渊月螺旋/7.X
-  // https://genshinflex.com/en/abyss/history/
-  "11-1": { level: 88, first: [], second: [["20011101", "大型水史莱姆", 24]] },
+  // https://genshinlab.com/genshin-spiral-abyss-team-comps/
+  "11-1": { level: 88, first: [
+    ["23073101", "愚人众特辖队·榴铳手", 4], ["23070101", "愚人众特辖队·线列军", 8],
+    ["23080101", "巡陆艇·近战攻坚型", 2], ["23080401", "巡陆艇·强侦斥候型", 4],
+    ["23080201", "巡陆艇·近战斥候型", 2], ["23080501", "巡陆艇·强侦地效型", 4],
+  ], second: [["20011101", "大型水史莱姆", 24]] },
   // The October 7.1 GenshinLab table and the 7.X archive agree on two hounds of each type.
   // https://genshinlab.com/genshin-spiral-abyss-team-comps/
   "11-2": { level: 90, first: [["21040201", "丘丘水行游侠", 2], ["26300201", "蕴光刃犀", 1]],

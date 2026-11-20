@@ -125,7 +125,10 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   const room = (name: string) => rendered?.rooms.find((room) => room.name === name);
   expect(room("11-1")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
-    [], [["大型水史莱姆", 24, "gallery/gi/20011101.webp"]],
+    [["愚人众特辖队·榴铳手", 4, "gallery/gi/23073101.webp"], ["愚人众特辖队·线列军", 8, "gallery/gi/23070101.webp"],
+      ["巡陆艇·近战攻坚型", 2, "gallery/gi/23080101.webp"], ["巡陆艇·强侦斥候型", 4, "gallery/gi/23080401.webp"],
+      ["巡陆艇·近战斥候型", 2, "gallery/gi/23080201.webp"], ["巡陆艇·强侦地效型", 4, "gallery/gi/23080501.webp"]],
+    [["大型水史莱姆", 24, "gallery/gi/20011101.webp"]],
   ]);
   expect(room("11-2")?.sides.map(({ enemies }) =>
     enemies.map(({ name, count, artwork }) => [name, count, artwork]))).toEqual([
