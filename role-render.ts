@@ -427,8 +427,11 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
-  const portrait = galleryPortrait ?? originalPortrait ?? image(role.overview.artwork) ??
+  const snapshotPortrait = image(role.overview.artwork) ??
     role.overview.portraitFallbacks?.map(image).find((candidate) => candidate !== undefined) ?? icon;
+  // The Genshin icon fields hold avatars. The Zenless source also stores full-body art in its icon fields.
+  const portrait = galleryPortrait ?? originalPortrait ??
+    (role.game === "gi" && snapshotPortrait === icon ? undefined : snapshotPortrait);
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
   const overview: Block[] = [];
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
