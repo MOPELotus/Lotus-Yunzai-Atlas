@@ -72,3 +72,7 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 记录 31 的 `7.2` 和 `7.2.52` 数据都提供「历经百战的丘丘萨满」标题和美味汤锅机制，月谕第八幕的敌人预览为空。11 月 1 日的[月谕难度实录](https://www.youtube.com/watch?v=ctSzyhDDpl4&t=572s)和[同期游戏内讨伐截图](https://staticg.sportskeeda.com/editor/2026/11/bc488-17935387674989-1920.jpg)确认该首领，游戏界面显示 Lv.95。头像与[丘尔德里克的 256 × 256 原图](https://patchwiki.biligame.com/images/ys/c/c4/6f12t7bek11qtfs2syx3yxlmfupfpcp.png)一致。
 
 持久主题目录或快照的 `gallery/gi/verified/Churldric.png` 可放置该原图。图鉴只接受 SHA-256 为 `6d246e440e6f3e3890760a329a1703fca7e382189de2757bb95e04a585edc161` 的文件，缺图仍显示第八幕首领名称和原说明。
+
+## 十月幻想真境剧诗首领补全
+
+记录 30 的已实装十月月谕数据保留第六、八幕标题与机制，但敌人预览为空。以[当期月谕实录第六幕](https://www.youtube.com/watch?v=20KjpqXJbKw&t=517s)及[第八幕](https://www.youtube.com/watch?v=20KjpqXJbKw&t=680s)核对历经百战的嵌合兽怪箭士和嵌合翼骏狮。两张原头像已经在旧快照的第 124 期深境使用，分别为 `gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp` 和 `gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp`。图鉴沿用旧快照的等级和机制，缺图时显示敌人名称。

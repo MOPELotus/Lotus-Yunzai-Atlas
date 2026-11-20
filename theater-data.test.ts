@@ -93,3 +93,34 @@ test("11 月实装月谕第八幕预览为空时补丘丘萨满和游戏内等�
     });
   }
 });
+
+test("10 月实装月谕的两处空首领预览使用对应旧图鉴原图", async () => {
+  const october = { ...entry, id: "30", name: "30", version: "7.2" };
+  const list = { live_begin: "2026-10-01 04:00:00", live_end: "2026-11-01 03:59:59" };
+  const sixth = { title: "历经百战的嵌合兽怪箭士", monster_level: 91, monster_preview_list: [] };
+  const eighth = { title: "嵌合翼骏狮", monster_level: 94, monster_preview_list: [] };
+  const raw = { list, detail: { difficulty_config: { "5": { room: {
+    "6": sixth, "8": eighth, "9": eighth,
+  } } } } };
+  const data = await normalizeTheater(october, raw, [], lookup);
+  expect(data?.acts.map(({ name, enemies }) => [name, enemies])).toEqual([
+    ["第六幕", [{ name: sixth.title, artwork: "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp" }]],
+    ["第八幕", [{ name: eighth.title, artwork: "gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp" }]],
+    ["第九幕", []],
+  ]);
+  expect(data?.groups.find(({ name }) => name === "首领阵容")?.cards.map(({ name }) => name))
+    .toEqual([sixth.title, eighth.title]);
+
+  const indexed = await normalizeTheater(october, { ...raw, detail: { difficulty_config: { "5": { room: { "6": {
+    ...sixth, monster_preview_list: [{ name: "源数据敌人" }],
+  } } } } } }, [], lookup);
+  expect(indexed?.acts[0]?.enemies).toMatchObject([{ name: "源数据敌人" }]);
+
+  for (const unchanged of [
+    normalizeTheater(october, { ...raw, list: { begin: list.live_begin, end: list.live_end } }, [], lookup),
+    normalizeTheater(entry, raw, [], lookup),
+    normalizeTheater(october, { ...raw, detail: { difficulty_config: { "4": { room: { "6": sixth } } } } }, [], lookup),
+  ]) {
+    expect((await unchanged)?.acts.every(({ enemies }) => !enemies.length)).toBe(true);
+  }
+});

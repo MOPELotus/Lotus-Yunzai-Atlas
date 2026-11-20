@@ -73,6 +73,11 @@ function list(primary: unknown, fallback: unknown = undefined): unknown[] {
   return Array.isArray(primary) ? primary : Array.isArray(fallback) ? fallback : [];
 }
 
+const octoberBosses = new Map([
+  [6, { name: "历经百战的嵌合兽怪箭士", artwork: "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp" }],
+  [8, { name: "嵌合翼骏狮", artwork: "gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp" }],
+]);
+
 const singleLine = (value: unknown) => effectText(value).replace(/\s*\n\s*/gu, " ");
 
 interface TheaterLookup {
@@ -93,8 +98,12 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
   const avatar = object(detail.avatar_config);
   const artwork = galleryArtwork(images, "gi");
   const { window } = readChallengeFacts(theaterMode, content);
-  const novemberLunar = entry.id === "31" && entry.name === "31" && (entry.version === "7.2" || entry.version === "7.2.52") &&
-    window?.from === "live" && window.begin === "2026-11-01 04:00:00" && window.end === "2026-12-01 03:59:59" && difficulty === 5;
+  const anchoredLunar = difficulty === 5 && entry.name === entry.id &&
+    (entry.version === "7.2" || entry.version === "7.2.52") && window?.from === "live";
+  const octoberLunar = anchoredLunar && entry.id === "30" &&
+    window.begin === "2026-10-01 04:00:00" && window.end === "2026-11-01 03:59:59";
+  const novemberLunar = anchoredLunar && entry.id === "31" &&
+    window.begin === "2026-11-01 04:00:00" && window.end === "2026-12-01 03:59:59";
 
   const actors = (values: readonly unknown[]) => Promise.all(values.flatMap((value) => {
     const row = object(value);
@@ -128,7 +137,10 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     const samachurl = novemberLunar && key === "room" && roomId === 8 && room.monster_level === 94 &&
       title === "历经百战的丘丘萨满" && description.includes("美味汤锅") && Array.isArray(preview) && !preview.length;
     const level = samachurl ? 95 : positiveInteger(room.monster_level);
-    const enemies = samachurl ? [{ name: title, artwork: samachurlArtwork.path }] :
+    const octoberBoss = octoberLunar && key === "room" && Array.isArray(preview) && !preview.length
+      ? octoberBosses.get(roomId) : undefined;
+    const supplement = samachurl ? { name: title, artwork: samachurlArtwork.path } : octoberBoss;
+    const enemies = supplement?.name === title ? [supplement] :
       distinct(await Promise.all(list(preview).flatMap((value, position) => {
         const enemy = object(value);
         const id = positiveInteger(enemy.id);
