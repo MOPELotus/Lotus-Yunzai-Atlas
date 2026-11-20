@@ -35,11 +35,15 @@ function numbered(value: unknown) {
     ? [{ key: Number(key), row: object(row) }] : []);
 }
 
+function withoutEmphasis(value: unknown): string {
+  return label(value).replace(/<\/?(?:i|b)>/giu, "");
+}
+
 function refinement(rank: number, name: unknown, source: unknown, params: unknown,
   truncateInteger = false): WeaponDetails["refinements"] {
   if (!Number.isInteger(rank) || rank < 1 || rank > 5) return [];
   const title = label(name);
-  const description = effectText(source, Array.isArray(params) ? params : undefined, true, truncateInteger);
+  const description = effectText(withoutEmphasis(source), Array.isArray(params) ? params : undefined, true, truncateInteger);
   return title || description ? [{ rank, name: title, description }] : [];
 }
 
@@ -130,8 +134,8 @@ export function normalizeWeapon(entry: AtlasEntry, content: Record<string, unkno
   if (!Object.keys(detail).length) return;
   const { stats, refinements } = game === "gi" ? genshin(detail, object(content.list), entry.rarity)
     : game === "hsr" ? starRail(detail) : zenless(detail);
-  const description = effectText(detail.desc);
-  const story = effectText(detail.story) || effectText(detail.background);
+  const description = effectText(withoutEmphasis(detail.desc));
+  const story = effectText(withoutEmphasis(detail.story)) || effectText(withoutEmphasis(detail.background));
   if (!description && !stats.length && !refinements.length && !story) return;
   const artwork = galleryArtwork(images, game);
   const icon = game === "hsr" ? artwork("derived.lightConeMediumIcon", "detail.derived.lightConeMediumIcon", "detail.icon", "icon")

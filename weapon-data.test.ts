@@ -127,3 +127,19 @@ test("光锥叠影的整数占位按游戏截断，保留浮点占位显示精�
   } }, []);
   expect(weapon?.refinements[0]?.description).toBe("比例13%。");
 });
+
+test("原神装备介绍去掉样式标签并保留原文、换行及登记的原图", () => {
+  const path = "gallery/gi/UI_EquipIcon_Sword_WeaponQuestSnezhnaya01.webp";
+  const weapon = normalizeWeapon({ ...entry, id: "390002", name: "星锋剑·源光" }, { detail: {
+    desc: "闪映着蓦然辉光。\\n\\n<i>「看啊，我的功业已成。」</i>",
+    story: "<b>原故事</b>",
+    refinement: { 1: { name: "效果", desc: "<i>回复#1[f1]点。</i>", param_list: [1.5] } },
+  } }, [{ status: "downloaded", placeholder: false, fieldPath: "detail.icon", localPath: path }]);
+  expect(weapon).toMatchObject({
+    name: "星锋剑·源光",
+    artwork: path,
+    description: "闪映着蓦然辉光。\n\n「看啊，我的功业已成。」",
+    story: "原故事",
+    refinements: [{ rank: 1, name: "效果", description: "回复1.5点。" }],
+  });
+});
