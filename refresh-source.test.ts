@@ -1214,3 +1214,52 @@ test("星铁轮换校验兼容原导出历史名称标记和已记录的未命�
   expect(mazeSourceOutline("maze_boss", preview, "3024", "3024")).toBeDefined();
   expect(mazeSourceOutline("maze_boss", { ...preview, id: 3025 }, "3025", "3025")).toBeUndefined();
 });
+
+test("绝区零敌人正式更新保留原图、变体和旧条目", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "lotus-atlas-zzz-monster-"));
+  const root = join(workspace, "atlas");
+  try {
+    const selection = "zzz/monster" as const;
+    const old = "3.2";
+    const live = "3.3";
+    const preview = "3.4.4+20539349";
+    const image = "UI/Sprite/A1DynamicLoad/BossCard/UnPacker/BossCardLv01/Monster_Test.png";
+    const index = { zh: "样例敌人", rarity: 1, group: 201, icon: image };
+    let failure: "old-entry" | "old-artwork" | "variant" | "identity" | undefined;
+    const urls: string[] = [];
+    const request = async (url: string) => {
+      urls.push(url);
+      if (url.endsWith("/monster.json")) return Response.json(failure === "old-entry" ? { "10001": index } : { "10000": index });
+      const detail = /\/monster\/(\d+)\.json$/u.exec(url);
+      if (detail) return Response.json({ id: failure === "identity" ? 9 : Number(detail[1]), name: index.zh, rarity: 1,
+        group_id: 201, image_path: image, monster_id: 11096, desc: "正式原文。", monster_info: failure === "variant" ? {} : {
+          "11096": { id: 11096, code_name: "Monster_Test", icon: "IconMonster_Test.png", stats: { hp: 1 } },
+        } });
+      if (url.endsWith("/IconMonster_Test.webp") || (failure === "old-artwork" && url.endsWith("/Monster_Test.webp"))) return missing();
+      return new Response(new Uint8Array(webp));
+    };
+    await acquireAtlasSource(root, [{ game: "zzz", pageId: "monster", version: old }], undefined, request);
+    urls.length = 0;
+    const manifest = async () => ({ zzz: { live, latest: preview, available: [old, live, preview] } });
+    for (const [mode, message] of [["old-entry", "缺少已有条目"], ["old-artwork", "缺少已下载图标"], ["variant", "缺少已有变体"]] as const) {
+      failure = mode;
+      const result = await refreshAtlasSource(root, { selection, manifest, request });
+      expect(result).toMatchObject({ status: "invalid", issues: expect.arrayContaining([expect.stringContaining(message)]) });
+      expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    }
+    failure = "identity";
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("身份或等级不符");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    failure = undefined;
+    const { commands } = createAtlasMaintenance(root, { updateConfig: { update_args: ["--page", "zzz=monster"] }, manifest, request });
+    expect(await commands["#检查图鉴更新"]("", { atlasMaintenance: true })).toContain(`${old} → ${live}`);
+    expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain(`绝区零敌人 · 已更新至 ${live}`);
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(urls.some(url => url.includes(preview))).toBe(false);
+    const atlas = createAtlasRuntimeCatalog(root);
+    const entry = (await atlas.read()).pages.find(page => page.game === "zzz" && page.kind === "monster")?.entries[0];
+    expect(await atlas.monsterDetails(entry!)).toMatchObject({ description: "正式原文。", artwork: "gallery/zzz/Monster_Test.webp" });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});

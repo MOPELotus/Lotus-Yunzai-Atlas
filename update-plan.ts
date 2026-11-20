@@ -96,7 +96,8 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       entries.push({ ...current, kind, action: "audit-rotation" });
       continue;
     }
-    const requireLive = (game === "zzz" && (pageId === "character" || pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
+    const requireLive = (game === "zzz" && (pageId === "character" || pageId === "monster" ||
+      pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
       (game === "hsr" && (pageId === "relicset" || pageId === "monster" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
     const target = requireLive ? publishedVersion(manifest, game) : targetVersion(manifest, game);
     entries.push(planVersionedPage(current, local, target));

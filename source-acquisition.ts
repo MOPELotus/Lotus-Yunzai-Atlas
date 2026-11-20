@@ -8,6 +8,7 @@ import { readAchievementCategories } from "./achievements.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { matchesZzzCharacterDetail, zzzCharacterImages, zzzCharacterIndexIcon } from "./zzz-character-source.ts";
+import { matchesZzzMonsterDetail, zzzMonsterImages, zzzMonsterIndexIcon } from "./zzz-monster-source.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
 import { atlasSourceOrigin, isAtlasSourceWebp, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
@@ -40,6 +41,7 @@ const lightconeRarities = new Map([
 const lightconePaths = new Set(["Warrior", "Rogue", "Mage", "Shaman", "Warlock", "Knight", "Priest", "Memory", "Elation"]);
 const pages = {
   "zzz/character": { game: "zzz", pageId: "character", title: "Character", folder: "绝区零角色", timeout: 600_000, maxRecords: 256 },
+  "zzz/monster": { game: "zzz", pageId: "monster", title: "Monster", folder: "绝区零敌人", timeout: 900_000, maxRecords: 1024 },
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
@@ -202,6 +204,14 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
+    if (category === "zzz/monster") {
+      const iconName = zzzMonsterIndexIcon(icon);
+      if (!iconName || typeof list.rarity !== "number" || ![1, 2, 3, 4].includes(list.rarity) ||
+          typeof list.group !== "number" || !Number.isSafeInteger(list.group) || list.group < 1) {
+        throw new Error(`绝区零敌人来源索引条目结构无效（${id}）。`);
+      }
+      return { id, list, name, rarity: "未分类", iconName };
+    }
     if (category === "zzz/character") {
       const iconName = zzzCharacterIndexIcon(icon);
       if (!iconName || (rank !== 3 && rank !== 4)) throw new Error(`绝区零角色来源索引条目结构无效（${id}）。`);
@@ -389,6 +399,7 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   if (isStarrailRotationPage(pageId)) return Boolean(mazeSourceOutline(pageId, detail, name, id));
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "zzz/character") return matchesZzzCharacterDetail(id, list, item);
+  if (category === "zzz/monster") return matchesZzzMonsterDetail(id, list, item);
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
   if (category === "hsr/monster") {
     const variants = Array.isArray(item.child) ? item.child.map(object) : undefined;
@@ -528,14 +539,16 @@ export async function acquireAtlasSource(destination: string, requirements: read
           throw new Error(`${folder}详情与来源索引身份或等级不符（${id}）。`);
         }
         const { iconName, pathName } = entry;
-        if (category === "zzz/character") {
-          for (const { fieldPath, originalValue, candidates, required } of zzzCharacterImages(id, list, detail)) {
+        if (category === "zzz/character" || category === "zzz/monster") {
+          const images = category === "zzz/monster" ? zzzMonsterImages(list, detail) : zzzCharacterImages(id, list, detail);
+          for (const reference of images) {
+            const { fieldPath, originalValue, candidates } = reference;
             let artwork: Awaited<ReturnType<typeof readIcon>>;
             for (const candidate of candidates) {
               artwork = await loadIcon(candidate);
               if (artwork) break;
             }
-            if (!artwork && required) throw new Error(`绝区零角色来源原图缺失（${id}，${fieldPath}）。`);
+            if (!artwork && "required" in reference && reference.required) throw new Error(`绝区零角色来源原图缺失（${id}，${fieldPath}）。`);
             if (artwork) references.push(imageReference(fieldPath, originalValue, artwork));
           }
         } else if (pathName) {

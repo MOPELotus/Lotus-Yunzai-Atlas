@@ -16,6 +16,7 @@ import { validateAtlasCandidate } from "./validate-candidate.ts";
 const itemIcons = ["icon", "detail.icon"] as const;
 const sourcePages = {
   "zzz/character": { game: "zzz", pageId: "character", title: "绝区零角色", iconFields: [] },
+  "zzz/monster": { game: "zzz", pageId: "monster", title: "绝区零敌人", iconFields: [] },
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "邦布", iconFields: itemIcons },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "音擎", iconFields: itemIcons },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
@@ -90,7 +91,8 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const content = object(item.content);
     const detail = object(content.detail);
     const values = object(content.list);
-    const variantIds = Array.isArray(values.child)
+    const zenlessMonster = game === "zzz" && pageId === "monster";
+    const variantIds = zenlessMonster ? Object.keys(object(detail.monster_info)) : Array.isArray(values.child)
       ? pageId === "monstervalue" ? values.child.map(variant => object(variant).Id)
         : pageId === "monster" ? values.child : undefined
       : undefined;
@@ -111,7 +113,8 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const maze = isStarrailRotationPage(pageId) ? mazeSourceOutline(pageId, content.detail, typeof name === "string" ? name : "", id) : undefined;
     if (isStarrailRotationPage(pageId) && !maze) throw new Error(`${starrailSourceRotation(pageId).mode.name} ${id} 关卡身份或结构无效。`);
     assets.set(key, { name, window, maze, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
-      icons: mode || pageId === "artifact" || pageId === "character" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
+      icons: mode || pageId === "artifact" || pageId === "character" || zenlessMonster
+        ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
     version: "", sourceUrl: "", sources: achievementSources,
@@ -157,6 +160,9 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
     }
     if (pageId === "character" && old.name !== next.name) issues.push(`${title} ${id} 与已有角色身份不符。`);
+    if (game === "zzz" && pageId === "monster" && old.name !== "OfficialName_" && old.name !== next.name) {
+      issues.push(`${title} ${id} 与已有敌人身份不符。`);
+    }
     if (old.parts?.some(part => !next.parts?.includes(part)) || old.effects?.some(effect => !next.effects?.includes(effect))) {
       issues.push(`${title} ${id} 缺少已有部位或套装效果。`);
     }
