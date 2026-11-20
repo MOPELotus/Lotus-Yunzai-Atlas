@@ -159,3 +159,30 @@ test("骇星之月 124 仅补核实的第 11、12 层阵容", async () => {
   }, [], lookup);
   expect(mismatched?.rooms.flatMap(({ sides }) => sides.flatMap(({ enemies }) => enemies))).toEqual([]);
 });
+
+test("辉卷之月 123 仅补 12-2 的已核阵容", async () => {
+  const entry123 = { ...entry, id: "123", name: "辉卷之月" };
+  const open = "2026-09-16 04:00:00";
+  const close = "2026-10-16 03:59:59";
+  const source = { list: { live_begin: open, live_end: close }, detail: {
+    open, close, leyline: { name: entry123.name, icon: "UI_TowerBlessing_107" },
+    floor: { "12": { room: {
+      "1": { level: 95, first: [], second: [] },
+      "2": { level: 98, first: [], second: [] },
+      "3": { level: 100, first: [], second: [] },
+    } } },
+  } };
+  const lookup = async (id: string, name: string) => ({ name, artwork: `gallery/gi/${id}.webp` });
+  const rendered = await normalizeAbyss(entry123, source, [], lookup);
+  expect(rendered?.rooms.map(({ sides }) => sides.map(({ enemies }) =>
+    enemies.map(({ name, count, artwork }) => [name, count, artwork])))).toEqual([
+    [[], []],
+    [[["不灭衍生造物", 1, "gallery/gi/25140101.webp"]],
+      [["深黯钓客", 4, "gallery/gi/22140101.webp"], ["深黯魇语之主", 1, "gallery/gi/22150101.webp"]]],
+    [[], []],
+  ]);
+  const mismatched = await normalizeAbyss(entry123, {
+    ...source, list: { ...source.list, live_end: "2026-10-16 04:00:00" },
+  }, [], lookup);
+  expect(mismatched?.rooms.flatMap(({ sides }) => sides.flatMap(({ enemies }) => enemies))).toEqual([]);
+});

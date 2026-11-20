@@ -107,7 +107,17 @@ const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
   "12-3": { level: 100, first: [["26310501", "嵌合翼骏狮", 1]], second: [["24090501", "秘源机兵·统御械", 1]] },
 };
 
+// The September 16 gameplay lists the enemies and counts for both halves.
+// https://www.youtube.com/watch?v=ddkJu1ItF8k
+// https://genshinflex.com/en/abyss/history/
+const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  "12-2": { level: 98, first: [["25140101", "不灭衍生造物", 1]],
+    second: [["22140101", "深黯钓客", 4], ["22150101", "深黯魇语之主", 1]] },
+};
+
 const verifiedPeriods = {
+  "123": { name: "辉卷之月", icon: "UI_TowerBlessing_107", begin: "2026-09-16 04:00:00",
+    end: "2026-10-16 03:59:59", rooms: record123Rooms },
   "124": { name: "骇星之月", icon: "UI_TowerBlessing_107", begin: "2026-10-16 04:00:00",
     end: "2026-11-16 03:59:59", rooms: record124Rooms },
   "125": { name: "凌振之月", icon: "UI_TowerBlessing_106", begin: "2026-11-16 04:00:00",
@@ -123,7 +133,7 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
   const artwork = galleryArtwork(images, "gi");
   const leyline = object(rawLeyline);
   const { window } = readChallengeFacts(abyssMode, content);
-  const period = entry.id === "124" || entry.id === "125" ? verifiedPeriods[entry.id] : undefined;
+  const period = entry.id === "123" || entry.id === "124" || entry.id === "125" ? verifiedPeriods[entry.id] : undefined;
   const verifiedRooms = period && window && entry.name === period.name && leyline.name === period.name && leyline.icon === period.icon &&
     (entry.version === "7.2" || entry.version === "7.2.52") &&
     open === period.begin && close === period.end && window.begin === open && window.end === close ? period.rooms : undefined;
