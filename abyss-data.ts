@@ -126,6 +126,13 @@ const record123Rooms: Readonly<Record<string, VerifiedRoom>> = {
     [undefined, "建造特化型机关·荒", 1, "gallery/gi/UI_MonsterIcon_MachinaIustitia_Excavator.webp"],
     ["24030201", "遗迹龙兽·地巡", 1],
   ], second: [["22130001", "荒野幽徒", 2], ["22131001", "荒野狂狩士", 1]] },
+  // https://www.youtube.com/watch?v=Hc1hYwSsulU
+  // https://wiki.biligame.com/ys/渊月螺旋/7.X
+  // Tower 122 preserves the Burrowbeast portrait; Tower 112 has the exact veteran Trooper portrait.
+  "12-1": { level: 95,
+    first: [[undefined, "历经百战的嵌合梭地兽", 1, "gallery/gi/UI_MonsterIcon_Chimera_OwlPangolin.webp"]],
+    second: [["22130001", "荒野幽徒", 9],
+      [undefined, "历经百战的火刃突击队员", 1, "gallery/gi/UI_MonsterIcon_Oprichnik_Male_Strong_LanceArquebus.webp"]] },
   "12-2": { level: 98, first: [["25140101", "不灭衍生造物", 1]],
     second: [["22140101", "深黯钓客", 4], ["22150101", "深黯魇语之主", 1]] },
   // https://www.youtube.com/watch?v=EXbRiGhMLjc
