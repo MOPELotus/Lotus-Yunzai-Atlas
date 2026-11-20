@@ -359,8 +359,13 @@ async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undef
   const indexed = await indexedGenshinPortrait(base, digest);
   if (indexed || themeOverride) return indexed;
   const installed = fileURLToPath(new URL("../miao-plugin/resources/meta-gs/character/", import.meta.url));
-  const bytes = await localAsset(join(installed, name, "imgs/splash.webp"), maxImageBytes).catch(() => undefined);
-  if (bytes && createHash("sha256").update(bytes).digest("hex") === digest) return loadImage(bytes).catch(() => undefined);
+  const directories = portraitDonor ? [join(portraitDonor, "meta-gs", "character"), installed] : [installed];
+  for (const directory of directories) {
+    const bytes = await localAsset(join(directory, name, "imgs/splash.webp"), maxImageBytes).catch(() => undefined);
+    if (!bytes || createHash("sha256").update(bytes).digest("hex") !== digest) continue;
+    const portrait = await loadImage(bytes).catch(() => undefined);
+    if (portrait?.width && portrait.height) return portrait;
+  }
 }
 
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
