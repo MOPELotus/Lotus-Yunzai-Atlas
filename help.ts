@@ -3,17 +3,13 @@ import { join } from "node:path";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 import type { AtlasImage } from "./traditional.ts";
 
-const command = "#图鉴帮助";
-export const atlasHelpAliases = Object.fromEntries([
-  "图鉴帮助", "#荷花图鉴帮助", "荷花图鉴帮助", "#Lotus图鉴帮助", "Lotus图鉴帮助",
-  "#lotus图鉴帮助", "lotus图鉴帮助",
-].map((alias) => [alias, command]));
+export const atlasHelpAliases = { "图鉴帮助": "#图鉴帮助" };
 
 const title = "图鉴帮助";
 const lead = "Lotus-Yunzai · 图鉴\n图鉴查询公开资料，个人战绩使用各游戏原命令。";
 const rows = [
   "直查：#神里绫华图鉴 / *卡芙卡星魂 / %艾莲影画",
-  "显式：#图鉴 原神 元素专家·第一辑 / #荷花图鉴 绝区零 星见雅",
+  "显式：#图鉴 原神 元素专家·第一辑 / #图鉴 绝区零 星见雅",
   "挑战图鉴：#本期幻想图鉴 / *上期末日图鉴 / %上期危局图鉴",
   "成就分类：#成就分类 原神 元素专家·第一辑",
   "状态：#图鉴状态",

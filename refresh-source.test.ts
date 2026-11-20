@@ -71,9 +71,11 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     });
     const check = commands["#检查图鉴更新"];
     const update = commands["#更新图鉴"];
-    expect(atlasMaintenanceAliases["荷花图鉴检查更新"]).toBe("#检查图鉴更新");
-    expect(atlasMaintenanceAliases["#Lotus图鉴更新"]).toBe("#更新图鉴");
-    expect(atlasMaintenanceAliases["#LOTUS图鉴更新"]).toBeUndefined();
+    expect(atlasMaintenanceAliases["图鉴检查更新"]).toBe("#检查图鉴更新");
+    expect(atlasMaintenanceAliases["#图鉴更新"]).toBe("#更新图鉴");
+    for (const alias of ["荷花图鉴检查更新", "#Lotus图鉴更新", "#LOTUS图鉴更新"]) {
+      expect(atlasMaintenanceAliases[alias]).toBeUndefined();
+    }
     expect(await check("", {})).toContain("只有 bot 主人");
     expect(await update("", { atlasMaintenance: true, isDelegated: true })).toContain("只有 bot 主人");
     expect(await update("zzz/bangboo", { atlasMaintenance: true })).toContain("请直接发送 #更新图鉴");

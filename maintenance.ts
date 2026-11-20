@@ -10,14 +10,13 @@ import { parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
-const prefixes = ["", "Lotus", "lotus", "荷花"];
 const names = [[checkCommand, "检查图鉴更新", "图鉴检查更新"], [updateCommand, "更新图鉴", "图鉴更新"]] as const;
 
 export const atlasMaintenanceAliases = Object.fromEntries(names.flatMap(([target, ...words]) =>
-  ["", "#"].flatMap((hash) => prefixes.flatMap((prefix) => words.flatMap((word) => {
-    const alias = `${hash}${prefix}${word}`;
+  ["", "#"].flatMap((hash) => words.flatMap((word) => {
+    const alias = `${hash}${word}`;
     return alias === target ? [] : [[alias, target]];
-  })))));
+  }))));
 
 function publishedManifest(value: unknown) {
   return Object.fromEntries(["gi", "hsr", "zzz"].map((game) => {

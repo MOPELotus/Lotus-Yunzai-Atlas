@@ -33,12 +33,15 @@ test("裸装备捷径沿用各游戏前缀，带图鉴和角色分项仍归原�
   }
 });
 
-test("旧显式入口接受紧连名称，预留状态、维护和帮助指令", () => {
-  for (const command of ["#图鉴西风剑", "图鉴西风剑", "#Lotus图鉴西风剑", "lotus图鉴西风剑", "荷花图鉴西风剑"]) {
+test("显式入口接受紧连名称，预留状态、维护和帮助指令", () => {
+  for (const command of ["#图鉴西风剑", "图鉴西风剑"]) {
     expect(parseGluedLookup(command)).toBe("西风剑");
   }
-  for (const command of ["#荷花图鉴状态", "Lotus图鉴帮助", "#图鉴更新", "荷花图鉴检查更新", "图鉴全量更新", "#图鉴重置",
-    "#更新图鉴", "#Lotus检查图鉴更新", "#全量更新图鉴", "#荷花重置图鉴", "#lotus清空图鉴"]) {
+  for (const command of ["#Lotus图鉴西风剑", "lotus图鉴西风剑", "荷花图鉴西风剑"]) {
+    expect(parseGluedLookup(command)).toBeUndefined();
+  }
+  for (const command of ["#图鉴状态", "图鉴帮助", "#图鉴更新", "图鉴检查更新", "图鉴全量更新", "#图鉴重置",
+    "#更新图鉴", "#检查图鉴更新", "#全量更新图鉴", "#重置图鉴", "#清空图鉴"]) {
     expect(parseGluedLookup(command)).toBeUndefined();
     expect(parseEquipmentShortcut(command)).toBeUndefined();
   }
