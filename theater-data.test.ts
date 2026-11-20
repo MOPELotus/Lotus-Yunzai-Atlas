@@ -62,3 +62,34 @@ test("theater selects the live row over overlapping exports and only previews an
   expect(data?.window?.from).toBe("export");
   expect(data?.name).toBe("幻想真境剧诗");
 });
+
+test("11 月实装月谕第八幕预览为空时补丘丘萨满和游戏内等级", async () => {
+  const room = {
+    monster_level: 94, title: "历经百战的丘丘萨满", desc: "破坏「美味汤锅」。",
+  };
+  const difficulty = content.detail.difficulty_config;
+  const withAct = (preview: readonly unknown[] = []) => ({ ...content, detail: { ...content.detail,
+    difficulty_config: { ...difficulty, "5": { ...difficulty["5"], room: {
+      ...difficulty["5"].room, "8": { ...room, monster_preview_list: preview },
+    } } },
+  } });
+
+  const released = await normalizeTheater(entry, withAct(), [], lookup);
+  const sourceBoss = { name: room.title, artwork: "gallery/gi/verified/Churldric.png" };
+  expect(released?.acts.find(({ name }) => name === "第八幕")).toMatchObject({
+    subtitle: "Lv95 · 历经百战的丘丘萨满", enemies: [sourceBoss],
+  });
+  expect(released?.groups.find(({ name }) => name === "首领阵容")?.cards.map(({ name }) => name))
+    .toEqual(["翠翎恐蕈", room.title]);
+
+  const indexed = await normalizeTheater(entry, withAct([{ name: "上游敌人资料" }]), [], lookup);
+  expect(indexed?.acts.find(({ name }) => name === "第八幕")?.enemies).toMatchObject([{ name: "上游敌人资料" }]);
+
+  const preview = await normalizeTheater(entry, { ...withAct(), list: exportDates }, [], lookup);
+  const other = await normalizeTheater({ ...entry, id: "32", name: "32" }, withAct(), [], lookup);
+  for (const data of [preview, other]) {
+    expect(data?.acts.find(({ name }) => name === "第八幕")).toMatchObject({
+      subtitle: "Lv94 · 历经百战的丘丘萨满", enemies: [],
+    });
+  }
+});

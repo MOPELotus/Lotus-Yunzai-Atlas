@@ -1,3 +1,4 @@
+import { prismSlimeArtwork } from "./challenge-artwork.ts";
 import type { AtlasEntry } from "./catalog.ts";
 import { abyssMode, hasChallengeScheduleConflict, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
@@ -53,11 +54,6 @@ function roomGoal(room: Record<string, unknown>): string {
 
 type Lineup = readonly [id: string | undefined, name: string, count: number, artwork?: string][];
 type VerifiedRoom = { readonly level: number; readonly first: Lineup; readonly second: Lineup };
-
-export const prismSlimeArtwork = {
-  path: "gallery/gi/hoyowiki/11052.png",
-  sha256: "694fab4aad6a86dd57bf8cf68488ea7e2d7c9942009d23934128701c7de64fcc",
-};
 
 // November 16 release, independently checked against the in-game captures and CN lineup table.
 // https://genshin.hoyoverse.com/m/en/news/detail/167187

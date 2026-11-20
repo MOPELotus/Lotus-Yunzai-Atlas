@@ -1,3 +1,4 @@
+import { samachurlArtwork } from "./challenge-artwork.ts";
 import type { AtlasEntry } from "./catalog.ts";
 import { readChallengeFacts, theaterMode } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
@@ -91,6 +92,9 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
   const [difficulty, config] = selection;
   const avatar = object(detail.avatar_config);
   const artwork = galleryArtwork(images, "gi");
+  const { window } = readChallengeFacts(theaterMode, content);
+  const novemberLunar = entry.id === "31" && entry.name === "31" && (entry.version === "7.2" || entry.version === "7.2.52") &&
+    window?.from === "live" && window.begin === "2026-11-01 04:00:00" && window.end === "2026-12-01 03:59:59" && difficulty === 5;
 
   const actors = (values: readonly unknown[]) => Promise.all(values.flatMap((value) => {
     const row = object(value);
@@ -117,12 +121,15 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
   }));
 
   const readActs = (key: "room" | "hard_room") => Promise.all(numberRows(config[key]).map(async ([roomId, room], index): Promise<TheaterAct> => {
-    const level = positiveInteger(room.monster_level);
-    return {
-      name: key === "room" ? `第${numerals[roomId] ?? roomId}幕` : `圣牌${numerals[index + 1] ?? index + 1}`,
-      subtitle: [level ? `Lv${level}` : "", singleLine(room.title)].filter(Boolean).join(" · "),
-      description: singleLine(room.desc),
-      enemies: distinct(await Promise.all(list(room.monster_preview_list).flatMap((value, position) => {
+    const preview = room.monster_preview_list;
+    const title = singleLine(room.title);
+    const description = singleLine(room.desc);
+    // The November live enemy preview omits this boss. The released battle menu shows Lv95.
+    const samachurl = novemberLunar && key === "room" && roomId === 8 && room.monster_level === 94 &&
+      title === "历经百战的丘丘萨满" && description.includes("美味汤锅") && Array.isArray(preview) && !preview.length;
+    const level = samachurl ? 95 : positiveInteger(room.monster_level);
+    const enemies = samachurl ? [{ name: title, artwork: samachurlArtwork.path }] :
+      distinct(await Promise.all(list(preview).flatMap((value, position) => {
         const enemy = object(value);
         const id = positiveInteger(enemy.id);
         const sourceName = singleLine(enemy.name);
@@ -133,7 +140,12 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
           id, name: sourceName || entry?.name || `敌人 ID ${id}（待核对）`,
           artwork: icon ?? entry?.artwork, description: effectText(enemy.desc) || entry?.description,
         }))];
-      }))),
+      })));
+    return {
+      name: key === "room" ? `第${numerals[roomId] ?? roomId}幕` : `圣牌${numerals[index + 1] ?? index + 1}`,
+      subtitle: [level ? `Lv${level}` : "", title].filter(Boolean).join(" · "),
+      description,
+      enemies,
     };
   }));
   const [acts, hardActs] = await Promise.all([readActs("room"), readActs("hard_room")]);
@@ -141,7 +153,7 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     name: current ? "当期幻想真境剧诗" : entry.name === entry.id ? theaterMode.name : entry.name,
     version: entry.version,
     artwork: artwork(),
-    window: readChallengeFacts(theaterMode, content).window,
+    window,
     difficulty: difficulties.get(difficulty)!,
     minLevel: positiveInteger(config.minimum_avatar_level),
     maxAct: positiveInteger(config.boss_max_room_number),

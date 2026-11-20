@@ -12,7 +12,8 @@ import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
-import { prismSlimeArtwork, type AbyssDetails } from "./abyss-data.ts";
+import type { AbyssDetails } from "./abyss-data.ts";
+import { challengeArtworkDigests } from "./challenge-artwork.ts";
 import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
 import type { ShiyuDetails } from "./shiyu-data.ts";
 import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
@@ -300,8 +301,8 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
   for (const path of new Set(paths)) {
     if (!isAtlasGalleryPath(path, game)) continue;
     // Keep the official supplement available when the exported snapshot changes.
-    const pinned = path === prismSlimeArtwork.path;
-    const bases = pinned ? [...roots, ...await Promise.all(themeDirectories.map((directory) =>
+    const digest = challengeArtworkDigests.get(path);
+    const bases = digest ? [...roots, ...await Promise.all(themeDirectories.map((directory) =>
       realpath(directory).catch(() => undefined)))] : roots;
     for (const base of bases) {
       if (!base) continue;
@@ -310,7 +311,7 @@ async function galleryImages(game: Game, paths: readonly (string | undefined)[],
         if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
         const bytes = await localAsset(resolved, maxImageBytes);
         if (!bytes) continue;
-        if (pinned && createHash("sha256").update(bytes).digest("hex") !== prismSlimeArtwork.sha256) continue;
+        if (digest && createHash("sha256").update(bytes).digest("hex") !== digest) continue;
         images.set(path, await loadImage(bytes));
         break;
       } catch {
