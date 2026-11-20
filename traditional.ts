@@ -1,5 +1,5 @@
 import type { Game } from "./catalog.ts";
-import { abyssMode, apocalypseMode, fictionMode } from "./challenges.ts";
+import { abyssMode, apocalypseMode, chaosMode, fictionMode } from "./challenges.ts";
 
 const prefixes: Readonly<Record<string, Game>> = {
   "#": "gi", "#原神": "gi", "#星铁": "hsr", "#星穹铁道": "hsr", "#崩坏星穹铁道": "hsr", "#崩铁": "hsr",
@@ -14,7 +14,7 @@ const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
 const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)([^\r\n]+)图鉴$/u;
-const datedModes = [abyssMode, apocalypseMode, fictionMode] as const;
+const datedModes = [abyssMode, apocalypseMode, chaosMode, fictionMode] as const;
 type DatedChallengeMode = typeof datedModes[number];
 type DatedPeriod = "本期" | "上期";
 

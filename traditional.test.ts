@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
-import { abyssMode, apocalypseMode, fictionMode } from "./challenges.ts";
+import { abyssMode, apocalypseMode, chaosMode, fictionMode } from "./challenges.ts";
 import { parseDatedChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
@@ -67,7 +67,20 @@ test("虚构叙事恢复旧星铁日期写法，拒绝裸日期查询与错误�
   }
   expect(parseDatedChallengeShortcut("#星铁2026-10-19上期虚构叙事图鉴")).toEqual({ mode: fictionMode, period: "上期", at });
   for (const command of ["*2026-10-19本期虚构", "#2026-10-19本期虚构图鉴", "%2026-10-19本期虚构图鉴",
-    "*2026-10-19下期虚构图鉴", "*2026-10-19本期混沌图鉴"]) {
+    "*2026-10-19下期虚构图鉴", "*2026-10-19本期异相图鉴"]) {
+    expect(parseDatedChallengeShortcut(command)).toBeUndefined();
+  }
+});
+
+test("混沌回忆日期图鉴支持忘却旧别名，保持非星铁入口和个人查询", () => {
+  const at = Date.parse("2026-07-06T12:00:00+08:00");
+  for (const command of ["*2026年7月6日本期混沌图鉴", "#星铁2026/7/6当期忘却图鉴"]) {
+    expect(parseDatedChallengeShortcut(command)).toEqual({ mode: chaosMode, period: "本期", at });
+  }
+  expect(parseDatedChallengeShortcut("*2026.7.6上期混沌回忆图鉴")).toEqual({ mode: chaosMode, period: "上期", at });
+  expect(parseDatedChallengeShortcut("#星铁2026-7-6上期忘却之庭图鉴")).toEqual({ mode: chaosMode, period: "上期", at });
+  for (const command of ["*2026-07-06上期忘却之庭", "%2026-07-06本期混沌图鉴",
+    "#2026-07-06本期混沌图鉴", "*2026-07-06下期混沌回忆图鉴"]) {
     expect(parseDatedChallengeShortcut(command)).toBeUndefined();
   }
 });
