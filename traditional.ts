@@ -1,4 +1,5 @@
 import type { Game } from "./catalog.ts";
+import { abyssMode, apocalypseMode, fictionMode } from "./challenges.ts";
 
 const prefixes: Readonly<Record<string, Game>> = {
   "#": "gi", "#原神": "gi", "#星铁": "hsr", "#星穹铁道": "hsr", "#崩坏星穹铁道": "hsr", "#崩铁": "hsr",
@@ -12,8 +13,9 @@ const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
-const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)(深渊|深境螺旋|末日|末日幻影)图鉴$/u;
-type DatedChallengeMode = "tower" | "maze_boss";
+const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)([^\r\n]+)图鉴$/u;
+const datedModes = [abyssMode, apocalypseMode, fictionMode] as const;
+type DatedChallengeMode = typeof datedModes[number];
 type DatedPeriod = "本期" | "上期";
 
 export function parseDatedChallengeShortcut(message: string) {
@@ -21,8 +23,8 @@ export function parseDatedChallengeShortcut(message: string) {
   if (!match) return;
   const [, prefix, year, month, day, period, title] = match;
   const game = prefixes[prefix!];
-  const mode: DatedChallengeMode = title === "深渊" || title === "深境螺旋" ? "tower" : "maze_boss";
-  if (game !== (mode === "tower" ? "gi" : "hsr")) return;
+  const mode = datedModes.find((item) => game === item.game && [item.name, ...item.aliases].some((name) => name === title));
+  if (!mode) return;
   const date = `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}`;
   // Lotus-ReFactor's extractExplicitDate uses noon in the China server timezone.
   const at = Date.parse(`${date}T12:00:00+08:00`);

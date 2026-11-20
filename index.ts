@@ -535,7 +535,7 @@ export const apps = traditionalAtlasApps((argument, kind, game) => {
   if (kind !== "glued") return traditionalQuery(argument, game, kind);
   const { query, game: statedGame } = searchTerms(argument);
   return traditionalQuery(query, statedGame, "name");
-}, (mode, period, at) => challengeQuery(`${mode === "tower" ? "原神 深境螺旋" : "星铁 末日幻影"} ${period}`, at));
+}, (mode, period, at) => challengeQuery(`${gameNames[mode.game]} ${mode.name} ${period}`, at));
 
 const atlas = {
   aliases: {
