@@ -1,4 +1,8 @@
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createAtlasCatalog, type AtlasEntry } from "./catalog.ts";
 import { findAchievementCategories, findAchievements, readAchievementCategories } from "./achievements.ts";
 
 test("同名成就保留各阶段，分类名可省略标点", () => {
@@ -51,4 +55,36 @@ test("绝区零成就按真实组号关联一级分类和子组，无法关联�
   const broken = { ...source, sources: source.sources.map((item) => item.id === "achievement"
     ? { ...item, list: { "100001": { name: "样例成就", group: 1007 } } } : item) };
   expect(() => readAchievementCategories("zzz", broken)).toThrow("无法关联到分类");
+});
+
+
+test("成就分类只加载与原神来源标识和同版条目相符的原图", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-achievement-icon-"));
+  try {
+    const catalog = createAtlasCatalog(root);
+    const source: AtlasEntry = { id: "6", game: "gi", name: "元素专家·第一辑", version: "7.2.52",
+      rarity: "未分类", path: "items/group.json" };
+    const path = "gallery/gi/UI_AchievementIcon_B001.webp";
+    const image = { status: "downloaded", placeholder: false, fieldPath: "icon", localPath: path };
+    const meta = { gameId: "gi", pageId: "achievement/achievement", recordId: "6", version: source.version };
+    const content = { list: { id: 6, name: source.name, icon: "UI_AchievementIcon_B001" } };
+    await mkdir(join(root, "items"));
+    const write = async (images: unknown) => writeFile(join(root, source.path), JSON.stringify({ meta: { ...meta, images }, content }));
+    await write([image]);
+    expect(await catalog.achievementCategoryArtwork(source)).toBe(path);
+    expect(await catalog.achievementCategoryArtwork({ ...source, version: "7.2" })).toBeUndefined();
+    expect(await catalog.achievementCategoryArtwork({ ...source, name: "其他分类" })).toBeUndefined();
+    expect(await catalog.achievementCategoryArtwork({ ...source, game: "hsr" })).toBeUndefined();
+    for (const invalid of [
+      { ...image, fieldPath: "detail.icon" },
+      { ...image, localPath: "gallery/gi/UI_AchievementIcon_B002.webp" },
+      { ...image, localPath: "gallery/hsr/UI_AchievementIcon_B001.webp" },
+      { ...image, placeholder: true },
+    ]) {
+      await write([invalid]);
+      expect(await catalog.achievementCategoryArtwork(source)).toBeUndefined();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

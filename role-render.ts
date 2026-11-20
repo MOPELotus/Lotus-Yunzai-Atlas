@@ -4,6 +4,7 @@ import { basename, dirname, join, sep } from "node:path";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
+import type { AchievementCategory } from "./achievements.ts";
 import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
@@ -424,6 +425,19 @@ export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOpt
   const panels = [[...overview, ...(cards.shift() ?? [])], ...cards].filter((panel) => panel.length);
   if (weapon.story) panels.push([heading("武器故事"), text(weapon.story)]);
   const [page] = await renderAtlasPages([{ section, panels }], title, game, weapon.version, icon, background, options);
+  return page!;
+}
+
+export async function renderAchievementCategory(category: AchievementCategory, artwork?: string, options: RoleRenderOptions = {}) {
+  const { game, name, version } = category;
+  const [images, background] = await Promise.all([
+    galleryImages(game, [artwork], options.assetRoot), themeImage("bg/bg-sr.webp"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
+  const icon = artwork ? images.get(artwork) : undefined;
+  const { wrap, text } = makeLayout();
+  const [page] = await renderAtlasPages([{ section: "成就", panels: [[text("")]], trailingGap: false }],
+    wrap(name, 620, 33), game, version, icon, background, options, 152);
   return page!;
 }
 

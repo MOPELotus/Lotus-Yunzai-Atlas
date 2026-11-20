@@ -247,6 +247,10 @@ async function traditionalQuery(
     const result = await catalog.read();
     const matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
     if (mode === "character" && !game && matches.length !== 1) return;
+    if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
+      const category = await traditionalAchievementCategory(query, result, game);
+      if (category) return category;
+    }
     if (!matches.length && mode === "shortcut" && game === "hsr") {
       const key = query.normalize("NFKC").toLowerCase();
       const entries = result.pages.find(({ challengeMode }) => challengeMode?.id === arbitrationMode.id)?.entries ?? [];
@@ -306,6 +310,30 @@ async function traditionalQuery(
 
 function achievementCategoryLabel(category: AchievementCategory): string {
   return [gameNames[category.game], category.parent, category.name].filter(Boolean).join(" · ");
+}
+
+async function traditionalAchievementCategory(query: string, result: Awaited<ReturnType<typeof catalog.read>>, game?: Game) {
+  const key = compareKey(query);
+  if (!key) return;
+  const categories = result.pages.flatMap((page) => page.achievementCategories ?? []);
+  const matches = findAchievementCategories(categories, query, game)
+    .filter((category) => category.game !== "zzz" && compareKey(category.name) === key);
+  if (matches.length > 1) return matches.map(achievementCategoryLabel).join("\n");
+  const [category] = matches;
+  if (!category) return;
+  const source = result.pages.find((page) => page.achievementCategories?.includes(category))?.entries
+    .find(({ id }) => id === category.id);
+  if (source) {
+    try {
+      const { renderAchievementCategory } = await import("./role-render.ts");
+      const artwork = await catalog.achievementCategoryArtwork(source);
+      const { png } = await renderAchievementCategory(category, artwork, { assetRoot: catalog.assetRoot(source) });
+      return { type: "image" as const, file: png };
+    } catch {
+      // The category stays available as text if the card renderer is unavailable.
+    }
+  }
+  return `${achievementCategoryLabel(category)} · ${category.entries.length} 项`;
 }
 
 async function achievementQuery(argument: string): Promise<string> {

@@ -435,6 +435,16 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       const item = await readItem(entry, setPages[entry.game].id);
       if (item) return normalizeSet(entry, item.content, item.meta.images);
     },
+    async achievementCategoryArtwork(entry: AtlasEntry): Promise<string | undefined> {
+      if (entry.game !== "gi") return;
+      const item = await readItem(entry, achievementPage.id);
+      if (!item) return;
+      const list = object(item.content.list);
+      const icon = label(list.icon);
+      if (label(list.name) !== entry.name || !/^UI_AchievementIcon_[A-Za-z0-9_]+$/u.test(icon)) return;
+      const artwork = galleryArtwork(item.meta.images, entry.game)("icon");
+      if (artwork === `gallery/gi/${icon}.webp`) return artwork;
+    },
     async challengeFacts(entry: AtlasEntry, mode: ChallengeMode) {
       const content = await readContent(entry, mode.id);
       return readChallengeFacts(mode, content);
