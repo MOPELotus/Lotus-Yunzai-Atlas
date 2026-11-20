@@ -4,6 +4,7 @@ import { effectText, galleryArtwork, object } from "./source-values.ts";
 
 interface AbyssEnemy {
   readonly name: string;
+  readonly count?: number;
   readonly artwork?: string;
   readonly description?: string;
   readonly hp?: number;
@@ -50,14 +51,37 @@ function roomGoal(room: Record<string, unknown>): string {
   return "星级条件待核对";
 }
 
+type Lineup = readonly [id: string, name: string, count: number][];
+
+// November 16 release, independently checked against the in-game captures and CN lineup table.
+// https://genshin.hoyoverse.com/m/en/news/detail/167187
+// https://insider-gaming.com/genshin-impact/spiral-abyss-7-2-november/
+// https://wiki.biligame.com/ys/index.php?title=渊月螺旋&oldid=693155
+const floor11Record125: Readonly<Record<string, { level: number; first: Lineup; second: Lineup }>> = {
+  "1": { level: 88, first: [
+    ["25133701", "嗥狼追猎者", 1], ["25133601", "牙兽狂徒", 1], ["24030201", "遗迹龙兽·地巡", 1],
+  ], second: [["22140101", "深黯钓客", 12]] },
+  "2": { level: 90, first: [
+    ["25137001", "苍遒的木灵长", 1], ["25138001", "幼嫩的分节树", 2],
+    ["26310801", "嵌合蝎尾怪", 1], ["26310701", "嵌合鳄蹄兽", 2],
+  ], second: [["26300401", "蕴光凛狼", 1]] },
+  "3": { level: 92, first: [["20090101", "冰结镜映体", 4]], second: [["22131001", "荒野狂狩士", 1]] },
+};
+
 export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, unknown>, images: unknown,
   enemy: (id: string, name: string) => Promise<AbyssEnemy | undefined>, current = false): Promise<AbyssDetails | undefined> {
   if (entry.game !== "gi") return;
-  const { leyline: rawLeyline, floor } = object(content.detail);
+  const { leyline: rawLeyline, floor, open, close } = object(content.detail);
   const floors = numbered(floor);
   if (!floors.length) return;
   const artwork = galleryArtwork(images, "gi");
   const leyline = object(rawLeyline);
+  const { window } = readChallengeFacts(abyssMode, content);
+  const identified125 = entry.id === "125" && entry.name === "凌振之月" &&
+    (entry.version === "7.2" || entry.version === "7.2.52") &&
+    leyline.name === entry.name && leyline.icon === "UI_TowerBlessing_106" &&
+    open === "2026-11-16 04:00:00" && close === "2026-12-16 03:59:59" &&
+    window?.begin === open && window.end === close;
   const description = effectText(leyline.desc);
   const effects = [{ title: "渊月祝福", description: description || "祝福说明待核对" }];
   const rooms = await Promise.all(floors.flatMap(([floorId, row]) => {
@@ -72,8 +96,17 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
 
     return numbered(level.room).map(async ([roomId, value]): Promise<AbyssRoom> => {
       const room = object(value);
+      const verified = identified125 && floorId === "11" ? floor11Record125[roomId] : undefined;
       const sides = await Promise.all((["first", "second"] as const).map(async (half, position) => {
         const rows = Array.isArray(room[half]) ? room[half] : [];
+        const name = position === 0 ? "上半" : "下半";
+        if (verified && verified.level === room.level && Array.isArray(room[half]) && !rows.length) {
+          const enemies = await Promise.all(verified[half].map(async ([id, enemyName, count]) => {
+            const original = await enemy(id, enemyName);
+            return { name: enemyName, count, artwork: original?.artwork, description: original?.description };
+          }));
+          return { name, enemies };
+        }
         const enemies = await Promise.all(rows.flatMap((value, index) => {
           const data = object(value);
           const id = positiveInteger(data.id);
@@ -87,13 +120,12 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
             hp: typeof data.hp === "number" && Number.isFinite(data.hp) && data.hp > 0 ? data.hp : undefined,
           }))];
         }));
-        return { name: position === 0 ? "上半" : "下半", enemies };
+        return { name, enemies };
       }));
       return { name: `${floorId}-${roomId}`, goal: roomGoal(room), level: positiveInteger(room.level), sides };
     });
   }));
   if (!rooms.length) return;
-  const { window } = readChallengeFacts(abyssMode, content);
   const blessing = effectText(leyline.name) || (entry.name === entry.id ? "" : entry.name);
   return {
     name: [current ? "当期深境螺旋" : abyssMode.name, blessing].filter(Boolean).join(" · "),

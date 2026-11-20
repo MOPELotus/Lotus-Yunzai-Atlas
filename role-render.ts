@@ -543,7 +543,8 @@ export async function renderAbyss(abyss: AbyssDetails, options: RoleRenderOption
       blocks.push(heading(side.name));
       if (!side.enemies.length) blocks.push(text("阵容待核对"));
       for (const enemy of side.enemies) {
-        blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
+        const name = enemy.count && enemy.count > 1 ? `${enemy.name} ×${enemy.count}` : enemy.name;
+        blocks.push(heading(name, enemy.artwork ? images.get(enemy.artwork) : undefined));
         if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
         if (enemy.description) blocks.push(text(enemy.description));
       }
