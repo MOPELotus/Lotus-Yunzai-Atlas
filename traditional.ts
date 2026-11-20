@@ -12,17 +12,22 @@ const glued = /^#?(?:Lotus|lotus|荷花)?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}`, "u");
-const datedAbyss = /^#(?:原神)?(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)(?:深渊|深境螺旋)图鉴$/u;
+const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)(深渊|深境螺旋|末日|末日幻影)图鉴$/u;
+type DatedChallengeMode = "tower" | "maze_boss";
+type DatedPeriod = "本期" | "上期";
 
-export function parseDatedAbyssShortcut(message: string) {
-  const match = datedAbyss.exec(message.trim());
+export function parseDatedChallengeShortcut(message: string) {
+  const match = datedChallenge.exec(message.trim());
   if (!match) return;
-  const [, year, month, day, period] = match;
+  const [, prefix, year, month, day, period, title] = match;
+  const game = prefixes[prefix!];
+  const mode: DatedChallengeMode = title === "深渊" || title === "深境螺旋" ? "tower" : "maze_boss";
+  if (game !== (mode === "tower" ? "gi" : "hsr")) return;
   const date = `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}`;
   // Lotus-ReFactor's extractExplicitDate uses noon in the China server timezone.
   const at = Date.parse(`${date}T12:00:00+08:00`);
   const valid = Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === date;
-  return { period: period === "上期" ? "上期" as const : "本期" as const, at: valid ? at : undefined };
+  return { mode, period: period === "上期" ? "上期" as const : "本期" as const, at: valid ? at : undefined };
 }
 
 export function parseGluedLookup(message: string): string | undefined {
@@ -71,7 +76,7 @@ type PluginConstructor = new (options: { name: string; rule: { reg: RegExp; fnc:
 
 export function traditionalAtlasApps(
   findReply: (query: string, kind: Lookup, game?: Game) => Promise<AtlasReply | undefined>,
-  findDatedAbyssReply: (period: "本期" | "上期", at: number) => Promise<AtlasReply>,
+  findDatedChallengeReply: (mode: DatedChallengeMode, period: DatedPeriod, at: number) => Promise<AtlasReply>,
 ) {
   return {
     // The host installs the V3 base before it enumerates the exported apps.
@@ -88,10 +93,10 @@ export function traditionalAtlasApps(
           if (query) return this.send(event, await findReply(query, "glued"));
           const role = parseRoleShortcut(event.msg);
           if (role) return this.send(event, await findReply(role.query, "character", role.game));
-          const dated = parseDatedAbyssShortcut(event.msg);
+          const dated = parseDatedChallengeShortcut(event.msg);
           if (dated) return this.send(event, dated.at === undefined
-            ? "日期无效，请输入有效日期，例如 #2026-11-16本期深渊图鉴。"
-            : await findDatedAbyssReply(dated.period, dated.at));
+            ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
+            : await findDatedChallengeReply(dated.mode, dated.period, dated.at));
           const target = parseEquipmentShortcut(event.msg);
           if (!target) return false;
           return this.send(event, await findReply(target.query, "shortcut", target.game));

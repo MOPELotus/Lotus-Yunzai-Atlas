@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
-import { parseDatedAbyssShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
+import { parseDatedChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -35,16 +35,28 @@ test("旧深境螺旋日期语法以中国服当天中午查询，只接带图�
   for (const command of [
     "#2026年11月16日本期深渊图鉴", "#2026.11.16当期深境螺旋图鉴",
     "#原神2026/11/16本期深渊图鉴",
-  ]) expect(parseDatedAbyssShortcut(command)).toEqual({ period: "本期", at });
-  expect(parseDatedAbyssShortcut("#2026-11-16上期深境螺旋图鉴")).toEqual({ period: "上期", at });
-  expect(parseDatedAbyssShortcut("#2026年2月29日本期深渊图鉴")).toEqual({ period: "本期", at: undefined });
-  expect(parseDatedAbyssShortcut("#2024年2月29日本期深渊图鉴")).toEqual({
-    period: "本期", at: Date.parse("2024-02-29T12:00:00+08:00"),
+  ]) expect(parseDatedChallengeShortcut(command)).toEqual({ mode: "tower", period: "本期", at });
+  expect(parseDatedChallengeShortcut("#2026-11-16上期深境螺旋图鉴")).toEqual({ mode: "tower", period: "上期", at });
+  expect(parseDatedChallengeShortcut("#2026年2月29日本期深渊图鉴")).toEqual({ mode: "tower", period: "本期", at: undefined });
+  expect(parseDatedChallengeShortcut("#2024年2月29日本期深渊图鉴")).toEqual({
+    mode: "tower", period: "本期", at: Date.parse("2024-02-29T12:00:00+08:00"),
   });
   for (const command of [
     "#本期深渊图鉴", "#2026-11-16本期深渊", "#2026-11-16下期深渊图鉴",
     "#2026-11-16本期幻想图鉴", "*2026-11-16本期深渊图鉴",
-  ]) expect(parseDatedAbyssShortcut(command)).toBeUndefined();
+  ]) expect(parseDatedChallengeShortcut(command)).toBeUndefined();
+});
+
+test("末日幻影日期图鉴仅接受旧星铁前缀，保持个人和其他游戏入口", () => {
+  const at = Date.parse("2026-10-26T12:00:00+08:00");
+  for (const command of ["*2026年10月26日本期末日图鉴", "#星铁2026/10/26当期末日幻影图鉴"]) {
+    expect(parseDatedChallengeShortcut(command)).toEqual({ mode: "maze_boss", period: "本期", at });
+  }
+  expect(parseDatedChallengeShortcut("#星铁2026-10-26上期末日图鉴")).toEqual({ mode: "maze_boss", period: "上期", at });
+  for (const command of ["#2026-10-26本期末日图鉴", "#原神2026-10-26本期末日图鉴", "*2026-10-26本期末日",
+    "*2026-10-26下期末日图鉴", "*2026-10-26本期异相图鉴"]) {
+    expect(parseDatedChallengeShortcut(command)).toBeUndefined();
+  }
 });
 
 test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", () => {

@@ -401,6 +401,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
   }
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
+  const displayCurrent = currentRequested && at === undefined;
   const previous = target === "上期" &&
     (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id ||
       mode.id === deadlyAssaultMode.id || mode.id === fictionMode.id || mode.id === shiyuMode.id || mode.id === theaterMode.id);
@@ -483,7 +484,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       }
     }
     if (mode.id === abyssMode.id) {
-      const abyss = await catalog.abyssDetails(entry, result, currentRequested && at === undefined);
+      const abyss = await catalog.abyssDetails(entry, result, displayCurrent);
       if (abyss) {
         try {
           const { renderAbyss } = await import("./role-render.ts");
@@ -495,7 +496,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       }
     }
     if (mode.id === apocalypseMode.id || mode.id === arbitrationMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
-      const image = await starrailChallengeCard(entry, result, mode, forecast ? "next" : currentRequested ? "current" : undefined);
+      const image = await starrailChallengeCard(entry, result, mode, forecast ? "next" : displayCurrent ? "current" : undefined);
       if (image) return image;
     }
     if (mode.id === shiyuMode.id) {
@@ -522,7 +523,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
         }
       }
     }
-    const lines = await challengeDetails(entry, mode, currentRequested && at === undefined, facts, forecast);
+    const lines = await challengeDetails(entry, mode, displayCurrent, facts, forecast);
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
   } catch {
@@ -534,7 +535,7 @@ export const apps = traditionalAtlasApps((argument, kind, game) => {
   if (kind !== "glued") return traditionalQuery(argument, game, kind);
   const { query, game: statedGame } = searchTerms(argument);
   return traditionalQuery(query, statedGame, "name");
-}, (period, at) => challengeQuery(`原神 深境螺旋 ${period}`, at));
+}, (mode, period, at) => challengeQuery(`${mode === "tower" ? "原神 深境螺旋" : "星铁 末日幻影"} ${period}`, at));
 
 const atlas = {
   aliases: {
