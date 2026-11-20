@@ -1,3 +1,4 @@
+import { LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { characterGalleryName } from "./role-data.ts";
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
@@ -656,8 +657,8 @@ const atlas = {
         });
         if (result.stale) lines.push("部分索引更新失败，已有数据的分类保留了上一次可用的版本。");
         return lines.join("\n");
-      } catch {
-        return missing;
+      } catch (error) {
+        return error instanceof LegacyAtlasSourceConflict ? error.message : missing;
       }
     },
     async "#角色图鉴"(argument: string): Promise<string> {

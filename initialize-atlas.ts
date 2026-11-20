@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { copyAtlasCandidate } from "./assemble-candidate.ts";
 import { atlasApplyStagingPrefix, hasLegacyAtlasData, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
   type AtlasPublication } from "./publish-candidate.ts";
+import { findLegacyAtlasExport } from "./legacy-atlas-directory.ts";
 import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 
 function contains(parent: string, child: string): boolean {
@@ -34,12 +35,14 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
 
 if (import.meta.main) {
   const [root, source, ...extra] = Bun.argv.slice(2);
-  if (!root || !source || extra.length) {
-    console.error("用法：bun initialize-atlas.ts <已有的本地图鉴目标目录> <包含 data/map.json 和 gallery/ 的原图鉴导出目录>");
+  if (!root || extra.length) {
+    console.error("用法：bun initialize-atlas.ts <已有的本地图鉴目标目录> [包含 data/map.json 和 gallery/ 的原图鉴导出目录]");
     process.exitCode = 2;
   } else {
     try {
-      const result = await initializeAtlas(root, source);
+      const donor = source ?? await findLegacyAtlasExport(root);
+      if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");
+      const result = await initializeAtlas(root, donor);
       console.log(JSON.stringify(result, null, 2));
       if (result.status !== "published") process.exitCode = 1;
     } catch (error) {

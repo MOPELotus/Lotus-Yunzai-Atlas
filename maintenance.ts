@@ -1,3 +1,4 @@
+import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { realpath } from "node:fs/promises";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
   type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
@@ -66,7 +67,15 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     try {
       let active = dataOverride ? undefined : await discoverAtlasDataDirectory(root).catch(() => undefined);
       const baseline = dataOverride ? await realpath(dataOverride).catch(() => undefined) : active?.root;
-      if (!baseline) return "图鉴数据未初始化或无法验证，请先准备完整快照。";
+      if (!baseline) {
+        if (!dataOverride) {
+          const fallback = await discoverRuntimeAtlasDataDirectory(root).catch((error: unknown) => {
+            if (error instanceof LegacyAtlasSourceConflict) throw error;
+          });
+          if (fallback?.legacy === true) return "当前图鉴只读使用旧版导出。请先运行本地初始化，再管理更新。";
+        }
+        return "图鉴数据未初始化或无法验证，请先准备完整快照。";
+      }
 
       const local = await validateAtlasCandidate(baseline, [], signal);
       if (!local.ok) return "图鉴数据未初始化或无法验证，请先准备完整快照。";
@@ -102,7 +111,8 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       }
       if (selections.length === atlasSourceSelections.length) lines.push("其余分类尚待核对来源。");
       return lines.join("\n");
-    } catch {
+    } catch (error) {
+      if (error instanceof LegacyAtlasSourceConflict) return error.message;
       return signal?.aborted ? "图鉴维护已中止。" : "无法核对图鉴快照，请稍后重试。";
     } finally {
       if (kind === "update") updating = false;

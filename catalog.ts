@@ -15,6 +15,7 @@ import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
+import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import equipmentAliasData from "./equipment-aliases.json";
 import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
@@ -91,6 +92,7 @@ interface Catalog {
 interface Snapshot extends Catalog {
   readonly map: Buffer;
   readonly mapIdentity: string;
+  readonly legacy: boolean;
   readonly root: string;
   readonly version: number | null;
 }
@@ -234,10 +236,10 @@ function artifactName(list: Record<string, unknown>): string {
 }
 
 export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string) {
-  return override ? createAtlasCatalog(override) : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot);
+  return override ? createAtlasCatalog(override) : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot, true);
 }
 
-export function createAtlasCatalog(directory: string, publicationRoot?: string) {
+export function createAtlasCatalog(directory: string, publicationRoot?: string, legacyFallback = false) {
   const configuredRoot = resolve(directory);
   const publishedRoot = publicationRoot && resolve(publicationRoot);
   const entryRoots = new WeakMap<AtlasEntry, string>();
@@ -246,13 +248,15 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
   let checkingShortcuts: Promise<Catalog> | undefined;
 
   async function locate() {
-    if (publishedRoot) return discoverAtlasDataDirectory(publishedRoot);
-    return { root: await realpath(configuredRoot), version: null };
+    if (publishedRoot && legacyFallback) return discoverRuntimeAtlasDataDirectory(publishedRoot);
+    const located = publishedRoot ? await discoverAtlasDataDirectory(publishedRoot)
+      : { root: await realpath(configuredRoot), version: null };
+    return { ...located, legacy: false };
   }
 
   async function read(shortcut = false): Promise<Catalog> {
     try {
-      const { root, version } = await locate();
+      const { root, version, legacy } = await locate();
       if (snapshot?.version && (version === null || version < snapshot.version)) {
         throw new Error("图鉴发布指针丢失或版本倒退。");
       }
@@ -264,13 +268,15 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
       // Explicit queries always compare bytes.
       const settledIdentity = info.ctimeNs < BigInt(Date.now()) * 1_000_000n - shortcutIdentityAgeNs;
       if (shortcut && settledIdentity && snapshot && !snapshot.stale && root === snapshot.root &&
-          version === snapshot.version && mapIdentity === snapshot.mapIdentity) {
+          version === snapshot.version && legacy === snapshot.legacy && mapIdentity === snapshot.mapIdentity) {
         return { pages: snapshot.pages, stale: false };
       }
       const map = await readFile(mapPath);
-      if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version || !map.equals(snapshot.map)) {
+      if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version ||
+          legacy !== snapshot.legacy || !map.equals(snapshot.map)) {
         const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
+        const previousPages = snapshot?.legacy === legacy && (!legacy || snapshot.root === root) ? snapshot.pages : [];
         let stale = false;
         for (const game of Object.keys(gameNames) as Game[]) {
           const gameBlock = object(object(source.games)[game]);
@@ -283,7 +289,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
           const challengePages = challengeModes.filter((mode) => mode.game === game)
             .map((mode) => ({ id: mode.id, name: mode.name, kind: "challenge" as const, challengeMode: mode }));
           for (const { id: pageId, name, kind, challengeMode } of [...standardPages, ...challengePages]) {
-            const previous = snapshot?.pages.find((page) =>
+            const previous = previousPages.find((page) =>
               page.game === game && page.kind === kind && page.challengeMode?.id === challengeMode?.id);
             const value = rawPages[pageId];
             if (value === undefined && !previous) continue;
@@ -325,13 +331,13 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string) 
           }
         }
         if (!pages.length || (version !== null && stale)) throw new Error("图鉴索引缺少可用分类。");
-        snapshot = { map, mapIdentity, root, version, pages, stale };
+        snapshot = { map, mapIdentity, root, version, legacy, pages, stale };
       } else if (mapIdentity !== snapshot.mapIdentity) {
         snapshot = { ...snapshot, mapIdentity };
       }
       return { pages: snapshot.pages, stale: snapshot.stale };
     } catch (error) {
-      if (snapshot) return { pages: snapshot.pages, stale: true };
+      if (snapshot && !snapshot.legacy && !(error instanceof LegacyAtlasSourceConflict)) return { pages: snapshot.pages, stale: true };
       throw error;
     }
   }

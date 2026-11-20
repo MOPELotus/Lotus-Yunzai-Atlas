@@ -20,6 +20,19 @@ bun plugins/atlas/legacy-coverage.ts /path/to/legacy-export /path/to/checkpoints
 
 `initialize-atlas.ts` 接收完整的 `data/` 与 `gallery/`；发布器将它们保存为 `snapshots/<版本>/data` 与同级 `gallery`，`current` 指向该版 `data`。覆盖报告只读，详情与原图有缺口时仍可输出报告供下一批补全。报告使用的检查点目录不能直接作为初始化来源。
 
+## 初始化已有旧导出
+
+首次升级可只读使用 `plugins/Lotus-Plugin/data/atlas/` 或 `plugins/Lotus-ReFactor/data/atlas/` 中已有的单份导出。设置 `LOTUS_ATLAS_DATA_DIR` 时以所指定的 `data/` 为准。存在主目录的 `current` 或 `data/` 时按主目录读取，异常时保留主目录的既有行为。
+
+要将已核对的完整旧版导出迁入新目录，在宿主根目录运行：
+
+```sh
+mkdir -p data/atlas
+bun plugins/atlas/initialize-atlas.ts data/atlas
+```
+
+发现两份不同的旧导出时，在命令最后指定要迁入的导出根目录。根目录需要含 `data/map.json` 和 `gallery/`。原位置只读，校验通过后才在主目录发布快照。已有主数据时初始化会退出。
+
 ## 详情候选队列
 
 ```sh
