@@ -144,7 +144,8 @@ export async function findAnnouncedChallengeNext<Entry extends { readonly id: st
 }
 
 export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
-  mode: typeof abyssMode | typeof apocalypseMode | typeof chaosMode | typeof fictionMode | typeof shiyuMode | typeof theaterMode,
+  mode: typeof abyssMode | typeof apocalypseMode | typeof chaosMode | typeof deadlyAssaultMode |
+    typeof fictionMode | typeof shiyuMode | typeof theaterMode,
   entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { abyssMode, apocalypseMode, challengeModes, chaosMode, fictionMode, findAnnouncedChallengeNext, findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation,
-  onslaughtMode, readChallengeFacts, theaterMode, type ChallengeMode } from "./challenges.ts";
+import { abyssMode, apocalypseMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
+  findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation, onslaughtMode, readChallengeFacts,
+  theaterMode, type ChallengeMode } from "./challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
   const mode = findChallengeMode("hsr", "混沌");
@@ -210,6 +211,20 @@ test("深境上期只使用首尾相邻且与公告无冲突的实装窗口", as
     "2027-01-16T04:00:00+08:00")).toBeUndefined();
   expect(await choosePrevious([...records, row("后继夹具", "2027-02-16 04:00:00", "2027-03-16 03:59:59")],
     "2027-02-16T04:00:00+08:00")).toBeUndefined();
+});
+
+test("危局上期在短轮换结束后保持待核对，忽略后继导出窗", async () => {
+  const earlier = row("690481", "2026-10-23 04:00:00", "2026-11-06 03:59:59");
+  const previous = row("690491", "2026-11-06 04:00:00", "2026-11-20 03:59:59");
+  const current = row("690501", "2026-11-20 04:00:00", "2026-12-02 03:59:59");
+  const exportOnly = { id: "690511", list: { begin: "2026-12-02 04:00:00", end: "2026-12-16 03:59:59" } };
+  const records = [current, earlier, previous, exportOnly];
+  const select = async (time: string) =>
+    (await findPreviousChallenge(deadlyAssaultMode, records, async (entry) => readChallengeFacts(deadlyAssaultMode, entry), Date.parse(time)))?.entry.id;
+  expect(await select("2026-11-20T03:59:59.999+08:00")).toBe("690481");
+  expect(await select("2026-11-20T04:00:00+08:00")).toBe("690491");
+  expect(await select("2026-12-02T03:59:59.999+08:00")).toBe("690491");
+  expect(await select("2026-12-02T04:00:00+08:00")).toBeUndefined();
 });
 
 test("重叠、部分 live、导出及异相仲裁都不能选定本期", async () => {

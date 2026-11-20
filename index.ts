@@ -373,8 +373,8 @@ async function challengeQuery(argument: string): Promise<string | AtlasImage> {
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
   const previous = target === "上期" &&
-    (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
-      mode.id === shiyuMode.id || mode.id === theaterMode.id);
+    (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id ||
+      mode.id === deadlyAssaultMode.id || mode.id === fictionMode.id || mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const forecast = target === "下期" &&
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
@@ -552,6 +552,9 @@ const atlas = {
     "#绝区零本期危局强袭战图鉴": "#绝区零本期危局图鉴",
     "#绝区零本期强袭图鉴": "#绝区零本期危局图鉴",
     "#绝区零本期强袭战图鉴": "#绝区零本期危局图鉴",
+    "#绝区零上期危局强袭战图鉴": "#绝区零上期危局图鉴",
+    "#绝区零上期强袭图鉴": "#绝区零上期危局图鉴",
+    "#绝区零上期强袭战图鉴": "#绝区零上期危局图鉴",
   },
   commands: {
     async "#图鉴"(argument: string) {
@@ -600,6 +603,7 @@ const atlas = {
     "#绝区零上期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 上期"),
     "#绝区零下期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 下期"),
     "#绝区零本期危局图鉴": () => challengeQuery("绝区零 危局强袭战 本期"),
+    "#绝区零上期危局图鉴": () => challengeQuery("绝区零 危局强袭战 上期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();
