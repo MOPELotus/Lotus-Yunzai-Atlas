@@ -52,20 +52,25 @@ function roomGoal(room: Record<string, unknown>): string {
 }
 
 type Lineup = readonly [id: string, name: string, count: number][];
+type VerifiedRoom = { readonly level: number; readonly first: Lineup; readonly second: Lineup };
 
 // November 16 release, independently checked against the in-game captures and CN lineup table.
 // https://genshin.hoyoverse.com/m/en/news/detail/167187
 // https://insider-gaming.com/genshin-impact/spiral-abyss-7-2-november/
 // https://wiki.biligame.com/ys/index.php?title=渊月螺旋&oldid=693155
-const floor11Record125: Readonly<Record<string, { level: number; first: Lineup; second: Lineup }>> = {
-  "1": { level: 88, first: [
+const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  "11-1": { level: 88, first: [
     ["25133701", "嗥狼追猎者", 1], ["25133601", "牙兽狂徒", 1], ["24030201", "遗迹龙兽·地巡", 1],
   ], second: [["22140101", "深黯钓客", 12]] },
-  "2": { level: 90, first: [
+  "11-2": { level: 90, first: [
     ["25137001", "苍遒的木灵长", 1], ["25138001", "幼嫩的分节树", 2],
     ["26310801", "嵌合蝎尾怪", 1], ["26310701", "嵌合鳄蹄兽", 2],
   ], second: [["26300401", "蕴光凛狼", 1]] },
-  "3": { level: 92, first: [["20090101", "冰结镜映体", 4]], second: [["22131001", "荒野狂狩士", 1]] },
+  "11-3": { level: 92, first: [["20090101", "冰结镜映体", 4]], second: [["22131001", "荒野狂狩士", 1]] },
+  // The original gallery has no 20012301 thumbnail. Resolve it only through its own exact identity.
+  "12-1": { level: 95, first: [["20012301", "历经百战的虹彩史莱姆", 1]], second: [["25134601", "浪涛锚定者", 1]] },
+  "12-2": { level: 98, first: [["20081001", "霜夜巡天灵主", 1]], second: [["25135202", "游雪的护刃", 1]] },
+  "12-3": { level: 100, first: [["26302101", "蕴光月守宫", 1]], second: [["24021101", "恒常机关阵列", 1]] },
 };
 
 export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, unknown>, images: unknown,
@@ -96,7 +101,8 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
 
     return numbered(level.room).map(async ([roomId, value]): Promise<AbyssRoom> => {
       const room = object(value);
-      const verified = identified125 && floorId === "11" ? floor11Record125[roomId] : undefined;
+      const roomName = `${floorId}-${roomId}`;
+      const verified = identified125 ? record125Rooms[roomName] : undefined;
       const sides = await Promise.all((["first", "second"] as const).map(async (half, position) => {
         const rows = Array.isArray(room[half]) ? room[half] : [];
         const name = position === 0 ? "上半" : "下半";
@@ -122,7 +128,7 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
         }));
         return { name, enemies };
       }));
-      return { name: `${floorId}-${roomId}`, goal: roomGoal(room), level: positiveInteger(room.level), sides };
+      return { name: roomName, goal: roomGoal(room), level: positiveInteger(room.level), sides };
     });
   }));
   if (!rooms.length) return;

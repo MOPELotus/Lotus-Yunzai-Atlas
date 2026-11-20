@@ -56,7 +56,7 @@ test("the official date conflict is distinguishable from an ordinary export wind
   expect(flags.map((row) => [row?.window?.from, row?.scheduleConflict])).toEqual([["live", true], ["export", false]]);
 });
 
-test("凌振之月 125 仅补已核实的 11 层空半场，保留源阵容和其他轮换", async () => {
+test("凌振之月 125 仅补经核实的 11、12 层空半场，保留源阵容和其他轮换", async () => {
   const verified = {
     ...content,
     detail: {
@@ -70,22 +70,32 @@ test("凌振之月 125 仅补已核实的 11 层空半场，保留源阵容和�
           "2": { level: 90, first: [], second: [{ id: 26300401, name: "蕴光凛狼", hp: 125 }] },
           "3": { level: 92, first: [], second: [] },
         } },
-        "12": { room: { "1": { level: 95, first: [], second: [] } } },
+        "12": { room: {
+          "1": { level: 95, first: [], second: [] },
+          "2": { level: 98, first: [], second: [] },
+          "3": { level: 100, first: [], second: [] },
+        } },
       },
     },
   };
-  const lookup = async (id: string, name: string) => ({ name, artwork: `gallery/gi/${id}.webp` });
+  const lookup = async (id: string, name: string) => id === "20012301" ? undefined : ({ name, artwork: `gallery/gi/${id}.webp` });
   const data = await normalizeAbyss(entry, verified, [], lookup);
   expect(data?.rooms.map(({ sides }) => sides.map(({ enemies }) =>
     enemies.map(({ name, count }) => [name, count])))).toEqual([
     [[["嗥狼追猎者", 1], ["牙兽狂徒", 1], ["遗迹龙兽·地巡", 1]], [["深黯钓客", 12]]],
     [[["苍遒的木灵长", 1], ["幼嫩的分节树", 2], ["嵌合蝎尾怪", 1], ["嵌合鳄蹄兽", 2]], [["蕴光凛狼", undefined]]],
     [[["冰结镜映体", 4]], [["荒野狂狩士", 1]]],
-    [[], []],
+    [[["历经百战的虹彩史莱姆", 1]], [["浪涛锚定者", 1]]],
+    [[["霜夜巡天灵主", 1]], [["游雪的护刃", 1]]],
+    [[["蕴光月守宫", 1]], [["恒常机关阵列", 1]]],
   ]);
   expect(data?.rooms[0]?.sides[1]?.enemies[0]).toMatchObject({ artwork: "gallery/gi/22140101.webp", count: 12 });
   expect(data?.rooms[0]?.sides[1]?.enemies[0]?.hp).toBeUndefined();
   expect(data?.rooms[1]?.sides[1]?.enemies[0]?.hp).toBe(125);
+  expect(data?.rooms[3]?.sides[0]?.enemies[0]).toEqual({
+    name: "历经百战的虹彩史莱姆", count: 1, artwork: undefined, description: undefined,
+  });
+  expect(data?.rooms[3]?.sides[1]?.enemies[0]?.artwork).toBe("gallery/gi/25134601.webp");
   const otherId = await normalizeAbyss({ ...entry, id: "124" }, verified, [], lookup);
   const otherDate = await normalizeAbyss(entry, { ...verified, list: { ...verified.list, live_end: "2026-12-17 03:59:59" } }, [], lookup);
   const otherVersion = await normalizeAbyss({ ...entry, version: "7.3" }, verified, [], lookup);
