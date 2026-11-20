@@ -51,7 +51,7 @@ function roomGoal(room: Record<string, unknown>): string {
   return "星级条件待核对";
 }
 
-type Lineup = readonly [id: string, name: string, count: number][];
+type Lineup = readonly [id: string | undefined, name: string, count: number, artwork?: string][];
 type VerifiedRoom = { readonly level: number; readonly first: Lineup; readonly second: Lineup };
 
 // November 16 release, independently checked against the in-game captures and CN lineup table.
@@ -73,11 +73,15 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
   "12-3": { level: 100, first: [["26302101", "蕴光月守宫", 1]], second: [["24021101", "恒常机关阵列", 1]] },
 };
 
-// October 16 release. The chamber 3 footage shows one monster in each half.
+// October 16 release. The footage shows one enemy in each half of chambers 2 and 3.
 // https://genshin.hoyoverse.com/m/fr/news/detail/166383
+// https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-2
 // https://allthings.how/varka-stellar-swirl-and-flins-lunar-charged-in-spiral-abyss-7-1-genshin-impact/#chamber-3
 // https://www.miyoushe.com/ys/article/78933070
 const record124Rooms: Readonly<Record<string, VerifiedRoom>> = {
+  // Tower 117 and RoleCombat 24/28 use the same Hildegard portrait, with different encounter IDs.
+  "12-2": { level: 98, first: [["26301101", "蕴光月幻蝶", 1]],
+    second: [[undefined, "历经百战的盗宝团精锐", 1, "gallery/gi/UI_MonsterIcon_Thoarder_Elder_Standard_Hildegard_01.webp"]] },
   "12-3": { level: 100, first: [["26310501", "嵌合翼骏狮", 1]], second: [["24090501", "秘源机兵·统御械", 1]] },
 };
 
@@ -121,9 +125,9 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
         const rows = Array.isArray(room[half]) ? room[half] : [];
         const name = position === 0 ? "上半" : "下半";
         if (verified && verified.level === room.level && Array.isArray(room[half]) && !rows.length) {
-          const enemies = await Promise.all(verified[half].map(async ([id, enemyName, count]) => {
-            const original = await enemy(id, enemyName);
-            return { name: enemyName, count, artwork: original?.artwork, description: original?.description };
+          const enemies = await Promise.all(verified[half].map(async ([id, enemyName, count, originalArtwork]) => {
+            const original = id ? await enemy(id, enemyName) : undefined;
+            return { name: enemyName, count, artwork: originalArtwork ?? original?.artwork, description: original?.description };
           }));
           return { name, enemies };
         }
