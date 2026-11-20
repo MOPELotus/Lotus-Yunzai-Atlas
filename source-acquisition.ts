@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { branchAndBladeIcon, effectText, label, object } from "./source-values.ts";
+import { readAchievementCategories } from "./achievements.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
@@ -31,12 +32,15 @@ const pages = {
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
+  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
+  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: "星铁成就", timeout: 60_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "Shiyu Defense", folder: "式舆防卫战", timeout: 360_000, maxRecords: 256 },
 } as const;
 type SourcePage = keyof typeof pages;
 const maxJsonBytes = 1024 * 1024;
+const maxAchievementIndexBytes = 2 * 1024 * 1024;
 const maxIconBytes = 2 * 1024 * 1024;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const placeholderPath = "gallery/_placeholder/unknown.svg";
@@ -58,8 +62,8 @@ export interface AtlasAcquiredSource {
   readonly missingImageCount: number;
 }
 
-async function sourceJson(url: string, optional: boolean, signal: AbortSignal, request: AtlasSourceFetch) {
-  const bytes = await readAtlasSourceBytes(url, "application/json", maxJsonBytes, optional, signal, request);
+async function sourceJson(url: string, optional: boolean, signal: AbortSignal, request: AtlasSourceFetch, limit = maxJsonBytes) {
+  const bytes = await readAtlasSourceBytes(url, "application/json", limit, optional, signal, request);
   return bytes === undefined ? undefined : JSON.parse(utf8.decode(bytes)) as unknown;
 }
 
@@ -74,6 +78,14 @@ function sourceIndex(category: SourcePage, value: unknown) {
   return entries.map(([id, value]) => {
     const list = object(value);
     const { zh, rank, icon, type } = list;
+    if (category === "gi/achievement/achievement" || category === "hsr/achievement/achievement") {
+      const name = label(list.name);
+      if (!/^(0|[1-9]\d{0,9})$/u.test(id) || !name ||
+          (category === "gi/achievement/achievement" && (typeof icon !== "string" || !/^UI_AchievementIcon_[A-Za-z0-9_]{1,100}$/u.test(icon)))) {
+        throw new Error(`${folder}来源索引条目结构无效。`);
+      }
+      return { id, list, name, rarity: "未分类", iconName: typeof icon === "string" && category === "gi/achievement/achievement" ? icon : undefined };
+    }
     if (category === "zzz/equipment") {
       const texts = object(zh);
       const { name } = texts;
@@ -255,7 +267,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
   if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
       !versions.test(scope.version) || (category !== "zzz/bangboo" && scope.version.includes("+"))) {
-    throw new Error("请选择支持抓取的分类及对应版本。支持原神武器、星铁光锥及绝区零邦布、正式版音擎、驱动盘、危局强袭战、式舆防卫战。");
+    throw new Error("请选择支持抓取的分类及对应版本。");
   }
   const { version } = scope;
   const { game, pageId, folder, title, timeout: limit } = pages[category];
@@ -268,12 +280,17 @@ export async function acquireAtlasSource(destination: string, requirements: read
   const items = `items/${locale}/${game}/${pageId}`;
   await mkdir(target, { mode: 0o700 });
   try {
-    const sourcePath = `${version}/${pageId}.json`;
+    const localized = pageId === "achievement/achievement";
+    const sourceLocale = localized ? locale : null;
+    const localeMode = localized ? "path" : "embedded";
+    const sourcePath = `${version}/${localized ? locale + "/" : ""}${pageId}.json`;
     const sourceUrl = `${atlasSourceOrigin}/${game}/${sourcePath}`;
-    const index = await sourceJson(sourceUrl, false, active, request);
+    const index = await sourceJson(sourceUrl, false, active, request, localized ? maxAchievementIndexBytes : maxJsonBytes);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
       : sourceIndex(category, index);
+    if (localized) readAchievementCategories(game, { version, sourceUrl,
+      sources: entries.map(({ id, name, list }) => ({ id, name, list })) });
     if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
@@ -287,7 +304,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
       const detailUrl = `${atlasSourceOrigin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
-      const detail = await sourceJson(detailUrl, pageId === "bangboo", active, request);
+      const detail = localized ? undefined : await sourceJson(detailUrl, pageId === "bangboo", active, request);
       const hasDetail = detail !== undefined;
       const detailSourceUrl = hasDetail ? detailUrl : null;
       const references = [];
@@ -330,6 +347,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
           const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
           if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error(`${folder}来源图标缺失（${id}）。`);
+          if (!icon && localized) throw new Error(`${folder}来源图标缺失（${id}）。`);
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
             throw new Error(`原神武器来源图标缺失（${id}）。`);
           }
@@ -343,7 +361,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
         }
       }
       const path = `${items}/${id}.json`;
-      const metadata = { sourceUrl, sourcePath, sourceLocale: null, localeMode: "embedded", detailSourceUrl };
+      const metadata = { sourceUrl, sourcePath, sourceLocale, localeMode, detailSourceUrl };
       await writeJson(join(data, path), { meta: { ...metadata, gameId: game, pageId, locale,
         recordId: id, name, version, rarity, hasDetail, images: references }, content: { list, detail: detail ?? null } });
       records[id] = { id, name, rarity, path, hasDetail, detailSourceUrl, imageCount: references.length };
@@ -352,8 +370,8 @@ export async function acquireAtlasSource(destination: string, requirements: read
       await mkdir(join(target, "gallery", "_placeholder"), { recursive: true });
       await writeFile(join(target, placeholderPath), placeholder, { flag: "wx" });
     }
-    const page = { id: pageId, title, folder, sourceUrl, sourcePath, sourceLocale: null,
-      localeMode: "embedded", version, recordCount: entries.length, totalRecordCount: entries.length, sampled: false, records };
+    const page = { id: pageId, title, folder, sourceUrl, sourcePath, sourceLocale,
+      localeMode, version, recordCount: entries.length, totalRecordCount: entries.length, sampled: false, records };
     await writeJson(join(data, "map.json"), {
       meta: { source: "https://nanoka.cc/", locales: [locale], imageDownloads: true,
         requestedVersions: { [game]: version }, selectedPages: { [game]: [pageId] } },

@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { readAchievementCategories } from "./achievements.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { candidateFile } from "./candidate-gallery.ts";
 import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
@@ -17,6 +18,8 @@ const sourcePages = {
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
+  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "原神成就", iconFields: ["icon"] },
+  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "星铁成就", iconFields: [] },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
@@ -56,6 +59,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
     window?: ReturnType<typeof readChallengeFacts>["window"] }>();
+  const achievementSources: { id: string; name: string; list: unknown }[] = [];
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
     const { path } = object(record);
@@ -65,24 +69,33 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const downloaded = new Set((Array.isArray(images) ? images : []).map(object)
       .flatMap(({ status, placeholder, fieldPath }) =>
         status === "downloaded" && placeholder !== true && typeof fieldPath === "string" ? [fieldPath] : []));
+    if (pageId === "achievement/achievement") {
+      achievementSources.push({ id, name: typeof name === "string" ? name : "", list: object(item.content).list });
+    }
     const window = mode ? readChallengeFacts(mode, object(item.content)).window : undefined;
     assets.set(id, { name, window, hasDetail: hasDetail === true,
       icons: mode ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
-  return assets;
+  const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
+    version: "", sourceUrl: "", sources: achievementSources,
+  }) : [];
+  return { assets, achievementIds: new Set(achievements.flatMap(({ entries }) => entries.map(({ id }) => id))) };
 }
 
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
   after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean) {
   const preserveRotation = pageId === "boss" || pageId === "shiyu";
   const issues: string[] = [];
-  for (const [id, old] of before) {
-    const next = after.get(id);
+  for (const id of before.achievementIds) {
+    if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
+  }
+  for (const [id, old] of before.assets) {
+    const next = after.assets.get(id);
     if (!next) {
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if (preserveRecords && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "achievement/achievement") && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;

@@ -491,3 +491,63 @@ test("收集期间已发布较新指针时提前结束，保持竞争赢家", ()
   expect(await readdir(join(root, "snapshots"))).toEqual(["4"]);
   expect(await readdir(workspace)).toEqual(["atlas"]);
 }));
+
+test.each(["gi", "hsr"] as const)("%s 成就更新保留分组和条目，正式版才可发布", async (game) => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-achievement-refresh-"));
+  const root = join(work, "atlas");
+  const pageId = "achievement/achievement";
+  const category = game === "gi" ? "0" : "1";
+  const iconName = "UI_AchievementIcon_O001";
+  const selection = game === "gi" ? "gi/achievement/achievement" : "hsr/achievement/achievement";
+  const base = { id: Number(category), name: "成就样例", ...(game === "gi" ? { icon: iconName } : {}) };
+  const row = (id: number) => ({ id, name: `成就 ${id}`, desc: "达成条件" });
+  const urls: string[] = [];
+  let live = "1.0";
+  let entries = [row(82001), row(82002)];
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url === `https://static.nanoka.cc/${game}/${live}/zh/${pageId}.json`) {
+      return Response.json({ [category]: { ...base, list: entries } });
+    }
+    if (game === "gi" && url === `https://static.nanoka.cc/assets/gi/${iconName}.webp`) {
+      return new Response(new Uint8Array(webp));
+    }
+    throw new Error(`意外的来源夹具请求 ${url}`);
+  };
+  try {
+    await acquireAtlasSource(root, [{ game, pageId, version: live }], undefined, request);
+    const catalog = createAtlasRuntimeCatalog(root);
+    const ids = async () => (await catalog.read()).pages
+      .flatMap(page => page.achievementCategories ?? []).flatMap(({ entries }) => entries.map(({ id }) => id));
+    expect(await ids()).toEqual(["82001", "82002"]);
+
+    const { commands } = createAtlasMaintenance(root, {
+      manifest: async () => ({ [game]: { live, latest: "2.0", available: [live, "2.0"] } }), request,
+      updateConfig: { update_args: ["--pages", selection.replace("/", "=")] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已是同一正式版本 1.0");
+    expect(urls).toEqual([]);
+
+    live = "1.1";
+    entries = [row(82001), row(82003)];
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("1.0 → 1.1，可准备候选");
+    expect(urls).toEqual([]);
+    expect(await commands["#更新图鉴"]("", owner)).toContain("候选校验未通过");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+    expect(await ids()).toEqual(["82001", "82002"]);
+
+    entries = [row(82001), row(82002), row(82003)];
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 1.1");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(await ids()).toEqual(["82001", "82002", "82003"]);
+    expect(urls).toEqual([
+      `https://static.nanoka.cc/${game}/1.1/zh/${pageId}.json`,
+      ...(game === "gi" ? [`https://static.nanoka.cc/assets/gi/${iconName}.webp`] : []),
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
