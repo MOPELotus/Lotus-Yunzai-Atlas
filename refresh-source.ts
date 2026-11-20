@@ -16,6 +16,7 @@ const sourcePages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "邦布", iconFields: itemIcons },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "音擎", iconFields: itemIcons },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
+  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "星铁遗器", iconFields: itemIcons },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
@@ -61,7 +62,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   const pages = object(object(object(gameData.locales).zh).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
-    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[] }>();
+    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[] }>();
   const achievementSources: { id: string; name: string; list: unknown }[] = [];
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
@@ -76,11 +77,17 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
       achievementSources.push({ id, name: typeof name === "string" ? name : "", list: object(item.content).list });
     }
     const window = mode ? readChallengeFacts(mode, object(item.content)).window : undefined;
-    const detail = object(object(item.content).detail);
+    const content = object(item.content);
+    const detail = object(content.detail);
+    const values = object(content.list);
+    const variantIds = pageId === "monstervalue" && Array.isArray(values.child)
+      ? values.child.map(variant => object(variant).Id) : undefined;
+    const phases = pageId === "monstervalue" && Array.isArray(values.PhaseList)
+      ? values.PhaseList.map(phase => object(phase).phase_num) : undefined;
     const setParts = pageId === "relicset" || pageId === "artifact" ? Object.keys(object(detail.parts)) : undefined;
     const effects = pageId === "relicset" ? Object.keys(object(detail.require_num))
       : pageId === "artifact" && Array.isArray(detail.need) ? detail.need.map(String) : undefined;
-    assets.set(id, { name, window, hasDetail: hasDetail === true, parts: setParts, effects,
+    assets.set(id, { name, window, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases,
       icons: mode || pageId === "artifact" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
@@ -116,7 +123,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact") && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue") && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;
@@ -127,6 +134,9 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
     }
     if (old.parts?.some(part => !next.parts?.includes(part)) || old.effects?.some(effect => !next.effects?.includes(effect))) {
       issues.push(`${title} ${id} 缺少已有部位或套装效果。`);
+    }
+    if (old.variants?.some(id => !next.variants?.includes(id)) || old.phases?.some(phase => !next.phases?.includes(phase))) {
+      issues.push(`${title} ${id} 缺少已有变体或阶段。`);
     }
     if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
     for (const field of old.icons) {

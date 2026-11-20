@@ -758,3 +758,79 @@ test("原神圣遗物更新校验五件部位，已核原缺图例外不会让�
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("星铁敌人数值更新只读正式索引并保留已有敌人、变体及阶段", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-monstervalue-refresh-"));
+  const root = join(work, "atlas");
+  const selection = "hsr/monstervalue";
+  const pageId = "monstervalue";
+  const id = "1004011";
+  const values = {
+    Rank: "LittleBoss", AttackBase: 19, DefenceBase: 220, HPBase: 100,
+    SpeedBase: null, StanceBase: 90, StatusResistanceBase: 0.3,
+    MaxMonsterPhase: 2, PhaseList: [{ phase_num: 1, phase_max_hp_ratio: 1 }, { phase_num: 2, phase_max_hp_ratio: 0.8 }],
+    child: [1004011, 100401101].map(Id => ({
+      Id, AttackModifyRatio: 1, DefenceModifyRatio: 1, EliteGroup: 10, HPModifyRatio: 1, SpeedModifyRatio: 1,
+      SpeedModifyValue: -10, StanceModifyRatio: 1, HardLevelGroup: 2, StanceWeakList: ["Wind"],
+    })),
+  };
+  let candidate = structuredClone(values);
+  let key = id;
+  let live = "4.6";
+  const urls: string[] = [];
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url !== `https://static.nanoka.cc/hsr/${live}/monstervalue.json`) throw new Error(`不应请求 ${url}`);
+    return Response.json({ [key]: candidate });
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
+    const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "hsr=monstervalue"] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "4.7";
+    urls.length = 0;
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    expect(urls).toEqual([]);
+
+    key = "1004012";
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [`星铁敌人数值 ${id} 缺少已有条目。`],
+    });
+    key = id;
+    candidate.child.pop();
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [`星铁敌人数值 ${id} 缺少已有变体或阶段。`],
+    });
+    candidate = structuredClone(values);
+    candidate.MaxMonsterPhase = 1;
+    candidate.PhaseList.pop();
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [`星铁敌人数值 ${id} 缺少已有变体或阶段。`],
+    });
+    candidate = structuredClone(values);
+    candidate.PhaseList[0]!.phase_num = 2;
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("索引条目结构无效");
+    expect(await readAtlasSnapshotVersion(root)).toBeNull();
+
+    candidate = structuredClone(values);
+    candidate.child.push({ ...values.child[1]!, Id: 100401102 });
+    candidate.PhaseList.push({ phase_num: 3, phase_max_hp_ratio: 1 });
+    candidate.MaxMonsterPhase = 3;
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    const published = join(root, "snapshots/1/data");
+    const map = await Bun.file(join(published, "map.json")).json();
+    const page = map.games.hsr.locales.zh.pages.monstervalue;
+    expect(page.records[id].hasDetail).toBe(false);
+    const record = await Bun.file(join(published, page.records[id].path)).json();
+    expect(record.content).toEqual({ list: candidate, detail: null });
+    expect(record.meta.images).toEqual([]);
+    expect(urls).toEqual(["https://static.nanoka.cc/hsr/4.7/monstervalue.json"]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

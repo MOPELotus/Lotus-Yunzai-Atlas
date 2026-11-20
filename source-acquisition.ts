@@ -39,6 +39,7 @@ const pages = {
   "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
+  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
   "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
@@ -51,7 +52,7 @@ const pages = {
 } as const;
 type SourcePage = keyof typeof pages;
 const maxJsonBytes = 1024 * 1024;
-const maxAchievementIndexBytes = 2 * 1024 * 1024;
+const maxLargeIndexBytes = 2 * 1024 * 1024;
 const maxIconBytes = 2 * 1024 * 1024;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const placeholderPath = "gallery/_placeholder/unknown.svg";
@@ -80,6 +81,37 @@ async function sourceJson(url: string, optional: boolean, signal: AbortSignal, r
 
 async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value)}\n`, { flag: "wx" });
+}
+
+const monsterStatRanks = new Set(["Minion", "MinionLv2", "Elite", "LittleBoss", "BigBoss"]);
+const monsterWeaknesses = new Set(["Fire", "Ice", "Imaginary", "Physical", "Quantum", "Thunder", "Wind"]);
+
+function monsterStatsIndexRow(value: Record<string, unknown>): boolean {
+  const { Rank, MaxMonsterPhase, PhaseList, child } = value;
+  if (typeof Rank !== "string" || !monsterStatRanks.has(Rank) ||
+      ![value.AttackBase, value.DefenceBase, value.HPBase].every(nonnegative) ||
+      ![value.SpeedBase, value.StanceBase, value.StatusResistanceBase].every(field => field === null || nonnegative(field)) ||
+      !Array.isArray(child)) return false;
+  if ((MaxMonsterPhase !== undefined || PhaseList !== undefined) &&
+      (typeof MaxMonsterPhase !== "number" || !Number.isSafeInteger(MaxMonsterPhase) || MaxMonsterPhase < 1 ||
+       !Array.isArray(PhaseList) || PhaseList.length !== MaxMonsterPhase ||
+       !PhaseList.every((row, index) => {
+         const { phase_num, phase_max_hp_ratio } = object(row);
+         return phase_num === index + 1 && nonnegative(phase_max_hp_ratio);
+       }))) return false;
+
+  const ids = new Set<number>();
+  return child.every(row => {
+    const { Id, AttackModifyRatio, DefenceModifyRatio, EliteGroup, HPModifyRatio, SpeedModifyRatio, SpeedModifyValue,
+      StanceModifyRatio, HardLevelGroup, StanceWeakList } = object(row);
+    if (typeof Id !== "number" || !Number.isSafeInteger(Id) || Id <= 0 || ids.has(Id) ||
+        ![EliteGroup, HardLevelGroup].every(group => typeof group === "number" && Number.isSafeInteger(group) && group >= 0) ||
+        ![AttackModifyRatio, DefenceModifyRatio, HPModifyRatio, SpeedModifyRatio, StanceModifyRatio].every(nonnegative) ||
+        (SpeedModifyValue !== null && (typeof SpeedModifyValue !== "number" || !Number.isFinite(SpeedModifyValue))) ||
+        !Array.isArray(StanceWeakList) || !StanceWeakList.every(weakness => monsterWeaknesses.has(weakness))) return false;
+    ids.add(Id);
+    return true;
+  });
 }
 
 function sourceIndex(category: SourcePage, value: unknown) {
@@ -114,6 +146,12 @@ function sourceIndex(category: SourcePage, value: unknown) {
       if (!/^[1-9]\d{0,9}$/u.test(id) || typeof name !== "string" || !name.trim() || !iconName ||
           !effectText(texts.desc2) || !effectText(texts.desc4)) throw new Error("驱动盘来源索引条目结构无效。");
       return { id, list, name: name.trim(), rarity: "未分类", iconName };
+    }
+    if (category === "hsr/monstervalue") {
+      if (!/^[1-9]\d{0,9}$/u.test(id) || !monsterStatsIndexRow(list)) {
+        throw new Error(`星铁敌人数值来源索引条目结构无效（${id}）。`);
+      }
+      return { id, list, name: id, rarity: "未分类", iconName: undefined };
     }
     if (category === "gi/artifact") {
       const effects = Object.entries(object(list.set));
@@ -368,11 +406,12 @@ export async function acquireAtlasSource(destination: string, requirements: read
   await mkdir(target, { mode: 0o700 });
   try {
     const localized = pageId === "achievement/achievement";
+    const indexOnly = localized || pageId === "monstervalue";
     const sourceLocale = localized ? locale : null;
     const localeMode = localized ? "path" : "embedded";
     const sourcePath = `${version}/${localized ? locale + "/" : ""}${pageId}.json`;
     const sourceUrl = `${atlasSourceOrigin}/${game}/${sourcePath}`;
-    const index = await sourceJson(sourceUrl, false, active, request, localized ? maxAchievementIndexBytes : maxJsonBytes);
+    const index = await sourceJson(sourceUrl, false, active, request, indexOnly ? maxLargeIndexBytes : maxJsonBytes);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
       : sourceIndex(category, index);
@@ -391,7 +430,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
       const detailUrl = `${atlasSourceOrigin}/${game}/${version}/${locale}/${pageId}/${id}.json`;
-      const detail = localized ? undefined : await sourceJson(detailUrl, pageId === "bangboo", active, request);
+      const detail = indexOnly ? undefined : await sourceJson(detailUrl, pageId === "bangboo", active, request);
       const hasDetail = detail !== undefined;
       const detailSourceUrl = hasDetail ? detailUrl : null;
       const references = [];
