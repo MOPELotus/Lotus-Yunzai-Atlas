@@ -10,7 +10,7 @@ import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candi
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import { effectText, object } from "./source-values.ts";
-import { fetchAtlasManifest, planAtlasUpdate, planPublishedChallengeRefresh } from "./update-plan.ts";
+import { fetchAtlasManifest, planAtlasUpdate, planPublishedChallengeRefresh, type AtlasVersionChannel } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const itemIcons = ["icon", "detail.icon"] as const;
@@ -50,6 +50,7 @@ function isSourceSelection(value: unknown): value is SourceSelection {
 }
 
 export interface AtlasRefreshOptions {
+  readonly channel?: AtlasVersionChannel;
   readonly pageId?: keyof typeof defaultSelections;
   readonly selection?: SourceSelection;
   readonly signal?: AbortSignal;
@@ -191,12 +192,12 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
 }
 
 export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
-  local: Awaited<ReturnType<typeof validateAtlasCandidate>>) {
+  local: Awaited<ReturnType<typeof validateAtlasCandidate>>, channel?: AtlasVersionChannel) {
   const { game, pageId } = sourcePages[selection];
   if (!local.pages.some((page) => page.game === game && page.pageId === pageId)) local = { ...local, ok: false };
-  if (isStarrailRotationPage(pageId)) return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId });
-  return pageId === "boss" || pageId === "shiyu" ? planPublishedChallengeRefresh(listing, local, { game: "zzz", pageId })
-    : planAtlasUpdate(listing, local, [{ game, pageId }]);
+  if (isStarrailRotationPage(pageId)) return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId }, channel);
+  return pageId === "boss" || pageId === "shiyu" ? planPublishedChallengeRefresh(listing, local, { game: "zzz", pageId }, channel)
+    : planAtlasUpdate(listing, local, [{ game, pageId }], channel);
 }
 
 export const atlasSourceSelections = Object.entries(sourcePages).map(([selection, { title }]) =>
@@ -223,7 +224,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     return undefined;
   });
   signal?.throwIfAborted();
-  const plan = atlasSourcePlan(selection, listing, local);
+  const plan = atlasSourcePlan(selection, listing, local, options.channel);
   const entry = plan.entries[0];
   if (entry?.action === "review") return { status: "review", reason: entry.reason };
   if (entry?.kind !== "versioned") return { status: "review", reason: "manifest-unavailable" };

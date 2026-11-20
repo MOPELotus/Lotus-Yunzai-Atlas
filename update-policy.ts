@@ -1,10 +1,12 @@
-import { atlasSourceSelections, type SourceSelection } from "./refresh-source.ts";
+import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { object } from "./source-values.ts";
 
 export type AtlasScheduleKind = "version" | "challenge";
+export const atlasExportSelections = legacyAtlasSourcePages.map(({ game, pageId }) => `${game}/${pageId}`);
+const challengePages = new Set(["leyline", "rolecombat", "tower", "maze", "maze_extra", "maze_boss", "maze_peak", "boss", "shiyu"]);
 
 interface AtlasSchedulePolicy {
-  readonly selections: readonly SourceSelection[];
+  readonly selections: readonly string[];
   readonly cron?: string;
   readonly issue?: string;
 }
@@ -60,7 +62,7 @@ const localeIds = new Map([
   ["en", "en"], ["ja", "ja"], ["jp", "ja"], ["ko", "ko"], ["kr", "ko"],
 ]);
 
-function configuredScope(value: unknown, selections: readonly SourceSelection[]): readonly SourceSelection[] | undefined {
+function configuredScope(value: unknown, selections: readonly string[]): readonly string[] | undefined {
   if (value === undefined) return selections;
   if (!Array.isArray(value) || !value.every((argument): argument is string => typeof argument === "string")) return;
   const args: readonly string[] = value[0] === "src/scrape.mjs" ? value.slice(1) : value;
@@ -111,8 +113,7 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
   const auto = object(atlas.auto_update);
   const invalidAuto = (atlas.auto_update !== undefined && atlas.auto_update !== auto) ||
     (auto.enable !== undefined && typeof auto.enable !== "boolean");
-  const entries = atlasSourceSelections.map(({ selection }) => selection);
-  function policy(kind: AtlasScheduleKind, selections: readonly SourceSelection[]): AtlasSchedulePolicy {
+  function policy(kind: AtlasScheduleKind, selections: readonly string[]): AtlasSchedulePolicy {
     const argsKey = kind === "version" ? "update_args" : "challenge_args";
     const selected = configuredScope(atlas[argsKey], selections);
     if (!selected) return { selections: [], issue: `图鉴 ${argsKey} 含不支持的选项或无效分类范围。` };
@@ -125,5 +126,9 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
     return rule ? { selections: selected, cron: rule }
       : { selections: selected, issue: `图鉴 auto_update.${cronKey} 无效或无法等价转换。` };
   }
-  return { version: policy("version", entries), challenge: policy("challenge", ["zzz/boss", "zzz/shiyu", "hsr/maze", "hsr/maze_extra", "hsr/maze_boss", "hsr/maze_peak"]) };
+  return {
+    version: policy("version", atlasExportSelections),
+    challenge: policy("challenge", legacyAtlasSourcePages.filter(({ pageId }) => challengePages.has(pageId))
+      .map(({ game, pageId }) => `${game}/${pageId}`)),
+  };
 }

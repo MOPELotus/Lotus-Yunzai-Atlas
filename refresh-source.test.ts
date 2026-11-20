@@ -67,6 +67,7 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     let sourceCalls = 0;
     let missingIcon = true;
     const { commands } = createAtlasMaintenance(root, {
+      updateConfig: { version_channel: "live", update_args: ["--page", "zzz=bangboo"] },
       async manifest() { manifestCalls++; return { zzz: { live, latest, available: [live, latest] } }; },
       async request(url) { sourceCalls++; expect(url).not.toContain(latest); return source(live, missingIcon ? "icon-missing" : "all")(url); },
     });
@@ -101,7 +102,7 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
     expect(await update("", context)).toContain(`邦布 · 已是同一正式版本 ${live}`);
     expect(sourceCalls).toBe(after);
 
-    const { commands: explicit } = createAtlasMaintenance(root, { dataOverride: join(root, "data"), manifest: async () => ({ zzz: { live, available: [live] } }) });
+    const { commands: explicit } = createAtlasMaintenance(root, { dataOverride: join(root, "data"), updateConfig: { version_channel: "live", update_args: ["--page", "zzz=bangboo"] }, manifest: async () => ({ zzz: { live, available: [live] } }) });
     expect(await explicit["#检查图鉴更新"]("", context)).toContain(`邦布 · ${oldVersion} → ${live}`);
     expect(await explicit["#更新图鉴"]("", context)).toContain("当前使用显式图鉴数据目录");
     expect(await readAtlasSnapshotVersion(root)).toBe(1);
@@ -117,7 +118,7 @@ test("定时与手动共用分类、发布互斥和生命周期，失败后下�
   const controller = new AbortController();
   const { atlasSchedule, commands } = createAtlasMaintenance(root, {
     signal: controller.signal,
-    updateConfig: { update_args: ["--page", "zzz=bangboo"], challenge_args: ["--page", "zzz=character"] },
+    updateConfig: { version_channel: "live", update_args: ["--page", "zzz=bangboo"], challenge_args: ["--page", "zzz=character"] },
     async manifest() {
       checks++;
       if (fail) throw new Error("fixture temporary failure");
@@ -149,6 +150,21 @@ test("定时与手动共用分类、发布互斥和生命周期，失败后下�
   const unready = createAtlasMaintenance(join(work, "missing"), { updateConfig: {}, async manifest() { checks++; } });
   expect(await unready.atlasSchedule.challenge.run()).toContain("请先准备完整快照");
   expect(checks).toBe(2);
+}));
+
+test("旧配置默认核对网站最新版，并能识别未更新或未准备的分类", () => fixture(async (_work, root) => {
+  const listing = { zzz: { live: "3.3", latest: upgrade, available: ["3.3", upgrade] } };
+  const owner = { atlasMaintenance: true } as const;
+  const maintenance = createAtlasMaintenance(root, { manifest: async () => listing });
+  const check = await maintenance.commands["#检查图鉴更新"]("", owner);
+  expect(check).toContain("网站最新版");
+  expect(check).toContain("本次范围 29 类");
+  expect(check).toContain(`邦布 · ${original} → ${upgrade}`);
+  expect(check).toContain(`绝区零角色 · 未准备 → ${upgrade}`);
+  expect(check).toContain("星铁精英组 · 来源版本未知");
+  const refused = await maintenance.commands["#更新图鉴"]("", owner);
+  expect(refused).toContain("本次范围未发布");
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
 }));
 
 const enginePrevious = "3.2";
@@ -524,7 +540,7 @@ test.each(["gi", "hsr"] as const)("%s 成就更新保留分组和条目，正式
 
     const { commands } = createAtlasMaintenance(root, {
       manifest: async () => ({ [game]: { live, latest: "2.0", available: [live, "2.0"] } }), request,
-      updateConfig: { update_args: ["--pages", selection.replace("/", "=")] },
+      updateConfig: { version_channel: "live", update_args: ["--pages", selection.replace("/", "=")] },
     });
     const owner = { atlasMaintenance: true } as const;
     urls.length = 0;
@@ -581,7 +597,7 @@ test("绝区零成就更新保留一级分类、空子分类、条目与互斥�
     const ids = async () => (await catalog.read()).pages.flatMap(page => page.achievementCategories ?? [])
       .flatMap(({ entries }) => entries.map(({ id }) => id));
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "zzz=achievement/achievement"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "zzz=achievement/achievement"] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "3.3";
@@ -664,7 +680,7 @@ test("星铁遗器只更新正式版并保留旧记录、部件、套装效果�
     if (!before) throw new Error("旧版星铁遗器测试数据未加载。");
     expect(before?.parts).toHaveLength(4);
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "hsr=relicset"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "hsr=relicset"] },
     });
     live = "4.7";
     requests.length = 0;
@@ -788,7 +804,7 @@ test("星铁敌人数值更新只读正式索引并保留已有敌人、变体�
     await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
     const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "hsr=monstervalue"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "hsr=monstervalue"] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "4.7";
@@ -862,7 +878,7 @@ test.each(["EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"] as const)(
       await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
       const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
       const { commands } = createAtlasMaintenance(root, {
-        manifest, request, updateConfig: { update_args: ["--pages", `hsr=${pageId}`] },
+        manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", `hsr=${pageId}`] },
       });
       const owner = { atlasMaintenance: true } as const;
       live = "4.7";
@@ -956,7 +972,7 @@ test("星铁敌人正式更新校验同版本身份、原图与数值表的变�
     expect((await applyAtlasCandidate(root, numberSource, valuePlan)).status).toBe("published");
     const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "hsr=monster"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "hsr=monster"] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "4.7";
@@ -1038,7 +1054,7 @@ test("混沌回忆更新保留实装窗口、历史期次和同版战斗倍率�
     expect((await applyAtlasCandidate(root, groupSource, group)).status).toBe("published");
     const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "hsr=maze"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "hsr=maze"] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "4.7";
@@ -1115,7 +1131,7 @@ test("绝区零角色只从正式版更新，已有条目、等级和原图必�
       expect(await readAtlasSnapshotVersion(root)).toBeNull();
     }
     failure = undefined;
-    const { commands } = createAtlasMaintenance(root, { updateConfig: { update_args: ["--page", "zzz=character"] }, manifest, request });
+    const { commands } = createAtlasMaintenance(root, { updateConfig: { version_channel: "live", update_args: ["--page", "zzz=character"] }, manifest, request });
     expect(await commands["#检查图鉴更新"]("", { atlasMaintenance: true })).toContain(`${old} → ${live}`);
     expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain(`绝区零角色 · 已更新至 ${live}`);
     expect(await readAtlasSnapshotVersion(root)).toBe(1);
@@ -1166,7 +1182,7 @@ test.each(["maze_extra", "maze_boss"] as const)("%s 缺少历史期、实装窗�
     await acquireAtlasSource(root, [{ game: "hsr", pageId, version: live }], undefined, request);
     const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", `hsr=${pageId}`] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", `hsr=${pageId}`] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "4.7";
@@ -1251,7 +1267,7 @@ test("绝区零敌人正式更新保留原图、变体和旧条目", async () =>
     await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("身份或等级不符");
     expect(await readAtlasSnapshotVersion(root)).toBeNull();
     failure = undefined;
-    const { commands } = createAtlasMaintenance(root, { updateConfig: { update_args: ["--page", "zzz=monster"] }, manifest, request });
+    const { commands } = createAtlasMaintenance(root, { updateConfig: { version_channel: "live", update_args: ["--page", "zzz=monster"] }, manifest, request });
     expect(await commands["#检查图鉴更新"]("", { atlasMaintenance: true })).toContain(`${old} → ${live}`);
     expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain(`绝区零敌人 · 已更新至 ${live}`);
     expect(await readAtlasSnapshotVersion(root)).toBe(1);
@@ -1309,7 +1325,7 @@ test("异相仲裁由正式索引更新，并保留已有期次、窗口、骑�
       expect((await applyAtlasCandidate(root, groupSource, groupPlan)).status).toBe("published");
     }
     const { commands } = createAtlasMaintenance(root, {
-      manifest, request, updateConfig: { update_args: ["--pages", "hsr=maze_peak"] },
+      manifest, request, updateConfig: { version_channel: "live", update_args: ["--pages", "hsr=maze_peak"] },
     });
     const owner = { atlasMaintenance: true } as const;
     live = "4.7";

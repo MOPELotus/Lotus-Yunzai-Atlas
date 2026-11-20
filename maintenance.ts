@@ -6,10 +6,12 @@ import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasR
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot } from "./publish-candidate.ts";
 import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.ts";
-import { fetchAtlasManifest } from "./update-plan.ts";
+import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
-import { parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { atlasExportSelections, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import { applyAtlasCandidate } from "./apply-candidate.ts";
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
@@ -28,17 +30,10 @@ export const atlasMaintenanceAliases = Object.fromEntries(names.flatMap(([target
     return alias === target ? [] : [[alias, target]];
   }))));
 
-function publishedManifest(value: unknown) {
-  return Object.fromEntries(["gi", "hsr", "zzz"].map((game) => {
-    const { live, available } = object(object(value)[game]);
-    return [game, { live, latest: live, available }];
-  }));
-}
-
 const reviewReasons = {
   "local-unverified": "现有分类不完整，保留现有资料",
-  "manifest-unavailable": "未能核实正式来源版本",
-  "unproven-upgrade": "正式源版本低于现有版本或无法比较，保留现有资料",
+  "manifest-unavailable": "未能核实来源版本",
+  "unproven-upgrade": "来源版本低于现有版本或无法比较，保留现有资料",
 } as const;
 
 function describeRefresh(result: AtlasSourceRefresh, targetVersion: string): string {
@@ -65,11 +60,15 @@ interface AtlasMaintenanceContext {
 export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOptions = {}) {
   const { signal, request, dataOverride, manifest = fetchAtlasManifest } = options;
   const policy = parseAtlasUpdatePolicy(options.updateConfig);
+  const configuredChannel = object(options.updateConfig).version_channel;
+  const channel = configuredChannel === undefined ? "latest" : configuredChannel;
+  const workspace = join(dirname(root), "atlas-download");
   let updating = false;
 
-  async function run(kind: "check" | "update", selections: readonly SourceSelection[]) {
+  async function run(kind: "check" | "update", selections: readonly string[]) {
     if (signal?.aborted) return "图鉴维护已中止。";
     if (!selections.length) return "图鉴配置未选中已核实的分类。";
+    if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
     if (kind === "update" && dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     if (kind === "update") updating = true;
@@ -91,12 +90,55 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       const listing = await manifest(signal).catch(() => undefined);
       if (signal?.aborted) return "图鉴维护已中止。";
       if (!listing) return "图鉴版本清单不可用，保留现有资料。";
-      const release = publishedManifest(listing);
+      const scope = legacyAtlasSourcePages.filter(({ game, pageId }) => selections.includes(`${game}/${pageId}`));
+      const native = atlasSourceSelections.filter(({ selection }) => selections.includes(selection));
+      const versions = Object.fromEntries([...new Set(scope.map(({ game }) => game))]
+        .map((game) => [game, atlasManifestVersion(listing, game, channel)]));
+      const missing = Object.entries(versions).filter(([, version]) => !version).map(([game]) => game);
+      const allCurrent = scope.every(({ game, pageId }) =>
+        versions[game] && local.pages.some((page) => page.game === game && page.pageId === pageId && page.version === versions[game]));
+      const targetNotes = Object.entries(versions).map(([game, version]) => `${game} ${version ?? "版本未知"}`).join("、");
+      const channelLabel = channel === "live" ? "正式版" : "网站最新版";
       const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
-      for (const { selection, title } of atlasSourceSelections) {
-        if (!selections.includes(selection)) continue;
+      lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
+
+      if (channel === "latest" || native.length !== scope.length || selections.length === atlasExportSelections.length ||
+          native.some(({ selection }) => {
+            const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
+            return entry?.action === "review" && entry.reason === "unproven-upgrade";
+          })) {
+        if (kind === "check") {
+          for (const { game, pageId } of scope) {
+            const current = local.pages.find((page) => page.game === game && page.pageId === pageId)?.version;
+            const title = native.find(({ selection }) => selection === `${game}/${pageId}`)?.title ?? `${game}/${pageId}`;
+            const target = versions[game];
+            const summary = !target ? "来源版本未知" : current === target ? `本地版本为 ${target}`
+              : `${current ?? "未准备"} → ${target}，待更新`;
+            lines.push(`${title} · ${summary}`);
+          }
+        } else if (missing.length) {
+          lines.push(`未能核实 ${missing.join("、")} 的目标版本，本次范围未发布。`);
+        } else if (allCurrent) {
+          lines.push(`本地所选 ${scope.length} 类版本均为目标版本。`);
+        } else {
+          try {
+            const { downloadAtlasVersion } = await import("./download-legacy-atlas.ts");
+            const result = await downloadAtlasVersion(workspace, root, versions,
+              (source, pages) => applyAtlasCandidate(root, source, pages, signal, active), signal, request, scope, baseline);
+            lines.push(result.status === "published" ? `所选 ${scope.length} 类已核对并发布至快照 ${result.version}。`
+              : `所选 ${scope.length} 类未发布，${describeRefresh(result, "")}。`);
+          } catch (error) {
+            if (signal?.aborted) return "图鉴维护已中止。";
+            console.warn("[atlas]", error instanceof Error ? error.message : "图鉴增量更新失败。");
+            lines.push(`所选 ${scope.length} 类未完成更新，现用快照仍可用。`);
+          }
+        }
+        return lines.join("\n");
+      }
+
+      for (const { selection, title } of native) {
         if (signal?.aborted) { lines.push("图鉴维护已中止。"); break; }
-        const entry = atlasSourcePlan(selection, release, local).entries[0];
+        const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
         if (!entry || entry.kind !== "versioned") continue;
         let summary: string;
         if (entry.action === "review") summary = reviewReasons[entry.reason];
@@ -105,7 +147,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         else {
           try {
             const result = await refreshAtlasSource(root, { selection, preserveRecords: true, expected: active, signal, request,
-              manifest: async () => release });
+              channel, manifest: async () => listing });
             summary = describeRefresh(result, entry.targetVersion);
             if (result.status === "published") active = { version: result.version, root: result.directory };
             if (result.status === "busy" || result.status === "stale") {
@@ -118,7 +160,6 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
         lines.push(`${title} · ${summary}`);
       }
-      if (selections.length === atlasSourceSelections.length) lines.push("其余分类尚待核对来源。");
       return lines.join("\n");
     } catch (error) {
       if (error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset) return error.message;
@@ -157,10 +198,11 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (argument) return `请直接发送 ${fullCommand}。`;
     if (dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
     if (signal?.aborted) return "图鉴维护已中止。";
+    if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
     try {
       await mkdir(root, { recursive: true, mode: 0o700 });
       if (await readAtlasSnapshotVersion(root) !== null || await hasLegacyAtlasData(root)) {
-        return run("update", atlasSourceSelections.map(({ selection }) => selection));
+        return run("update", atlasExportSelections);
       }
     } catch {
       return "图鉴发布目录不可用，保留现有资料。";
@@ -168,9 +210,9 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     updating = true;
     try {
-      const donor = await findLegacyAtlasExport(root);
+      const donor = configuredChannel === undefined ? await findLegacyAtlasExport(root) : undefined;
       const result = donor ? await initializeAtlas(root, donor, signal)
-        : await initializeAtlasFromPublic(root, join(dirname(root), "atlas-download"), signal);
+        : await initializeAtlasFromPublic(root, workspace, signal, channel);
       if (result.status === "published") return `图鉴初始化完成，已发布第 ${result.version} 版。`;
       if (result.status === "stale") return "现用快照已切换，本次候选未发布。";
       if (result.status === "busy") return "已有图鉴发布正在进行，请稍后再试。";
