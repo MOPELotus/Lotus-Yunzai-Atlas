@@ -551,3 +551,63 @@ test.each(["gi", "hsr"] as const)("%s 成就更新保留分组和条目，正式
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("绝区零成就更新保留一级分类、空子分类、条目与互斥表，只抓正式版", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-zzz-achievement-refresh-"));
+  const root = join(work, "atlas");
+  const selection = "zzz/achievement/achievement";
+  const pageId = "achievement/achievement";
+  const original = {
+    category: {
+      "1": { name: "战术", group: { "101": { name: "挑战", sort: 1 }, "102": { name: "待收录", sort: 2 } } },
+      "2": { name: "未收录", group: {} },
+    },
+    achievement: { "1001": { group: 101, name: "胜利", desc: "完成挑战" } },
+    mutual_type: { "99": { sample: true } },
+  };
+  let candidate = structuredClone(original);
+  let live = "3.2";
+  const urls: string[] = [];
+  const manifest = async () => ({ zzz: { live, latest: "3.4.4+3", available: [live, "3.4.4+3"] } });
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url !== `https://static.nanoka.cc/zzz/${live}/zh/${pageId}.json`) throw new Error("请求了非正式来源。");
+    return Response.json(candidate);
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "zzz", pageId, version: live }], undefined, request);
+    const catalog = createAtlasRuntimeCatalog(root);
+    const ids = async () => (await catalog.read()).pages.flatMap(page => page.achievementCategories ?? [])
+      .flatMap(({ entries }) => entries.map(({ id }) => id));
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "zzz=achievement/achievement"] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "3.3";
+    urls.length = 0;
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("3.2 → 3.3，可准备候选");
+    expect(urls).toEqual([]);
+    for (const [remove, expected] of [
+      [(next: typeof candidate) => { Reflect.deleteProperty(next.achievement, "1001"); }, "条目 1001"],
+      [(next: typeof candidate) => { Reflect.deleteProperty(next.category, "2"); }, "一级分类 2"],
+      [(next: typeof candidate) => { Reflect.deleteProperty(next.category["1"].group, "102"); }, "子分类 102"],
+      [(next: typeof candidate) => { Reflect.deleteProperty(next.mutual_type, "99"); }, "互斥数据 99"],
+    ] as const) {
+      candidate = structuredClone(original);
+      Object.assign(candidate.achievement, { "1002": { group: 101, name: "新增", desc: "新的挑战" } });
+      remove(candidate);
+      const result = await refreshAtlasSource(root, { selection, manifest, request });
+      expect(result).toMatchObject({ status: "invalid", issues: [`绝区零成就缺少已有${expected}。`] });
+      expect(await readAtlasSnapshotVersion(root)).toBeNull();
+      expect(await ids()).toEqual(["1001"]);
+    }
+    candidate = structuredClone(original);
+    Object.assign(candidate.achievement, { "1002": { group: 101, name: "新增", desc: "新的挑战" } });
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 3.3");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+    expect(await ids()).toEqual(["1001", "1002"]);
+    expect(new Set(urls)).toEqual(new Set([`https://static.nanoka.cc/zzz/3.3/zh/${pageId}.json`]));
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

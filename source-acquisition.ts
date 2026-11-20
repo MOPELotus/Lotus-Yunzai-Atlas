@@ -32,6 +32,7 @@ const pages = {
   "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
+  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: "星铁成就", timeout: 60_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
@@ -75,6 +76,16 @@ function sourceIndex(category: SourcePage, value: unknown) {
   const entries = Object.entries(object(value));
   const { folder, maxRecords } = pages[category];
   if (entries.length === 0 || entries.length > maxRecords) throw new Error(`${folder}索引条目数无效。`);
+  if (category === "zzz/achievement/achievement") {
+    const tables = ["category", "achievement", "mutual_type"];
+    if (entries.length !== tables.length || tables.some(table => !Object.hasOwn(object(value), table))) {
+      throw new Error("绝区零成就缺少原始分类、条目或互斥表。");
+    }
+    return entries.map(([id, list]) => {
+      if (list !== object(list)) throw new Error(`绝区零成就来源表 ${id} 结构无效。`);
+      return { id, list: object(list), name: id, rarity: "未分类", rank: undefined, iconName: undefined, pathName: undefined };
+    });
+  }
   return entries.map(([id, value]) => {
     const list = object(value);
     const { zh, rank, icon, type } = list;

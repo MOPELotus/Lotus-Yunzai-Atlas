@@ -94,7 +94,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       entries.push({ ...current, kind, action: "audit-rotation" });
       continue;
     }
-    const target = game === "zzz" && (pageId === "equipment" || pageId === "weapon")
+    const target = game === "zzz" && (pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")
       ? publishedZzzVersion(manifest) : targetVersion(manifest, game);
     entries.push(planVersionedPage(current, local, target));
   }

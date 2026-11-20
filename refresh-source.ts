@@ -18,6 +18,7 @@ const sourcePages = {
   "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
+  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "绝区零成就", iconFields: [] },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "原神成就", iconFields: ["icon"] },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "星铁成就", iconFields: [] },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
@@ -79,7 +80,18 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
     version: "", sourceUrl: "", sources: achievementSources,
   }) : [];
-  return { assets, achievementIds: new Set(achievements.flatMap(({ entries }) => entries.map(({ id }) => id))) };
+  const achievementIds = new Set(achievements.flatMap(({ entries }) => entries.map(({ id }) => id)));
+  const achievementGroups = new Set<string>();
+  if (game === "zzz" && pageId === "achievement/achievement") {
+    for (const { id } of achievements) achievementGroups.add(`子分类 ${id}`);
+    for (const { id, list } of achievementSources) {
+      if (id === "category" || id === "mutual_type") {
+        const title = id === "category" ? "一级分类" : "互斥数据";
+        for (const key of Object.keys(object(list))) achievementGroups.add(`${title} ${key}`);
+      }
+    }
+  }
+  return { assets, achievementIds, achievementGroups };
 }
 
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
@@ -88,6 +100,9 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
   const issues: string[] = [];
   for (const id of before.achievementIds) {
     if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
+  }
+  for (const group of before.achievementGroups) {
+    if (!after.achievementGroups.has(group)) issues.push(`${title}缺少已有${group}。`);
   }
   for (const [id, old] of before.assets) {
     const next = after.assets.get(id);
