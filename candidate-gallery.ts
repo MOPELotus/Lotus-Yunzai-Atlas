@@ -20,13 +20,13 @@ export async function copyCandidateFile(source: string, destination: string) {
   await copyFile(source, destination, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
 }
 
-async function hashFile(file: string, signal?: AbortSignal): Promise<string> {
+export async function hashCandidateFile(file: string, signal?: AbortSignal): Promise<string> {
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(file, { signal })) hash.update(chunk);
   return hash.digest("hex");
 }
 
-function referencedImage(image: Record<string, unknown>, game: Game) {
+export function candidateImageReference(image: Record<string, unknown>, game: Game) {
   if (image.status !== "downloaded" && image.placeholder !== true) return;
   const { localPath: path, sha256 } = image;
   const placeholder = image.placeholder === true;
@@ -49,13 +49,13 @@ export function candidateGallery(destination?: string) {
       const { images: list } = object(object(item).meta);
       for (const row of Array.isArray(list) ? list : []) {
         signal?.throwIfAborted();
-        const asset = referencedImage(object(row), game);
+        const asset = candidateImageReference(object(row), game);
         if (!asset) continue;
         const earlier = images.get(asset.path);
         if (earlier && asset.sha256 && earlier.sha256 !== asset.sha256) throw new Error(`图库路径冲突：${asset.path}`);
         if (earlier?.sources.has(source)) continue;
         const imageFile = await candidateFile(source, asset.path);
-        const checksum = await hashFile(imageFile, signal);
+        const checksum = await hashCandidateFile(imageFile, signal);
         if ((asset.sha256 && checksum !== asset.sha256) || (earlier && earlier.sha256 !== checksum)) {
           throw new Error(`图库文件内容与记录不符：${asset.path}`);
         }
@@ -64,7 +64,7 @@ export function candidateGallery(destination?: string) {
           if (destination) {
             const output = join(destination, asset.path);
             await copyCandidateFile(imageFile, output);
-            if (await hashFile(output, signal) !== checksum) throw new Error(`复制时图库文件发生变化：${asset.path}`);
+            if (await hashCandidateFile(output, signal) !== checksum) throw new Error(`复制时图库文件发生变化：${asset.path}`);
           }
           images.set(asset.path, { sha256: checksum, sources: new Set([source]) });
         }
