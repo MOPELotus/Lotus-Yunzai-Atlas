@@ -54,6 +54,11 @@ function roomGoal(room: Record<string, unknown>): string {
 type Lineup = readonly [id: string | undefined, name: string, count: number, artwork?: string][];
 type VerifiedRoom = { readonly level: number; readonly first: Lineup; readonly second: Lineup };
 
+export const prismSlimeArtwork = {
+  path: "gallery/gi/hoyowiki/11052.png",
+  sha256: "694fab4aad6a86dd57bf8cf68488ea7e2d7c9942009d23934128701c7de64fcc",
+};
+
 // November 16 release, independently checked against the in-game captures and CN lineup table.
 // https://genshin.hoyoverse.com/m/en/news/detail/167187
 // https://insider-gaming.com/genshin-impact/spiral-abyss-7-2-november/
@@ -67,8 +72,8 @@ const record125Rooms: Readonly<Record<string, VerifiedRoom>> = {
     ["26310801", "嵌合蝎尾怪", 1], ["26310701", "嵌合鳄蹄兽", 2],
   ], second: [["26300401", "蕴光凛狼", 1]] },
   "11-3": { level: 92, first: [["20090101", "冰结镜映体", 4]], second: [["22131001", "荒野狂狩士", 1]] },
-  // The original gallery has no 20012301 thumbnail. Resolve it only through its own exact identity.
-  "12-1": { level: 95, first: [["20012301", "历经百战的虹彩史莱姆", 1]], second: [["25134601", "浪涛锚定者", 1]] },
+  "12-1": { level: 95, first: [["20012301", "历经百战的虹彩史莱姆", 1, prismSlimeArtwork.path]],
+    second: [["25134601", "浪涛锚定者", 1]] },
   "12-2": { level: 98, first: [["20081001", "霜夜巡天灵主", 1]], second: [["25135202", "游雪的护刃", 1]] },
   "12-3": { level: 100, first: [["26302101", "蕴光月守宫", 1]], second: [["24021101", "恒常机关阵列", 1]] },
 };
@@ -202,7 +207,7 @@ export async function normalizeAbyss(entry: AtlasEntry, content: Record<string, 
         if (verified?.[half].length && verified.level === room.level && Array.isArray(room[half]) && !rows.length) {
           const enemies = await Promise.all(verified[half].map(async ([id, enemyName, count, originalArtwork]) => {
             const original = id ? await enemy(id, enemyName) : undefined;
-            return { name: enemyName, count, artwork: originalArtwork ?? original?.artwork, description: original?.description };
+            return { name: enemyName, count, artwork: original?.artwork ?? originalArtwork, description: original?.description };
           }));
           return { name, enemies };
         }

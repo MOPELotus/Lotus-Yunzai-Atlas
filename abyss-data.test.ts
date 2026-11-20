@@ -93,9 +93,12 @@ test("凌振之月 125 仅补经核实的 11、12 层空半场，保留源阵容
   expect(data?.rooms[0]?.sides[1]?.enemies[0]?.hp).toBeUndefined();
   expect(data?.rooms[1]?.sides[1]?.enemies[0]?.hp).toBe(125);
   expect(data?.rooms[3]?.sides[0]?.enemies[0]).toEqual({
-    name: "历经百战的虹彩史莱姆", count: 1, artwork: undefined, description: undefined,
+    name: "历经百战的虹彩史莱姆", count: 1, artwork: "gallery/gi/hoyowiki/11052.png", description: undefined,
   });
   expect(data?.rooms[3]?.sides[1]?.enemies[0]?.artwork).toBe("gallery/gi/25134601.webp");
+  const withIndexedPrism = await normalizeAbyss(entry, verified, [], async (id, name) =>
+    id === "20012301" ? { name, artwork: "gallery/gi/source-prism.webp" } : lookup(id, name));
+  expect(withIndexedPrism?.rooms[3]?.sides[0]?.enemies[0]?.artwork).toBe("gallery/gi/source-prism.webp");
   const otherId = await normalizeAbyss({ ...entry, id: "124" }, verified, [], lookup);
   const otherDate = await normalizeAbyss(entry, { ...verified, list: { ...verified.list, live_end: "2026-12-17 03:59:59" } }, [], lookup);
   const otherVersion = await normalizeAbyss({ ...entry, version: "7.3" }, verified, [], lookup);

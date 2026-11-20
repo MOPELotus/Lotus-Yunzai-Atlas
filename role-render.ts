@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
@@ -11,7 +12,7 @@ import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
-import type { AbyssDetails } from "./abyss-data.ts";
+import { prismSlimeArtwork, type AbyssDetails } from "./abyss-data.ts";
 import type { StarrailChallengeDetails } from "./starrail-challenge-data.ts";
 import type { ShiyuDetails } from "./shiyu-data.ts";
 import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
@@ -294,18 +295,22 @@ async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undef
 
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
   const images = new Map<string, Image>();
-  if (!assetRoot) return images;
-  const root = await realpath(assetRoot).catch(() => undefined);
-  if (!root) return images;
-  const roots = basename(root) === "data" ? [root, dirname(root)] : [root];
+  const root = assetRoot ? await realpath(assetRoot).catch(() => undefined) : undefined;
+  const roots = !root ? [] : basename(root) === "data" ? [root, dirname(root)] : [root];
   for (const path of new Set(paths)) {
     if (!isAtlasGalleryPath(path, game)) continue;
-    for (const base of roots) {
+    // Keep the official supplement available when the exported snapshot changes.
+    const pinned = path === prismSlimeArtwork.path;
+    const bases = pinned ? [...roots, ...await Promise.all(themeDirectories.map((directory) =>
+      realpath(directory).catch(() => undefined)))] : roots;
+    for (const base of bases) {
+      if (!base) continue;
       try {
         const resolved = await realpath(join(base, path));
         if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
         const bytes = await localAsset(resolved, maxImageBytes);
         if (!bytes) continue;
+        if (pinned && createHash("sha256").update(bytes).digest("hex") !== prismSlimeArtwork.sha256) continue;
         images.set(path, await loadImage(bytes));
         break;
       } catch {

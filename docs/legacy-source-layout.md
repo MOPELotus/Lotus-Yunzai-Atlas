@@ -60,3 +60,9 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 ```
 
 索引中的 `icon` 必须逐条对应旧图库的 75 个文件，整份路径、大小和 SHA-256 映射也须匹配已核对旧图库的固定摘要。下载限额为每次 0 至 8 张，`0` 只复核已有文件。CDN 图片路径不含版本，响应只有通过旧 WebP 大小、格式及 SHA-256 校验才会进入检查点。重新生成隔离预览即可使用本批原图。
+
+## 第 125 期深境螺旋补充原图
+
+第 12 层第 1 间上半的历经百战的虹彩史莱姆（敌人 ID `20012301`）已由[第 59 期阵容记录](https://wiki.biligame.com/ys/渊月螺旋/7.X)确认。[同期阵容卡](https://www.u7buy.com/blog/genshin-impact-spiral-abyss/)展示该形态所用头像，与 [HoYoWiki 的虹彩史莱姆条目](https://wiki.hoyolab.com/pc/genshin/entry/11052?lang=zh-cn)头像一致。HoYoWiki 原始 PNG 和 BWIKI 头像的字节相同。
+
+旧导出没有该头像。敌人索引未提供该 ID 的原图时，可在持久主题目录下的 `gallery/gi/hoyowiki/11052.png` 放入[官方原始 PNG](https://act-webstatic.hoyoverse.com/event-static-hoyowiki-admin/2026/06/25/1d9f9f856a9593af362aebca541f15e7_3285614967934688327.png)。原图为 256 × 256，SHA-256 为 `694fab4aad6a86dd57bf8cf68488ea7e2d7c9942009d23934128701c7de64fcc`。默认持久目录是宿主的 `data/atlas/theme/`，可用 `LOTUS_ATLAS_THEME_DIR` 指定。快照内的同路径文件优先，两个位置均复核摘要。缺文件或摘要不符时，图鉴仍显示敌人名称。查询只读本地文件。
