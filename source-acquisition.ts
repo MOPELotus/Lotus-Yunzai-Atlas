@@ -43,6 +43,7 @@ const pages = {
   "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "Elite Group", folder: "星铁精英组", timeout: 60_000, maxRecords: 4096 },
   "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "Difficulty Group", folder: "星铁难度组", timeout: 60_000, maxRecords: 4096 },
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: "星铁无限精英组", timeout: 60_000, maxRecords: 4096 },
+  "hsr/monster": { game: "hsr", pageId: "monster", title: "Monster", folder: "星铁敌人", timeout: 900_000, maxRecords: 4096 },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
@@ -90,19 +91,27 @@ async function writeJson(path: string, value: unknown) {
 const monsterStatRanks = new Set(["Minion", "MinionLv2", "Elite", "LittleBoss", "BigBoss"]);
 const monsterWeaknesses = new Set(["Fire", "Ice", "Imaginary", "Physical", "Quantum", "Thunder", "Wind"]);
 
+function monsterFigure(value: unknown): string | undefined {
+  if (value === "SpriteOutput/BattleEventIcon/Monster_Unknown.png") return "Monster_Unknown";
+  if (typeof value === "string") return /^SpriteOutput\/MonsterFigure\/(Monster_[A-Za-z0-9_]{1,100}|BossIconTemporary)\.png$/u.exec(value)?.[1];
+}
+
+function monsterPhases(count: unknown, phases: unknown): boolean {
+  if (count === undefined && phases === undefined) return true;
+  return typeof count === "number" && Number.isSafeInteger(count) && count >= 1 &&
+    Array.isArray(phases) && phases.length === count && phases.every((row, index) => {
+      const { phase_num, phase_max_hp_ratio } = object(row);
+      return phase_num === index + 1 && nonnegative(phase_max_hp_ratio);
+    });
+}
+
 function monsterStatsIndexRow(value: Record<string, unknown>): boolean {
   const { Rank, MaxMonsterPhase, PhaseList, child } = value;
   if (typeof Rank !== "string" || !monsterStatRanks.has(Rank) ||
       ![value.AttackBase, value.DefenceBase, value.HPBase].every(nonnegative) ||
       ![value.SpeedBase, value.StanceBase, value.StatusResistanceBase].every(field => field === null || nonnegative(field)) ||
       !Array.isArray(child)) return false;
-  if ((MaxMonsterPhase !== undefined || PhaseList !== undefined) &&
-      (typeof MaxMonsterPhase !== "number" || !Number.isSafeInteger(MaxMonsterPhase) || MaxMonsterPhase < 1 ||
-       !Array.isArray(PhaseList) || PhaseList.length !== MaxMonsterPhase ||
-       !PhaseList.every((row, index) => {
-         const { phase_num, phase_max_hp_ratio } = object(row);
-         return phase_num === index + 1 && nonnegative(phase_max_hp_ratio);
-       }))) return false;
+  if (!monsterPhases(MaxMonsterPhase, PhaseList)) return false;
 
   const ids = new Set<number>();
   return child.every(row => {
@@ -187,6 +196,14 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
+    if (category === "hsr/monster") {
+      const figure = monsterFigure(icon);
+      if (!figure || typeof rank !== "string" || !monsterStatRanks.has(rank) ||
+          !Array.isArray(list.weak) || !list.weak.every(weakness => monsterWeaknesses.has(weakness)) ||
+          !Array.isArray(list.child) || !list.child.every(variant => Number.isSafeInteger(variant) && variant > 0) ||
+          new Set(list.child).size !== list.child.length) throw new Error(`星铁敌人来源索引条目结构无效（${id}）。`);
+      return { id, list, name, rarity: rank === "MinionLv2" ? "二星" : "未分类", iconName: `monsterfigure/${figure}` };
+    }
     if (category === "hsr/relicset") {
       const match = typeof icon === "string" && /^SpriteOutput\/ItemIcon\/([1-9]\d{0,9})\.png$/u.exec(icon);
       const effects = object(list.set);
@@ -355,6 +372,21 @@ function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<
   if (category === "gi/artifact") return genshinArtifactDetail(item, id, list);
   if (typeof item.name !== "string" || item.name.trim() !== name) return false;
   if (category === "hsr/lightcone") return lightconeDetail(item, id, list);
+  if (category === "hsr/monster") {
+    const variants = Array.isArray(item.child) ? item.child.map(object) : undefined;
+    if (item.id !== Number(id) || item.image_path !== list.icon || item.rank !== list.rank ||
+        (item.desc !== null && typeof item.desc !== "string") ||
+        ![item.attack_base, item.defence_base, item.hp_base].every(nonnegative) ||
+        ![item.speed_base, item.stance_base, item.status_resistance_base].every(value => value === null || nonnegative(value)) ||
+        !Array.isArray(item.drop) || !monsterPhases(item.max_monster_phase, item.phase_list) ||
+        !variants || !Array.isArray(list.child) || variants.length !== list.child.length ||
+        variants.some(variant => !Array.isArray(variant.skill_list) || !Array.isArray(variant.damage_type_resistance) ||
+          !Array.isArray(variant.stance_weak_list) ||
+          ![variant.elite_group, variant.hard_level_group].every(group =>
+            typeof group === "number" && Number.isSafeInteger(group) && group >= 0))) return false;
+    const ids = new Set(variants.map(variant => variant.id));
+    return variants.length === ids.size && list.child.every(variant => ids.has(variant));
+  }
   if (category === "hsr/relicset") {
     const listed = object(list.set);
     const effects = object(item.require_num);
@@ -494,6 +526,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
           if (!icon && category === "gi/artifact" && !missingGenshinArtifactIcons.get(id)?.has(iconName)) {
             throw new Error(`原神圣遗物来源主图缺失（${id}）。`);
           }
+          if (!icon && category === "hsr/monster") throw new Error(`星铁敌人来源原图缺失（${id}）。`);
           if (!icon && category === "hsr/relicset") throw new Error(`星铁遗器来源图标缺失（${id}）。`);
           if (!icon && localized) throw new Error(`${folder}来源图标缺失（${id}）。`);
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
@@ -504,6 +537,11 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const { icon: detailIcon, icon2 } = object(detail);
           if (typeof detailIcon === "string" && (pageId === "weapon" || detailIcon === list.icon)) {
             references.push(imageReference("detail.icon", detailIcon, icon));
+          }
+          if (category === "hsr/monster") {
+            const { image_path } = object(detail);
+            references.push(imageReference("derived.monsterFigure", iconName, icon),
+              imageReference("detail.image_path", image_path, icon));
           }
           if (category === "gi/artifact") {
             for (const [slot, part] of Object.entries(object(object(detail).parts))) {

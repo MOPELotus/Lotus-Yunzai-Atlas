@@ -905,3 +905,98 @@ test.each(["EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"] as const)(
       await rm(work, { recursive: true, force: true });
     }
   });
+
+test("星铁敌人正式更新校验同版本身份、原图与数值表的变体关联", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lotus-atlas-hsr-monster-refresh-"));
+  const root = join(work, "atlas");
+  const numberSource = join(work, "stats");
+  const selection = "hsr/monster";
+  const id = "1002011";
+  const name = "冰锋";
+  const icon = "SpriteOutput/MonsterFigure/Monster_1002011.png";
+  const variants = [1002011, 100201101];
+  let candidate = [...variants];
+  let live = "4.6";
+  let badDetail = false;
+  let badIcon = false;
+  const urls: string[] = [];
+  const request = async (url: string) => {
+    urls.push(url);
+    if (url === `https://static.nanoka.cc/hsr/${live}/monster.json`) {
+      return Response.json({ [id]: { zh: name, icon, rank: "MinionLv2", weak: ["Fire"], child: candidate } });
+    }
+    if (url === `https://static.nanoka.cc/hsr/${live}/zh/monster/${id}.json`) {
+      return Response.json({
+        id: Number(id), name: badDetail ? "错误敌人" : name, rank: "MinionLv2", image_path: icon,
+        desc: "守护者创造的冰矛。", attack_base: 18, defence_base: 210, hp_base: 70,
+        speed_base: 100, stance_base: 60, status_resistance_base: 0.2, drop: [],
+        child: candidate.map(id => ({
+          id, skill_list: [], damage_type_resistance: [], stance_weak_list: ["Fire"], elite_group: 1, hard_level_group: 1,
+        })),
+      });
+    }
+    if (url === "https://static.nanoka.cc/assets/hsr/monsterfigure/Monster_1002011.webp") {
+      return badIcon ? missing() : new Response(new Uint8Array(webp));
+    }
+    throw new Error(`不应请求 ${url}`);
+  };
+  const numeric = [...variants, 100201102];
+  const numbers = {
+    Rank: "MinionLv2", AttackBase: 18, DefenceBase: 210, HPBase: 70, SpeedBase: 100,
+    StanceBase: 60, StatusResistanceBase: 0.2,
+    child: numeric.map(Id => ({ Id, AttackModifyRatio: 1, DefenceModifyRatio: 1, EliteGroup: 1,
+      HPModifyRatio: 1, SpeedModifyRatio: 1, SpeedModifyValue: null, StanceModifyRatio: 1,
+      HardLevelGroup: 1, StanceWeakList: ["Fire"] })),
+  };
+  try {
+    await acquireAtlasSource(root, [{ game: "hsr", pageId: "monster", version: live }], undefined, request);
+    const valuePlan = [{ game: "hsr", pageId: "monstervalue", version: "4.7" }] as const;
+    await acquireAtlasSource(numberSource, valuePlan, undefined, async () => Response.json({ [id]: numbers }));
+    expect((await applyAtlasCandidate(root, numberSource, valuePlan)).status).toBe("published");
+    const manifest = async () => ({ hsr: { live, latest: "4.7.52", available: [live, "4.7.52"] } });
+    const { commands } = createAtlasMaintenance(root, {
+      manifest, request, updateConfig: { update_args: ["--pages", "hsr=monster"] },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    live = "4.7";
+    urls.length = 0;
+    expect(await commands["#检查图鉴更新"]("", owner)).toContain("4.6 → 4.7，可准备候选");
+    expect(urls).toEqual([]);
+
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [`星铁敌人 ${id} 缺少同版本数值表关联的变体。`],
+    });
+    candidate = [variants[0]!];
+    expect(await refreshAtlasSource(root, { selection, manifest, request })).toMatchObject({
+      status: "invalid", issues: [`星铁敌人 ${id} 缺少已有变体或阶段。`, `星铁敌人 ${id} 缺少同版本数值表关联的变体。`],
+    });
+    candidate = numeric;
+    badDetail = true;
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("详情与来源索引");
+    badDetail = false;
+    badIcon = true;
+    await expect(refreshAtlasSource(root, { selection, manifest, request })).rejects.toThrow("来源原图缺失");
+    expect(await readAtlasSnapshotVersion(root)).toBe(1);
+
+    badIcon = false;
+    urls.length = 0;
+    expect(await commands["#更新图鉴"]("", owner)).toContain("已更新至 4.7");
+    expect(await readAtlasSnapshotVersion(root)).toBe(2);
+    const active = join(root, "snapshots/2/data");
+    const map = await Bun.file(join(active, "map.json")).json();
+    const records = map.games.hsr.locales.zh.pages;
+    const stats = await Bun.file(join(active, records.monstervalue.records[id].path)).json();
+    const monster = await Bun.file(join(active, records.monster.records[id].path)).json();
+    expect(stats.content.list).toEqual(numbers);
+    expect(monster.content.list.child).toEqual(numeric);
+    expect(monster.meta.images.map(({ fieldPath }: { fieldPath: string }) => fieldPath))
+      .toEqual(["icon", "derived.monsterFigure", "detail.image_path"]);
+    expect(urls).toEqual([
+      "https://static.nanoka.cc/hsr/4.7/monster.json",
+      "https://static.nanoka.cc/hsr/4.7/zh/monster/1002011.json",
+      "https://static.nanoka.cc/assets/hsr/monsterfigure/Monster_1002011.webp",
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});

@@ -96,7 +96,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
       continue;
     }
     const requireLive = (game === "zzz" && (pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
-      (game === "hsr" && (pageId === "relicset" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
+      (game === "hsr" && (pageId === "relicset" || pageId === "monster" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
     const target = requireLive ? publishedVersion(manifest, game) : targetVersion(manifest, game);
     entries.push(planVersionedPage(current, local, target));
   }

@@ -8,7 +8,7 @@ import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.t
 import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
-import { object } from "./source-values.ts";
+import { effectText, object } from "./source-values.ts";
 import { fetchAtlasManifest, planAtlasUpdate, planPublishedZzzRefresh } from "./update-plan.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
@@ -20,6 +20,7 @@ const sourcePages = {
   "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "星铁精英组", iconFields: [] },
   "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "星铁难度组", iconFields: [] },
   "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "星铁无限精英组", iconFields: [] },
+  "hsr/monster": { game: "hsr", pageId: "monster", title: "星铁敌人", iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
   "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
   "hsr/relicset": { game: "hsr", pageId: "relicset", title: "星铁遗器", iconFields: itemIcons },
   "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
@@ -66,7 +67,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   const pages = object(object(object(gameData.locales).zh).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
-    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[] }>();
+    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[]; description?: string }>();
   const achievementSources: { id: string; name: string; list: unknown }[] = [];
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
@@ -84,10 +85,13 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const content = object(item.content);
     const detail = object(content.detail);
     const values = object(content.list);
-    const variantIds = pageId === "monstervalue" && Array.isArray(values.child)
-      ? values.child.map(variant => object(variant).Id) : undefined;
-    const phases = pageId === "monstervalue" && Array.isArray(values.PhaseList)
-      ? values.PhaseList.map(phase => object(phase).phase_num) : undefined;
+    const variantIds = Array.isArray(values.child)
+      ? pageId === "monstervalue" ? values.child.map(variant => object(variant).Id)
+        : pageId === "monster" ? values.child : undefined
+      : undefined;
+    const phaseList = pageId === "monstervalue" ? values.PhaseList : pageId === "monster" ? detail.phase_list : undefined;
+    const phases = Array.isArray(phaseList) ? phaseList.map(phase => object(phase).phase_num) : undefined;
+    const description = pageId === "monster" ? effectText(detail.desc) : undefined;
     const setParts = pageId === "relicset" || pageId === "artifact" ? Object.keys(object(detail.parts)) : undefined;
     const effects = pageId === "relicset" ? Object.keys(object(detail.require_num))
       : pageId === "artifact" && Array.isArray(detail.need) ? detail.need.map(String) : undefined;
@@ -99,7 +103,7 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
       key = semanticKey;
       groupFields = Object.keys(values);
     }
-    assets.set(key, { name, window, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields,
+    assets.set(key, { name, window, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
       icons: mode || pageId === "artifact" ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
@@ -135,7 +139,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;
@@ -153,6 +157,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
     if (old.groupFields?.some(field => !next.groupFields?.includes(field))) {
       issues.push(`${title} ${id} 缺少已有字段。`);
     }
+    if (old.description && !next.description) issues.push(`${title} ${id} 缺少已有说明。`);
     if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
     for (const field of old.icons) {
       if (!next.icons.has(field)) issues.push(`${title} ${id} 缺少已下载图标 ${field}。`);
@@ -210,6 +215,16 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     if (current !== baseline.version) return { status: "stale", current };
     const after = await pageAssets(join(source.directory, "data"), page, signal);
     const issues = regressions(page, before, after, options.preserveRecords === true);
+    if (selection === "hsr/monster" && local.pages.some(({ game, pageId, version }) =>
+      game === "hsr" && pageId === "monstervalue" && version === entry.targetVersion)) {
+      const values = await pageAssets(baseline.root, sourcePages["hsr/monstervalue"], signal);
+      for (const [id, record] of values.assets) {
+        const monster = after.assets.get(id);
+        if (!monster || record.variants?.some(variant => !monster.variants?.includes(variant))) {
+          issues.push(`星铁敌人 ${id} 缺少同版本数值表关联的变体。`);
+        }
+      }
+    }
     if (issues.length) return { status: "invalid", issues };
     publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline);
     return publication;
