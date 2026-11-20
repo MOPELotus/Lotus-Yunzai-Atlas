@@ -1,9 +1,10 @@
 import { Database } from "bun:sqlite";
-import { lstat, mkdir, readdir, realpath, unlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { candidateFile, candidateImageReference, hashCandidateFile } from "./candidate-gallery.ts";
 import type { Game } from "./catalog.ts";
+import { seedExporterFromPublished } from "./export-workspace-seed.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
@@ -14,6 +15,8 @@ const exporterRevision = "0496f9cf725d815b89f118b30f681cae82ad2f4e";
 const networkPolicy = fileURLToPath(new URL("./public-atlas-network.mjs", import.meta.url));
 const atlasVersion = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const maxExportIndexBytes = 16 * 1024 * 1024;
+const seedStagingPrefix = ".atlas-export-seed-";
+const seedStagingName = /^\.atlas-export-seed-[A-Za-z0-9]{6}$/u;
 
 export type AtlasExportVersions = Readonly<Partial<Record<Game, string>>>;
 export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
@@ -118,6 +121,37 @@ async function prepareExporter(workspace: string, git: string, signal?: AbortSig
     throw new Error("图鉴下载器源码或固定版本不符，请使用新的下载工作目录。");
   }
   return root;
+}
+
+async function prepareWorkspaceExporter(workspace: string, git: string, publishedBaseline?: string, signal?: AbortSignal) {
+  const root = join(workspace, "backend");
+  if (!publishedBaseline) return await prepareExporter(workspace, git, signal);
+  for (const child of await readdir(workspace, { withFileTypes: true })) {
+    signal?.throwIfAborted();
+    if (child.isDirectory() && seedStagingName.test(child.name)) {
+      await rm(join(workspace, child.name), { recursive: true, force: true });
+    }
+  }
+  if (await entry(root)) return await prepareExporter(workspace, git, signal);
+  const data = await realpath(publishedBaseline);
+  if (contains(workspace, data) || contains(data, workspace)) {
+    throw new Error("图鉴下载种子必须位于独立的发布快照。");
+  }
+  const staged = await mkdtemp(join(workspace, seedStagingPrefix));
+  try {
+    const cache = join(staged, "snapshot");
+    await seedExporterFromPublished(data, cache, signal);
+    const prepared = await prepareExporter(staged, git, signal);
+    await rename(join(cache, "data"), join(prepared, "data"));
+    const gallery = join(cache, "gallery");
+    if (await entry(gallery)) await rename(gallery, join(prepared, "gallery"));
+    signal?.throwIfAborted();
+    if (await entry(root)) throw new Error("图鉴下载工作区已有导出器，未替换。");
+    await rename(prepared, root);
+    return root;
+  } finally {
+    await rm(staged, { recursive: true, force: true });
+  }
 }
 
 async function acquireWorkspace(path: string, target: string) {
@@ -229,7 +263,8 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
 }
 
 async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly ExportScope[]>,
-  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
+  publishedBaseline?: string): Promise<T> {
   signal?.throwIfAborted();
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
@@ -249,7 +284,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     const git = executable("git");
     const corepack = executable("corepack");
     const node = executable("node");
-    const root = await prepareExporter(workspace, git, signal);
+    const root = await prepareWorkspaceExporter(workspace, git, publishedBaseline, signal);
     await child([corepack, "yarn", "install", "--immutable", "--mode=skip-build"], root, signal);
     const scope = await selected();
     const initial = await inspectExporterPages(root, signal, scope);
@@ -288,6 +323,7 @@ export function downloadLegacyAtlas<T>(path: string, target: string, consume: (s
 /** Run all supported pages at the versions already selected from the original website manifest. */
 export function downloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[]): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal);
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
+    publishedBaseline);
 }
