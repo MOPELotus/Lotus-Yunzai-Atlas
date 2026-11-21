@@ -1,8 +1,13 @@
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Game } from "./catalog.ts";
 import { isAtlasGalleryPath } from "./source-values.ts";
+
+export function zzzCharacterGalleryRoot() {
+  return Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim() || fileURLToPath(new URL("../../data/character-gallery/", import.meta.url));
+}
 
 export async function readAtlasGalleryImage(root: string, game: Game, path: string | undefined,
   maxBytes = 1024 * 1024): Promise<Uint8Array | undefined> {

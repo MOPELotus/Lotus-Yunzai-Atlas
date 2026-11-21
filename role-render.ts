@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
+import { zzzCharacterGalleryRoot } from "./gallery.ts";
 import type { AchievementCategory } from "./achievements.ts";
 import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
@@ -292,7 +293,7 @@ function isRaster(data: Buffer) {
 }
 
 export async function readCharacterGalleryPortrait(game: Game, name: string | readonly string[] | undefined,
-  configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim()): Promise<Image | undefined> {
+  configured = game === "zzz" ? zzzCharacterGalleryRoot() : Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim()): Promise<Image | undefined> {
   const names = [...new Set(typeof name === "string" ? [name] : name ?? [])]
     .filter(value => value && value !== "." && value !== ".." && !/[\/\\\p{Cc}\p{Cf}]/u.test(value));
   if (!names.length) return;
