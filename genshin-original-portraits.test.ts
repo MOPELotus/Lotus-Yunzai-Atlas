@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +10,9 @@ test("原神同版缺立绘进入原源补齐，全部失败时不发布，其�
   try {
     const root = join(base, "atlas");
     const data = join(root, "snapshots/1/data");
-    const backend = join(base, "atlas-download/backend");
-    const bin = join(base, "bin");
+    const gallery = join(root, "snapshots/1/gallery/gi");
+    const icon = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
+    const sha256 = createHash("sha256").update(icon).digest("hex");
     const version = "7.2";
     const id = "10000136";
     const name = "米提亚";
@@ -20,7 +22,7 @@ test("原神同版缺立绘进入原源补齐，全部失败时不发布，其�
       records: { [target]: { id: target, name: title, hasDetail: true, path: `items/${key}.json` } },
     });
     await Promise.all([mkdir(join(data, "items"), { recursive: true }),
-      mkdir(join(backend, ".git"), { recursive: true }), mkdir(bin)]);
+      mkdir(gallery, { recursive: true })]);
     await Promise.all([
       symlink("snapshots/1/data", join(root, "current")),
       writeFile(join(data, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: {
@@ -28,25 +30,15 @@ test("原神同版缺立绘进入原源补齐，全部失败时不发布，其�
       } } } } } })),
       writeFile(join(data, "items/character.json"), JSON.stringify({
         meta: { gameId: "gi", pageId: "character", locale: "zh", version, recordId: id, name, hasDetail: true,
-          images: [{ fieldPath: "icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/portrait.webp" }] },
+          images: [{ fieldPath: "icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/portrait.webp", sha256 }] },
         content: { list: row, detail: row },
       })),
       writeFile(join(data, "items/weapon.json"), JSON.stringify({
         meta: { gameId: "gi", pageId: "weapon", locale: "zh", version, recordId: "1", name: "武器", hasDetail: true },
         content: { list: {}, detail: {} },
       })),
-      writeFile(join(bin, "git"), `#!/bin/sh
-case " $* " in
-  *' rev-parse '*) printf '%s\\n' 0496f9cf725d815b89f118b30f681cae82ad2f4e ;;
-  *' status '*) exit 0 ;;
-  *) exit 1 ;;
-esac
-`, { mode: 0o700 }),
-      writeFile(join(bin, "corepack"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
-      writeFile(join(bin, "node"), "#!/bin/sh\nexit 1\n", { mode: 0o700 }),
+      writeFile(join(gallery, "portrait.webp"), icon),
     ]);
-    await cp(data, join(backend, "data"), { recursive: true });
-    await writeFile(join(backend, "data/gallery-index.json"), '{"images":[]}');
     const script = `
       import { readlink } from "node:fs/promises";
       import { createAtlasMaintenance } from ${JSON.stringify(fileURLToPath(new URL("./maintenance.ts", import.meta.url)))};
@@ -69,7 +61,7 @@ esac
       const update = await forPage("character")["#更新图鉴"]("", owner);
       console.log(JSON.stringify({ other, before, check, update, requests, current: await readlink(root + "/current") }));
     `;
-    const child = Bun.spawn([process.execPath, "-e", script, root], { env: { PATH: bin }, stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawn([process.execPath, "-e", script, root], { env: { PATH: "/nonexistent" }, stdout: "pipe", stderr: "pipe" });
     const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
     const outcome = JSON.parse(stdout);

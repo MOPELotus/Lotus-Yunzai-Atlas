@@ -75,6 +75,8 @@ const placeholderPath = "gallery/_placeholder/unknown.svg";
 // Keep the owner's legacy placeholder bytes so old and new classifications can share its gallery path.
 const placeholder = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Missing image"><rect width="256" height="256" rx="36" fill="#141827"/><path d="M62 176 98 132l29 35 22-27 45 56H62Z" fill="#2b3248"/><circle cx="183" cy="76" r="18" fill="#39435e"/><path d="M128 58c-24 0-42 14-45 36h30c2-8 8-13 16-13 9 0 15 5 15 13 0 7-4 12-15 20-17 12-24 23-23 41h28c0-10 4-16 17-25 16-11 25-23 25-39 0-20-19-33-48-33Z" fill="#b8c0d9"/><circle cx="120" cy="188" r="15" fill="#b8c0d9"/></svg>\n`;
 
+export { placeholder as atlasSourcePlaceholder };
+
 const placeholderImage = { status: "placeholder", placeholder: true, placeholderReason: "remote_missing", remoteUrl: null,
   localPath: placeholderPath, contentType: "image/svg+xml", bytes: Buffer.byteLength(placeholder),
   sha256: createHash("sha256").update(placeholder).digest("hex") } as const;

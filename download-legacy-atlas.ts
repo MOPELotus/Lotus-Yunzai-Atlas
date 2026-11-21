@@ -1,22 +1,17 @@
 import { Database } from "bun:sqlite";
-import { lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, unlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import { candidateFile, candidateImageReference, hashCandidateFile } from "./candidate-gallery.ts";
 import type { Game } from "./catalog.ts";
-import { seedExporterFromPublished } from "./export-workspace-seed.ts";
+import { assembleAtlasCandidate, copyAtlasSelectedPages } from "./assemble-candidate.ts";
+import { nativeAtlasExport } from "./native-atlas-export.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
 import { type AtlasCandidatePage, validateAtlasCandidate } from "./validate-candidate.ts";
 
-const originalExporter = "https://github.com/MOPELotus/nanoka-atlas-backend.git";
-const exporterRevision = "0496f9cf725d815b89f118b30f681cae82ad2f4e";
-const networkPolicy = fileURLToPath(new URL("./public-atlas-network.mjs", import.meta.url));
 const atlasVersion = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const maxExportIndexBytes = 16 * 1024 * 1024;
-const seedStagingPrefix = ".atlas-export-seed-";
-const seedStagingName = /^\.atlas-export-seed-[A-Za-z0-9]{6}$/u;
 
 export type AtlasExportVersions = Readonly<Partial<Record<Game, string>>>;
 export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
@@ -73,84 +68,6 @@ async function entry(path: string) {
     return await lstat(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException | undefined)?.code !== "ENOENT") throw error;
-  }
-}
-
-function executable(name: string) {
-  const path = Bun.which(name);
-  if (!path) throw new Error(`公网图鉴初始化需要 ${name}。`);
-  return path;
-}
-
-async function child(argv: string[], cwd: string, signal?: AbortSignal, quiet = false) {
-  signal?.throwIfAborted();
-  const command = Bun.spawn(argv, {
-    cwd, signal, stdin: "ignore", stdout: quiet ? "pipe" : 2, stderr: "inherit",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", COREPACK_ENABLE_DOWNLOAD_PROMPT: "0", NODE_USE_ENV_PROXY: "1" },
-  });
-  const stdout = typeof command.stdout === "object" ? new Response(command.stdout).text() : undefined;
-  const code = await command.exited;
-  signal?.throwIfAborted();
-  if (code !== 0) throw new Error(`${basename(argv[0]!)} 未成功结束（${code}），下载工作目录已保留。`);
-  return (await stdout)?.trim() ?? "";
-}
-
-async function prepareExporter(workspace: string, git: string, signal?: AbortSignal) {
-  const root = join(workspace, "backend");
-  const path = await entry(root);
-  if (path && !path.isDirectory()) throw new Error("图鉴下载器目录须为实体目录。");
-  const run = (args: string[], quiet = false) =>
-    child([git, "-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", ...args], root, signal, quiet);
-  if (!path) await mkdir(root, { mode: 0o700 });
-  const metadata = await entry(join(root, ".git"));
-  if (!metadata && (await readdir(root)).length === 0) {
-    await run(["init", "--quiet"]);
-  } else if (!metadata?.isDirectory()) {
-    throw new Error("图鉴下载目录中的 Git 仓库须由初始化器建立。");
-  }
-  const head = await run(["rev-parse", "--verify", "-q", "HEAD"], true).catch((error: unknown) => {
-    signal?.throwIfAborted();
-    return error instanceof Error ? "" : Promise.reject(error);
-  });
-  if (!head) {
-    await run(["fetch", "--no-tags", "--depth=1", originalExporter, exporterRevision]);
-    await run(["checkout", "--detach", exporterRevision]);
-  }
-  if ((await run(["rev-parse", "HEAD"], true)) !== exporterRevision ||
-      await run(["status", "--porcelain", "--untracked-files=no"], true)) {
-    throw new Error("图鉴下载器源码或固定版本不符，请使用新的下载工作目录。");
-  }
-  return root;
-}
-
-async function prepareWorkspaceExporter(workspace: string, git: string, publishedBaseline?: string, signal?: AbortSignal) {
-  const root = join(workspace, "backend");
-  if (!publishedBaseline) return await prepareExporter(workspace, git, signal);
-  for (const child of await readdir(workspace, { withFileTypes: true })) {
-    signal?.throwIfAborted();
-    if (child.isDirectory() && seedStagingName.test(child.name)) {
-      await rm(join(workspace, child.name), { recursive: true, force: true });
-    }
-  }
-  if (await entry(root)) return await prepareExporter(workspace, git, signal);
-  const data = await realpath(publishedBaseline);
-  if (contains(workspace, data) || contains(data, workspace)) {
-    throw new Error("图鉴下载种子必须位于独立的发布快照。");
-  }
-  const staged = await mkdtemp(join(workspace, seedStagingPrefix));
-  try {
-    const cache = join(staged, "snapshot");
-    await seedExporterFromPublished(data, cache, signal);
-    const prepared = await prepareExporter(staged, git, signal);
-    await rename(join(cache, "data"), join(prepared, "data"));
-    const gallery = join(cache, "gallery");
-    if (await entry(gallery)) await rename(gallery, join(prepared, "gallery"));
-    signal?.throwIfAborted();
-    if (await entry(root)) throw new Error("图鉴下载工作区已有导出器，未替换。");
-    await rename(prepared, root);
-    return root;
-  } finally {
-    await rm(staged, { recursive: true, force: true });
   }
 }
 
@@ -283,7 +200,7 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
   return { completed, corruptImages, exactScope: ok && pages.length === scope.length };
 }
 
-async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly ExportScope[]>,
+async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly AtlasSourceIndex[]>,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
   publishedBaseline?: string, request?: AtlasSourceFetch): Promise<T> {
   signal?.throwIfAborted();
@@ -292,6 +209,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
   const lockPath = await entry(lockFile);
   if (lockPath && !lockPath.isFile()) throw new Error("图鉴下载锁须为实体文件。");
   const lock = new Database(lockFile);
+  let stage: string | undefined;
   try {
     lock.exec("PRAGMA busy_timeout = 0");
     try {
@@ -302,52 +220,83 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       }
       throw error;
     }
-    const git = executable("git");
-    const corepack = executable("corepack");
-    const node = executable("node");
-    const root = await prepareWorkspaceExporter(workspace, git, publishedBaseline, signal);
-    await child([corepack, "yarn", "install", "--immutable", "--mode=skip-build"], root, signal);
-    const scope = await selected();
-    const initial = await inspectExporterPages(root, signal, scope);
-    const { completed, corruptImages } = initial;
-    for (const file of corruptImages) {
+    const indexes = await selected();
+    const pages = indexes.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
+    const legacy = join(workspace, "backend");
+    const sources = [];
+    if (publishedBaseline && (await validateAtlasCandidate(publishedBaseline, [], signal)).ok) {
+      sources.push(dirname(publishedBaseline));
+    }
+    if ((await entry(legacy))?.isDirectory() && (await entry(join(legacy, "data")))?.isDirectory() &&
+        (await validateAtlasCandidate(join(legacy, "data"), [], signal)).ok) sources.push(legacy);
+
+    const cache = join(workspace, "native-cache");
+    await mkdir(cache, { recursive: true, mode: 0o700 });
+    if (!(await entry(cache))?.isDirectory() || await realpath(cache) !== cache) {
+      throw new Error("图鉴原资源缓存须为实体目录。");
+    }
+    for (const item of await readdir(workspace, { withFileTypes: true })) {
       signal?.throwIfAborted();
-      // Incremental mode trusts the recorded hash as long as an existing file has bytes.
-      await unlink(file);
-    }
-    for (const { game, pageId, version } of scope) {
-      if (completed.has(`${game}/${pageId}`)) continue;
-      await child([node, "--import", networkPolicy, "src/scrape.mjs", "--mode", "incremental", "--game", game,
-        "--locale", "zh", "--version", `${game}=${version}`, "--pages", `${game}=${pageId}`], root, signal);
-    }
-    if (scope.some(({ rows }) => rows)) {
-      const verified = completed.size === scope.length ? initial : await inspectExporterPages(root, signal, scope);
-      const missing = scope.filter(({ game, pageId }) => !verified.completed.has(`${game}/${pageId}`));
-      if (missing.length) throw new Error(`原导出未完成所选图鉴：${missing.map(({ game, pageId }) => `${game}/${pageId}`).join("、")}。`);
-      if (scope.length === legacyAtlasSourcePages.length && !verified.exactScope) {
-        throw new Error("原导出的分类范围与所选图鉴不符。");
+      if (item.isDirectory() && /^\.native-atlas-build-[A-Za-z0-9]{6}$/u.test(item.name)) {
+        await rm(join(workspace, item.name), { recursive: true, force: true });
       }
     }
-    const roles = scope.find(({ game, pageId, rows }) => game === "gi" && pageId === "character" && rows);
+    stage = await mkdtemp(join(workspace, ".native-atlas-build-"));
+    let remaining = indexes;
+    const reusable = [];
+    for (const seed of sources) {
+      const data = join(seed, "data");
+      const changed = await changedAtlasSourceIndexes(data, remaining, signal).catch((error: unknown) => {
+        if (data === publishedBaseline) throw error;
+        signal?.throwIfAborted();
+        return remaining;
+      });
+      const ready = remaining.filter(page => !changed.includes(page));
+      if (ready.length) reusable.push({ seed, pages: ready });
+      remaining = changed;
+    }
+
+    let source: string | undefined;
+    if (remaining.length) {
+      source = join(stage, "original");
+      await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal });
+    }
+    for (const [index, donor] of reusable.entries()) {
+      const destination = join(stage, `merge-${index}`);
+      const combined = source ? await assembleAtlasCandidate(source, donor.seed, destination, donor.pages, signal)
+        : await copyAtlasSelectedPages(donor.seed, destination, donor.pages, signal);
+      source = combined.directory;
+    }
+    if (!source) throw new Error("未选中图鉴下载分类。");
+    const roles = indexes.find(({ game, pageId }) => game === "gi" && pageId === "character");
     if (roles) {
       const { completeGenshinPortraits } = await import("./genshin-original-portraits.ts");
-      await completeGenshinPortraits(root, roles.version, signal, request);
+      await completeGenshinPortraits(source, roles.version, signal, request);
     }
-    const pages = scope.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
-    if (scope.some(({ pageId, rows }) => pageId === "character" && rows)) {
+    if (indexes.some(({ pageId }) => pageId === "character")) {
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
-      await completeAtlasRoleMaterials(root, pages, signal, request);
+      await completeAtlasRoleMaterials(source, pages, signal, request);
     }
-    return await consume(root, pages);
+    const validated = await validateAtlasCandidate(join(source, "data"), pages, signal);
+    if (!validated.ok) throw new Error(`公网图鉴候选未通过校验。${validated.issues[0] ?? ""}`);
+    return await consume(source, pages);
   } finally {
-    lock.close();
+    try { if (stage) await rm(stage, { recursive: true, force: true }); }
+    finally { lock.close(); }
   }
 }
 
-/** Replay the original fixed export with its audited per-page counts. */
+/** Read the prior pinned public versions and retain the audited per-page counts. */
 export function downloadLegacyAtlas<T>(path: string, target: string, consume: (source: string) => Promise<T>,
   signal?: AbortSignal): Promise<T> {
-  return downloadAtlasExport(path, target, async () => legacyAtlasSourcePages, consume, signal);
+  const versions = Object.fromEntries(legacyAtlasSourcePages.map(({ game, version }) => [game, version]));
+  return downloadAtlasExport(path, target, async () => {
+    const indexes = await readSelectedExporterIndexes(versions, signal);
+    if (indexes.some(({ recordCount }, index) => recordCount !== legacyAtlasSourcePages[index]?.recordCount)) {
+      throw new Error("原站固定版本图鉴分类或条目数与旧资料记录不符。");
+    }
+    return indexes;
+  }, consume, signal);
 }
 
 /** Run all supported pages at the versions already selected from the original website manifest. */

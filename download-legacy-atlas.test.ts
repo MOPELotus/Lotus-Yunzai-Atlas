@@ -28,36 +28,6 @@ test("公网初始化禁止工作区与发布目录重叠，已有发布时不�
   }
 });
 
-test("公网下载只允许固定来源的匿名 GET 和 HEAD，禁止重定向", async () => {
-  const policy = new URL("./public-atlas-network.mjs", import.meta.url).href;
-  const source = `
-    const calls = [];
-    globalThis.fetch = (url, options) => {
-      calls.push([options.method, options.credentials, options.redirect, [...options.headers.entries()]]);
-      return Promise.resolve(new Response("public"));
-    };
-    await import(${JSON.stringify(policy)});
-    await fetch(new Request("https://static.nanoka.cc/manifest.json", {headers: {
-      Cookie: "test", Authorization: "test", Accept: "application/json",
-    }}));
-    await fetch("https://hsr.nanoka.cc/", {method:"HEAD", redirect:"follow", credentials:"include"});
-    for(const [url, method] of [
-      ["https://nte.nanoka.cc/", "GET"], ["https://other.example/", "GET"],
-      ["http://gi.nanoka.cc/", "GET"], ["https://static.nanoka.cc/", "POST"],
-      ["https://user@zzz.nanoka.cc/", "GET"],
-    ]) {
-      try { await fetch(url, {method}); throw Error("allowed"); }
-      catch(error) { if (!error.message.includes("固定 Nanoka")) throw error; }
-    }
-    console.log(JSON.stringify(calls));`;
-  const child = Bun.spawn([process.execPath, "-e", source], { stdout: "pipe", stderr: "pipe" });
-  const stdout = new Response(child.stdout).json();
-  expect(await child.exited).toBe(0);
-  expect(await stdout).toEqual([
-    ["GET", "omit", "error", [["accept", "application/json"]]], ["HEAD", "omit", "error", []],
-  ]);
-});
-
 test("续跑核对分类条目和原图，保留有效缓存及原站确认的占位", async () => {
   const root = await mkdtemp(join(tmpdir(), "lotus-atlas-download-resume-"));
   try {
@@ -130,7 +100,7 @@ test("续跑拒绝修改工作目录外的链接目标", async () => {
   }
 });
 
-test("公网工作区的第二个获取者不会启动 Git 或覆盖已下载的数据", async () => {
+test("公网工作区的第二个获取者不会写入已有下载", async () => {
   const root = await mkdtemp(join(tmpdir(), "lotus-atlas-download-lock-"));
   const workspace = join(root, "work");
   const target = join(root, "atlas");

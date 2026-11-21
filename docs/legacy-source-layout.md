@@ -37,14 +37,14 @@ bun plugins/atlas/initialize-atlas.ts data/atlas
 
 ## 从公网准备首版
 
-空安装可使用独立的工作目录准备固定首版。此命令需要 Git、Node.js 及提供 Yarn 的 Corepack。
+空安装可用 Bun 在独立的工作目录准备固定首版。
 
 ```sh
 mkdir -p data/atlas
 bun plugins/atlas/initialize-atlas.ts data/atlas --public /path/to/atlas-download
 ```
 
-原导出程序按三款游戏的固定版本逐类获取简体中文索引、详情和原图，素材请求仅访问原版 Nanoka 域名，无需账号。网络中断后可用同一命令继续，保留已下载图片及完整的分类。初始化校验全部 29 类、条目、详情和原图后，才在目标目录原子发布首版。下载工作目录须在发布目录之外。[原导出程序的固定提交](https://github.com/MOPELotus/nanoka-atlas-backend/tree/0496f9cf725d815b89f118b30f681cae82ad2f4e)
+初始化从 Nanoka 原站获取三款游戏的简体中文索引、详情和原图，无需账号。下载中断后可重用已校验的缓存。上面的固定版本命令校验 29 类后发布首版。经宿主选用正式版或网站最新版时，还会把同一版本的七圣召唤一起校验和发布。下载工作目录须在发布目录之外。[原导出程序的固定提交](https://github.com/MOPELotus/nanoka-atlas-backend/tree/0496f9cf725d815b89f118b30f681cae82ad2f4e)
 
 ## 详情候选队列
 
