@@ -454,7 +454,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       if (!item) return;
       const { rank } = object(item.content.list);
       const rarity = character.game === "zzz" ? rank === 2 ? "" : zzzRarity(rank) : character.rarity;
-      return normalizeRoleDetails(character, item.content, rarity, item.meta.images);
+      return normalizeRoleDetails(character, item.content, rarity, item.meta.images, item.meta.materialNames);
     },
     async weaponDetails(entry: AtlasEntry) {
       const item = await readItem(entry, equipmentPages[entry.game].id);

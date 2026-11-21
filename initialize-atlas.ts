@@ -22,7 +22,8 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
 
 async function publishInitialAtlas(root: string, source: string, pages: readonly Required<AtlasCandidatePage>[],
   counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal,
-  extra?: { readonly source: string; readonly pages: readonly Required<AtlasCandidatePage>[] }): Promise<AtlasPublication> {
+  extra?: { readonly source: string; readonly pages: readonly Required<AtlasCandidatePage>[] },
+  materialRequest?: AtlasSourceFetch): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
     throw new Error("请提供已有的本地图鉴目标目录和原导出目录。");
@@ -39,6 +40,10 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
     const prepared = extra
       ? await assembleAtlasCandidate(donor, extra.source, target, extra.pages, signal)
       : await copyAtlasCandidate(donor, target, pages, counts, signal);
+    if (materialRequest) {
+      const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
+      await completeAtlasRoleMaterials(prepared.directory, pages, signal, materialRequest);
+    }
     const expected = extra ? [...pages, ...extra.pages] : pages;
     result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal, true);
     return result;
@@ -72,7 +77,8 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
       }
     }, signal, request);
   }
-  return downloadLegacyAtlas(workspace, root, donor => initializeAtlas(root, donor, signal), signal);
+  return downloadLegacyAtlas(workspace, root,
+    donor => publishInitialAtlas(root, donor, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, request ?? fetch), signal);
 }
 
 if (import.meta.main) {

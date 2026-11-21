@@ -1,5 +1,5 @@
 import { discoverRuntimeAtlasDataDirectory, findLegacyAtlasExport, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
-import { mkdir, realpath } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
   type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
@@ -129,6 +129,41 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       const targetNotes = Object.entries(versions).map(([game, version]) => `${game} ${version ?? "版本未知"}`).join("、");
       const channelLabel = channel === "live" ? "正式版" : "网站最新版";
       lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
+
+      const currentRoles = local.pages.filter(({ game, pageId, version }) => pageId === "character" &&
+        version === versions[game] && scope.some(page => page.game === game && page.pageId === pageId));
+      if (scheduledKind !== "challenge" && currentRoles.length) {
+        const { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } = await import("./role-material-source.ts");
+        const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal);
+        if (pending.length && kind === "check") {
+          lines.push(`${pending.length} 个角色分类待补齐同版材料名称与图标。`);
+        } else if (pending.length) {
+          const stage = await mkdtemp(join(dirname(root), ".atlas-material-update-"));
+          try {
+            const { copyAtlasSelectedPages } = await import("./assemble-candidate.ts");
+            const prepared = await copyAtlasSelectedPages(dirname(baseline), join(stage, "source"), pending, signal);
+            const updated = await completeAtlasRoleMaterials(prepared.directory, pending, signal, request);
+            if (pending.length > updated.length) {
+              lines.push(`${pending.length - updated.length} 个角色分类的同版材料表暂不可用。`);
+            }
+            if (updated.length) {
+              const result = await applyAtlasCandidate(root, prepared.directory, updated, signal, active);
+              lines.push(result.status === "published" ? `${updated.length} 个角色分类已补齐同版材料名称与可用原图。`
+                : `同版角色材料未发布，${describeRefresh(result, "")}。`);
+              if (result.status === "published") {
+                active = { version: result.version, root: result.directory };
+                baseline = result.directory;
+              } else if (result.status === "busy" || result.status === "stale") return lines.join("\n");
+            }
+          } catch (error) {
+            signal?.throwIfAborted();
+            console.warn("[atlas]", error instanceof Error ? error.message : "图鉴材料补齐失败。");
+            lines.push("同版角色材料未补齐，保留现用资料。");
+          } finally {
+            await rm(stage, { recursive: true, force: true }).catch(() => undefined);
+          }
+        }
+      }
 
       if (allCurrent && scheduledKind !== "challenge" &&
           versions.gi && scope.some(({ game, pageId }) => game === "gi" && pageId === "character")) {

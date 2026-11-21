@@ -117,16 +117,27 @@ async function copyPages(pages: readonly SelectedPage[], target: string, signal?
 
 export async function copyAtlasCandidate(source: string, destination: string, scope: readonly Page[],
   counts: { readonly imageCount: number; readonly detailCount: number } | undefined, signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
+  return copyPagesFromAtlas(source, destination, scope, false, counts, signal);
+}
+
+export async function copyAtlasSelectedPages(source: string, destination: string, scope: readonly Page[],
+  signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
+  return copyPagesFromAtlas(source, destination, scope, true, undefined, signal);
+}
+
+async function copyPagesFromAtlas(source: string, destination: string, scope: readonly Page[], subset: boolean,
+  counts: { readonly imageCount: number; readonly detailCount: number } | undefined, signal?: AbortSignal) {
   signal?.throwIfAborted();
   const resolved = resolve(destination);
   const [base, parent] = await Promise.all([realpath(source), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
   if (overlaps(base, target)) throw new Error("图鉴源和候选目录必须独立。");
   const root = await readRoot(base, scope, signal);
-  if (root.validated.length !== scope.length || new Set(scope.map(pageKey)).size !== scope.length) {
+  const keys = new Set(scope.map(pageKey));
+  if ((!subset && root.validated.length !== scope.length) || keys.size !== scope.length || !keys.size) {
     throw new Error("原图鉴导出的分类与已核定首版不同。");
   }
-  const pages = root.validated.map((page) => selectPage(root, page));
+  const pages = root.validated.filter(page => keys.has(pageKey(page))).map(page => selectPage(root, page));
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
@@ -135,7 +146,8 @@ export async function copyAtlasCandidate(source: string, destination: string, sc
       throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
     }
     const data = join(target, "data");
-    await writeFile(join(data, "map.json"), JSON.stringify(root.map) + "\n", { flag: "wx" });
+    const map = subset ? composeMap(root, root, pages, scope) : root.map;
+    await writeFile(join(data, "map.json"), JSON.stringify(map) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(data, scope, signal);
     if (!validation.ok) throw new Error(`首版图鉴未通过校验。${validation.issues[0] ?? ""}`);
     return { directory: target, validation, imageCount };

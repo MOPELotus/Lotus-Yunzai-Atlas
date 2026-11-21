@@ -334,6 +334,10 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       await completeGenshinPortraits(root, roles.version, signal, request);
     }
     const pages = scope.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
+    if (scope.some(({ pageId, rows }) => pageId === "character" && rows)) {
+      const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
+      await completeAtlasRoleMaterials(root, pages, signal, request);
+    }
     return await consume(root, pages);
   } finally {
     lock.close();

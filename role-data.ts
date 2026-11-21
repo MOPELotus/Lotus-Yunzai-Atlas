@@ -541,7 +541,23 @@ export function characterGalleryName(character: Character, roster: readonly Char
   return name;
 }
 
-export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
+export function roleMaterialGroups(game: Game, detail: RecordValue, images?: unknown, materialNames?: unknown): RoleMaterialGroup[] {
+  const artwork = galleryArtwork(images, game);
+  const groups = game === "gi" ? genshinMaterials(detail, artwork)
+    : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
+  const names = object(materialNames);
+  return groups.map(group => ({
+    ...group,
+    items: group.items.map(item => {
+      if (!item.id) return item;
+      return { ...item, name: item.name ?? text(names[item.id]),
+        artwork: item.artwork ?? artwork(`derived.material.${item.id}`) };
+    }),
+  }));
+}
+
+export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown,
+  materialNames?: unknown): RoleDetails | undefined {
   const { game, id, version, name } = character;
   const detail = object(content.detail);
   if (!Object.keys(detail).length) return;
@@ -569,7 +585,7 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
     return path ? [path] : [];
   }))];
   const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
-  const materials = game === "gi" ? genshinMaterials(detail, artwork) : game === "hsr" ? starRailMaterials(detail) : zenlessMaterials(detail);
+  const materials = roleMaterialGroups(game, detail, images, materialNames);
   return {
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name: title, rarity, description,

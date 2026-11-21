@@ -86,7 +86,8 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     const { hasDetail, images, name } = object(item.meta);
     const downloaded = new Set((Array.isArray(images) ? images : []).map(object)
       .flatMap(({ status, placeholder, fieldPath }) =>
-        status === "downloaded" && placeholder !== true && typeof fieldPath === "string" ? [fieldPath] : []));
+        status === "downloaded" && placeholder !== true && typeof fieldPath === "string" &&
+          !fieldPath.startsWith("derived.material.") ? [fieldPath] : []));
     if (pageId === "achievement/achievement") {
       achievementSources.push({ id, name: typeof name === "string" ? name : "", list: object(item.content).list });
     }

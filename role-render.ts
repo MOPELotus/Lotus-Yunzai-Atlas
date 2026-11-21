@@ -488,7 +488,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const materials = role.materials.filter(({ items }) => items.length);
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
-    ...items.map((item) => material(item.name || item.id || "材料", item.count, image(item.artwork))),
+    ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
   ]) });
 
   return renderAtlasPages(pages, title, role.game, role.version, icon, background, options);

@@ -645,6 +645,10 @@ export async function acquireAtlasSource(destination: string, requirements: read
       games: { [game]: { game: { id: game, versions: [version], requestedVersion: version },
         locales: { [locale]: { pages: { [pageId]: page } } } } },
     });
+    if (pageId === "character") {
+      const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
+      await completeAtlasRoleMaterials(target, requirements, active, request);
+    }
     const validation = await validateAtlasCandidate(data, requirements, active);
     if (!validation.ok) throw new Error(`抓取的源快照未通过校验。${validation.issues[0] ?? ""}`);
     const imageCount = [...images.values()].filter((image) => image !== undefined).length;
