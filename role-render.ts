@@ -27,7 +27,7 @@ export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
   readonly scale?: number;
   readonly assetRoot?: string;
-  readonly galleryName?: string;
+  readonly galleryName?: string | readonly string[];
 }
 
 const width = 800;
@@ -291,9 +291,11 @@ function isRaster(data: Buffer) {
     data[0] === 255 && data[1] === 216;
 }
 
-export async function readCharacterGalleryPortrait(game: Game, name: string | undefined,
+export async function readCharacterGalleryPortrait(game: Game, name: string | readonly string[] | undefined,
   configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim()): Promise<Image | undefined> {
-  if (!name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return;
+  const names = [...new Set(typeof name === "string" ? [name] : name ?? [])]
+    .filter(value => value && value !== "." && value !== ".." && !/[\/\\\p{Cc}\p{Cf}]/u.test(value));
+  if (!names.length) return;
   const roots = configured ? [{ root: configured, paths: [characterGalleryDirectories[game]] }] : [];
   if (game === "zzz") {
     const legacyRoot = Bun.env.LOTUS_ZZZ_LEGACY_RESOURCES_DIR?.trim();
@@ -308,14 +310,15 @@ export async function readCharacterGalleryPortrait(game: Game, name: string | un
     for (const path of paths) {
       const base = join(resolved, path);
       if (await realpath(base).catch(() => undefined) !== base) continue;
-      const folder = join(base, name);
-      const children = await realpath(folder).catch(() => undefined) === folder
-        ? await readdir(folder, { withFileTypes: true }).catch(() => []) : [];
-      const candidates = [
-        ...characterGalleryExtensions.map(extension => join(base, name + extension)),
-        ...children.filter(child => child.isFile() && /\.(?:webp|png|jpe?g)$/iu.test(child.name))
-          .map(child => join(folder, child.name)),
-      ];
+      const candidates: string[] = [];
+      for (const name of names) {
+        const folder = join(base, name);
+        const children = await realpath(folder).catch(() => undefined) === folder
+          ? await readdir(folder, { withFileTypes: true }).catch(() => []) : [];
+        candidates.push(...characterGalleryExtensions.map(extension => join(base, name + extension)),
+          ...children.filter(child => child.isFile() && /\.(?:webp|png|jpe?g)$/iu.test(child.name))
+            .map(child => join(folder, child.name)));
+      }
       while (candidates.length) {
         const [candidate] = candidates.splice(randomInt(candidates.length), 1);
         const data = await localAsset(candidate!, maxImageBytes).catch(() => undefined);

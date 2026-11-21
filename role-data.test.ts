@@ -297,3 +297,13 @@ test("图库文件夹按游戏与已核形态选择，同名记录无法互借�
   expect(characterGalleryName(march, [march, hunt])).toBe("三月七");
   expect(characterGalleryName(hunt, [march, hunt])).toBe("三月七·巡猎");
 });
+
+test("绝区零图库接受同一角色经过核验的全名，保留短名与同游戏名称冲突保护", () => {
+  const ellen = { game: "zzz", id: "1191", name: "艾莲", path: "", rarity: "", version: "3.3" } as const;
+  const collision = { ...ellen, id: "9999", name: "艾莲·乔" };
+  expect(characterGalleryName(ellen, [ellen], "艾莲·乔")).toEqual(["艾莲", "艾莲·乔"]);
+  expect(characterGalleryName(ellen, [ellen], "艾莲·乔的其他形态")).toBe("艾莲");
+  expect(characterGalleryName(ellen, [ellen, collision], "艾莲·乔")).toBe("艾莲");
+  expect(characterGalleryName(ellen, [ellen, { ...collision, game: "hsr" }], "艾莲·乔"))
+    .toEqual(["艾莲", "艾莲·乔"]);
+});

@@ -15,11 +15,17 @@ test("原画读取限定项目和角色，坏图、跨游戏和越界目录不�
     await mkdir(join(gallery, "gs-character"), { recursive: true });
     await writeFile(join(zzz, "雅", "坏图.png"), "invalid artwork");
     await writeFile(join(zzz, "雅", "原图.png"), png);
+    await writeFile(join(zzz, "艾莲.png"), "invalid artwork");
+    await mkdir(join(zzz, "艾莲·乔"));
+    await writeFile(join(zzz, "艾莲·乔", "原图.png"), png);
     await writeFile(join(gallery, "gs-character", "仅原神.png"), png);
     await symlink(join(zzz, "雅"), join(zzz, "链接角色"), "dir");
     await symlink(join(zzz, "雅", "原图.png"), join(zzz, "链接.png"));
 
     expect((await readCharacterGalleryPortrait("zzz", "雅", gallery))?.width).toBe(1);
+    expect(await readCharacterGalleryPortrait("zzz", "艾莲", gallery)).toBeUndefined();
+    expect((await readCharacterGalleryPortrait("zzz", ["艾莲", "艾莲·乔"], gallery))?.width).toBe(1);
+    expect(await readCharacterGalleryPortrait("gi", ["艾莲", "艾莲·乔"], gallery)).toBeUndefined();
     expect((await readCharacterGalleryPortrait("gi", "仅原神", gallery))?.height).toBe(1);
     expect(await readCharacterGalleryPortrait("zzz", "仅原神", gallery)).toBeUndefined();
     expect(await readCharacterGalleryPortrait("zzz", "链接角色", gallery)).toBeUndefined();

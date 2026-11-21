@@ -122,11 +122,12 @@ async function bangbooQuery(argument: string): Promise<AtlasReply> {
   }
 }
 
-async function characterBook(entry: AtlasEntry, galleryName: string | undefined): Promise<AtlasReply> {
+async function characterBook(entry: AtlasEntry, roster: readonly AtlasEntry[]): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
   if (!role) return characterLine(entry, true);
   try {
     const { renderRoleBook } = await import("./role-render.ts");
+    const galleryName = characterGalleryName(entry, roster, role.overview.name);
     const pages = await renderRoleBook(role, { assetRoot: catalog.assetRoot(entry), galleryName });
     const sections = pages.map(({ section }) => section).join(" → ");
     const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
@@ -292,7 +293,7 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
-      return characterBook(entry, characterGalleryName(entry, roster));
+      return characterBook(entry, roster);
     }
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(first.entry);

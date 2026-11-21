@@ -521,7 +521,8 @@ function genshinTraveler(character: Character, list: RecordValue, detail: Record
   }
 }
 
-export function characterGalleryName(character: Character, roster: readonly Character[]): string | undefined {
+export function characterGalleryName(character: Character, roster: readonly Character[],
+  verifiedTitle?: string): string | readonly string[] | undefined {
   const { game, id, name } = character;
   if (game === "hsr") {
     if (name === "{NICKNAME}") return starRailTrailblazerName(character);
@@ -529,7 +530,14 @@ export function characterGalleryName(character: Character, roster: readonly Char
     if (name === "三月七" && id === "1224") return "三月七·巡猎";
   }
   const folded = name.normalize("NFKC").toLowerCase();
-  if (roster.filter(entry => entry.game === game && entry.name.normalize("NFKC").toLowerCase() === folded).length === 1) return name;
+  if (roster.filter(entry => entry.game === game && entry.name.normalize("NFKC").toLowerCase() === folded).length !== 1) return;
+  const verified = game === "zzz" ? zzzFullNames.get(id) : undefined;
+  if (verified?.name === name && verified.fullName === verifiedTitle) {
+    const fullName = verified.fullName.normalize("NFKC").toLowerCase();
+    if (fullName !== folded && !roster.some(entry => entry.game === game && entry.id !== id &&
+      entry.name.normalize("NFKC").toLowerCase() === fullName)) return [name, verified.fullName];
+  }
+  return name;
 }
 
 export function normalizeRoleDetails(character: Character, content: RecordValue, rarity: string, images?: unknown): RoleDetails | undefined {
