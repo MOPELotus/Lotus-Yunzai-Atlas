@@ -178,10 +178,14 @@ function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): 
   return findMatches(catalog, [kind], query, game).map(({ entry }) => entry);
 }
 
-export type TraditionalLookup = "search" | "name" | "equipment" | "weapon" | "character";
+export type TraditionalLookup = "search" | "name" | "equipment" | "weapon" | "character" | "bare";
 
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
   if (mode === "weapon") return findMatches(catalog, ["equipment"], query, game, true);
+  if (mode === "bare") {
+    const weapons = findMatches(catalog, ["equipment"], query, game, true);
+    return weapons.length ? weapons : findMatches(catalog, ["character", "set"], query, game, true);
+  }
   if (mode === "equipment") return findMatches(catalog, ["equipment", "set"], query, game, true);
   if (mode === "character") return findMatches(catalog, ["character"], query, game, true);
   const pages = catalog.pages.filter((page) => page.kind !== "challenge" || page.challengeMode?.id === "leyline");

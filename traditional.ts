@@ -1,36 +1,48 @@
 import type { Game } from "./catalog.ts";
-import { abyssMode, apocalypseMode, chaosMode, fictionMode } from "./challenges.ts";
+import { challengeModes, theaterMode, type ChallengeMode } from "./challenges.ts";
 
 const prefixes: Readonly<Record<string, Game>> = {
   "#": "gi", "#原神": "gi", "#星铁": "hsr", "#星穹铁道": "hsr", "#崩坏星穹铁道": "hsr", "#崩铁": "hsr",
   "#绝区零": "zzz", "#绝区": "zzz", "*": "hsr", "%": "zzz", "％": "zzz",
 };
 const shortcut = /^[#*%％][^\r\n]+图鉴$/u;
-const bareEquipment = /^[#*%％][^\r\n]{2,128}$/u;
+const bareName = /^[#*%％][^\r\n]{2,128}$/u;
 const gamePrefix = /^(?:#崩坏星穹铁道|#星穹铁道|#绝区零|#绝区|#星铁|#崩铁|#原神|[#*%％])/u;
 const reserved = /攻略|练度统计|(?:命座|星魂|影画|天赋)$/u;
+const reservedBare = /^(?:扫码登录|米哈游登录|锅巴登录|登录|刷新cookie|绑定设备|体力|全部体力|多体力|更新抽卡记录|刷新抽卡记录|全部记录|角色记录|武器记录|常驻记录|新手记录|抽卡记录|更新面板|帮助|菜单|签到|注册自动签到|远程|spawn|上传|下载|测试|最强|极限)|(?:面板|面版)(?:\d{1,3})?$|(?:面板|面版).*?[换变改]|(?:排名|排行|排行榜)$/iu;
 const operations = /^#?(?:图鉴(?:状态|帮助|更新|检查更新|全量更新|重置)|(?:更新|检查更新|全量更新|重置|清空)图鉴)$/u;
 const glued = /^#?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
-const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${bareEquipment.source}`, "u");
-const datedChallenge = /^(#(?:原神|星铁)?|\*)(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?(本期|当期|上期)([^\r\n]+)图鉴$/u;
-const datedModes = [abyssMode, apocalypseMode, chaosMode, fictionMode] as const;
-type DatedChallengeMode = typeof datedModes[number];
-type DatedPeriod = "本期" | "上期";
+const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${bareName.source}`, "u");
+const challengePeriod = /^(?:(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?)?(本期|当期|上期|下期)([^\r\n]+?)(图鉴)?$/u;
+type ChallengePeriod = "本期" | "上期" | "下期";
 
-export function parseDatedChallengeShortcut(message: string) {
-  const match = datedChallenge.exec(message.trim());
+function shortcutChallengeMode(game: Game, title: string) {
+  return challengeModes.find((mode) => game === mode.game &&
+    (mode.name === title || mode.aliases.some((name) => name === title) ||
+      (mode === theaterMode && (title === "幻想" || title === "剧诗"))));
+}
+
+export function parseChallengeShortcut(message: string) {
+  const input = message.trim();
+  const prefix = gamePrefix.exec(input)?.[0];
+  if (!prefix) return;
+  const match = challengePeriod.exec(input.slice(prefix.length).trim());
   if (!match) return;
-  const [, prefix, year, month, day, period, title] = match;
-  const game = prefixes[prefix!];
-  const mode = datedModes.find((item) => game === item.game && [item.name, ...item.aliases].some((name) => name === title));
+  const [, year, month, day, selector, title, explicitSuffix] = match;
+  // Undated personal battle records use the same current/previous selectors.
+  if (!year && !explicitSuffix && selector !== "下期") return;
+  const game = prefixes[prefix];
+  const mode = game && title ? shortcutChallengeMode(game, title) : undefined;
   if (!mode) return;
+  const period: ChallengePeriod = selector === "上期" || selector === "下期" ? selector : "本期";
+  if (!year) return { mode, period, at: undefined, invalidDate: false };
   const date = `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}`;
-  // Lotus-ReFactor's extractExplicitDate uses noon in the China server timezone.
+  // The original date selector used noon in the China server timezone.
   const at = Date.parse(`${date}T12:00:00+08:00`);
   const valid = Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === date;
-  return { mode, period: period === "上期" ? "上期" as const : "本期" as const, at: valid ? at : undefined };
+  return { mode, period, at: valid ? at : undefined, invalidDate: !valid };
 }
 
 export function parseGluedLookup(message: string): string | undefined {
@@ -51,16 +63,17 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   if (game) return { game, query };
 }
 
-export function parseBareEquipmentShortcut(message: string): { game: Game; query: string } | undefined {
+export function parseBareNameShortcut(message: string): { game: Game; query: string } | undefined {
   const input = message.trim();
-  if (!bareEquipment.test(input) || operations.test(input) || shortcut.test(input)) return;
+  if (!bareName.test(input) || operations.test(input) || shortcut.test(input)) return;
   const prefix = gamePrefix.exec(input)?.[0];
   if (!prefix) return;
   const game = prefixes[prefix];
   const query = input.slice(prefix.length).trim();
-  if (game && query.length >= 2 && !reserved.test(query) && !/^[0-9]+$/u.test(query.normalize("NFKC"))) {
-    return { game, query };
-  }
+  if (!game || query.length < 2 || reserved.test(query) || reservedBare.test(query) ||
+      /^[0-9]+$/u.test(query.normalize("NFKC"))) return;
+  if (shortcutChallengeMode(game, query.replace(/^(?:本期|当期|上期|往期|最新)/u, ""))) return;
+  return { game, query };
 }
 
 export function parseRoleShortcut(message: string): { game?: Game; query: string } | undefined {
@@ -79,7 +92,7 @@ export function parseRoleShortcut(message: string): { game?: Game; query: string
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
 type AtlasNode = string | AtlasImage;
 export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
-type Lookup = "glued" | "shortcut" | "weapon" | "character";
+type Lookup = "glued" | "shortcut" | "bare" | "character";
 
 interface ShortcutEvent {
   readonly msg: string;
@@ -91,7 +104,7 @@ type PluginConstructor = new (options: { name: string; rule: { reg: RegExp; fnc:
 
 export function traditionalAtlasApps(
   findReply: (query: string, kind: Lookup, game?: Game) => Promise<AtlasReply | undefined>,
-  findDatedChallengeReply: (mode: DatedChallengeMode, period: DatedPeriod, at: number) => Promise<AtlasReply>,
+  findChallengeReply: (mode: ChallengeMode, period: ChallengePeriod, at?: number) => Promise<AtlasReply>,
 ) {
   return {
     // The host installs the V3 base before it enumerates the exported apps.
@@ -108,14 +121,14 @@ export function traditionalAtlasApps(
           if (query) return this.send(event, await findReply(query, "glued"));
           const role = parseRoleShortcut(event.msg);
           if (role) return this.send(event, await findReply(role.query, "character", role.game));
-          const dated = parseDatedChallengeShortcut(event.msg);
-          if (dated) return this.send(event, dated.at === undefined
+          const challenge = parseChallengeShortcut(event.msg);
+          if (challenge) return this.send(event, challenge.invalidDate
             ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
-            : await findDatedChallengeReply(dated.mode, dated.period, dated.at));
+            : await findChallengeReply(challenge.mode, challenge.period, challenge.at));
           const target = parseEquipmentShortcut(event.msg);
           if (target) return this.send(event, await findReply(target.query, "shortcut", target.game));
-          const bare = parseBareEquipmentShortcut(event.msg);
-          return bare ? this.send(event, await findReply(bare.query, "weapon", bare.game)) : false;
+          const bare = parseBareNameShortcut(event.msg);
+          return bare ? this.send(event, await findReply(bare.query, "bare", bare.game)) : false;
         }
 
         async send(event: ShortcutEvent, reply: AtlasReply | undefined) {

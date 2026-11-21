@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
-import { abyssMode, apocalypseMode, chaosMode, fictionMode } from "./challenges.ts";
-import { parseBareEquipmentShortcut, parseDatedChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut } from "./traditional.ts";
+import { abyssMode, apocalypseMode, chaosMode, deadlyAssaultMode, fictionMode, shiyuMode, theaterMode } from "./challenges.ts";
+import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut, traditionalAtlasApps } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -26,10 +26,10 @@ test("裸装备捷径沿用各游戏前缀，带图鉴和角色分项仍归原�
     ["hsr", "锋镝", ["*锋镝", "#星穹铁道锋镝"]],
     ["zzz", "深海访客", ["%深海访客", "％深海访客", "#绝区零深海访客"]],
   ] as const) {
-    for (const command of commands) expect(parseBareEquipmentShortcut(command)).toEqual({ game, query });
+    for (const command of commands) expect(parseBareNameShortcut(command)).toEqual({ game, query });
   }
   for (const command of ["西风剑", "#西风剑图鉴", "#更新图鉴", "#123", "#星铁１２３", "*卡芙卡星魂", "%深海访客攻略"]) {
-    expect(parseBareEquipmentShortcut(command)).toBeUndefined();
+    expect(parseBareNameShortcut(command)).toBeUndefined();
   }
 });
 
@@ -47,57 +47,73 @@ test("显式入口接受紧连名称，预留状态、维护和帮助指令", ()
   }
 });
 
-test("旧深境螺旋日期语法以中国服当天中午查询，只接带图鉴后缀的本期和上期", () => {
-  const at = Date.parse("2026-11-16T12:00:00+08:00");
-  for (const command of [
-    "#2026年11月16日本期深渊图鉴", "#2026.11.16当期深境螺旋图鉴",
-    "#原神2026/11/16本期深渊图鉴",
-  ]) expect(parseDatedChallengeShortcut(command)).toEqual({ mode: abyssMode, period: "本期", at });
-  expect(parseDatedChallengeShortcut("#2026-11-16上期深境螺旋图鉴")).toEqual({ mode: abyssMode, period: "上期", at });
-  expect(parseDatedChallengeShortcut("#2026年2月29日本期深渊图鉴")).toEqual({ mode: abyssMode, period: "本期", at: undefined });
-  expect(parseDatedChallengeShortcut("#2024年2月29日本期深渊图鉴")).toEqual({
-    mode: abyssMode, period: "本期", at: Date.parse("2024-02-29T12:00:00+08:00"),
+test("挑战日期别名沿用中国服中午，保留明确的游戏、所属类别和期次", () => {
+  for (const [mode, period, date, commands] of [
+    [abyssMode, "本期", "2026-11-16", ["#2026年11月16日本期深渊", "#2026.11.16当期深境螺旋图鉴", "#原神2026/11/16本期深渊图鉴"]],
+    [apocalypseMode, "本期", "2026-10-26", ["*2026-10-26本期末日", "#星铁2026/10/26当期末日幻影图鉴"]],
+    [fictionMode, "本期", "2026-10-19", ["*2026年10月19日本期虚构图鉴", "#星铁2026/10/19当期虚构叙事图鉴"]],
+    [chaosMode, "上期", "2026-07-06", ["*2026.7.6上期混沌回忆图鉴", "#星铁2026-7-6上期忘却之庭"]],
+    [theaterMode, "本期", "2026-11-16", ["#2026-11-16本期幻想图鉴", "#2026-11-16本期剧诗"]],
+    [deadlyAssaultMode, "本期", "2026-11-20", ["%2026-11-20本期危局", "％2026-11-20本期强袭图鉴", "#绝区零2026-11-20本期危局强袭战"]],
+    [shiyuMode, "下期", "2026-11-20", ["%2026-11-20下期防卫战", "#绝区2026-11-20下期式舆"]],
+  ] as const) {
+    const at = Date.parse(`${date}T12:00:00+08:00`);
+    for (const command of commands) expect(parseChallengeShortcut(command)).toEqual({ mode, period, at, invalidDate: false });
+  }
+  expect(parseChallengeShortcut("#2026年2月29日本期深渊")).toEqual({
+    mode: abyssMode, period: "本期", at: undefined, invalidDate: true,
   });
-  for (const command of [
-    "#本期深渊图鉴", "#2026-11-16本期深渊", "#2026-11-16下期深渊图鉴",
-    "#2026-11-16本期幻想图鉴", "*2026-11-16本期深渊图鉴",
-  ]) expect(parseDatedChallengeShortcut(command)).toBeUndefined();
-});
-
-test("末日幻影日期图鉴仅接受旧星铁前缀，保持个人和其他游戏入口", () => {
-  const at = Date.parse("2026-10-26T12:00:00+08:00");
-  for (const command of ["*2026年10月26日本期末日图鉴", "#星铁2026/10/26当期末日幻影图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toEqual({ mode: apocalypseMode, period: "本期", at });
-  }
-  expect(parseDatedChallengeShortcut("#星铁2026-10-26上期末日图鉴")).toEqual({ mode: apocalypseMode, period: "上期", at });
-  for (const command of ["#2026-10-26本期末日图鉴", "#原神2026-10-26本期末日图鉴", "*2026-10-26本期末日",
-    "*2026-10-26下期末日图鉴", "*2026-10-26本期异相图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toBeUndefined();
+  expect(parseChallengeShortcut("#2024年2月29日本期深渊图鉴")).toEqual({
+    mode: abyssMode, period: "本期", at: Date.parse("2024-02-29T12:00:00+08:00"), invalidDate: false,
+  });
+  for (const command of ["*2026-11-16本期深渊图鉴", "#2026-10-26本期末日", "%2026-07-06本期混沌图鉴",
+    "#2026-11-16深渊", "#2026-11-16当期深渊攻略", "%深渊", "#深渊", "#当期深渊", "*本期末日", "%上期防卫战"]) {
+    expect(parseChallengeShortcut(command)).toBeUndefined();
   }
 });
 
-test("虚构叙事恢复旧星铁日期写法，拒绝裸日期查询与错误前缀", () => {
-  const at = Date.parse("2026-10-19T12:00:00+08:00");
-  for (const command of ["*2026年10月19日本期虚构图鉴", "#星铁2026/10/19当期虚构叙事图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toEqual({ mode: fictionMode, period: "本期", at });
-  }
-  expect(parseDatedChallengeShortcut("#星铁2026-10-19上期虚构叙事图鉴")).toEqual({ mode: fictionMode, period: "上期", at });
-  for (const command of ["*2026-10-19本期虚构", "#2026-10-19本期虚构图鉴", "%2026-10-19本期虚构图鉴",
-    "*2026-10-19下期虚构图鉴", "*2026-10-19本期异相图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toBeUndefined();
-  }
-});
-
-test("混沌回忆日期图鉴支持忘却旧别名，保持非星铁入口和个人查询", () => {
-  const at = Date.parse("2026-07-06T12:00:00+08:00");
-  for (const command of ["*2026年7月6日本期混沌图鉴", "#星铁2026/7/6当期忘却图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toEqual({ mode: chaosMode, period: "本期", at });
-  }
-  expect(parseDatedChallengeShortcut("*2026.7.6上期混沌回忆图鉴")).toEqual({ mode: chaosMode, period: "上期", at });
-  expect(parseDatedChallengeShortcut("#星铁2026-7-6上期忘却之庭图鉴")).toEqual({ mode: chaosMode, period: "上期", at });
-  for (const command of ["*2026-07-06上期忘却之庭", "%2026-07-06本期混沌图鉴",
-    "#2026-07-06本期混沌图鉴", "*2026-07-06下期混沌回忆图鉴"]) {
-    expect(parseDatedChallengeShortcut(command)).toBeUndefined();
+test("V3 图鉴路由把裸全名、日期和下期交给对应的公共查询，个人入口仍让行", async () => {
+  const target = globalThis as typeof globalThis & { plugin?: unknown };
+  const prior = Object.getOwnPropertyDescriptor(target, "plugin");
+  const calls: unknown[][] = [];
+  try {
+    Object.defineProperty(target, "plugin", { value: class {}, configurable: true });
+    const { AtlasTraditionalCommands: Atlas } = traditionalAtlasApps(
+      async (query, kind, game) => {
+        calls.push([query, kind, game]);
+        return "名称资料";
+      },
+      async (mode, period, at) => {
+        calls.push([mode.id, period, at]);
+        return "挑战资料";
+      },
+    );
+    const app = new Atlas!();
+    const replies: unknown[] = [];
+    const command = (msg: string) => app.lookup({ msg, reply: (value) => replies.push(value) });
+    for (const msg of ["#芙宁娜", "#星铁卡芙卡", "#绝区零艾莲·乔", "#冰风迷途的勇士", "*太空封印站", "％啄木鸟电音"])
+      await command(msg);
+    for (const msg of ["#2026年11月16日本期深渊", "#星铁2026-10-26本期末日", "%2026-11-20本期危局",
+      "#下期幻想", "*下期末日", "%下期防卫战", "#下期深渊", "%2026-11-20下期防卫战"])
+      await command(msg);
+    expect(calls).toEqual([
+      ["芙宁娜", "bare", "gi"], ["卡芙卡", "bare", "hsr"], ["艾莲·乔", "bare", "zzz"],
+      ["冰风迷途的勇士", "bare", "gi"], ["太空封印站", "bare", "hsr"], ["啄木鸟电音", "bare", "zzz"],
+      ["tower", "本期", Date.parse("2026-11-16T12:00:00+08:00")], ["maze_boss", "本期", Date.parse("2026-10-26T12:00:00+08:00")],
+      ["boss", "本期", Date.parse("2026-11-20T12:00:00+08:00")], ["rolecombat", "下期", undefined],
+      ["maze_boss", "下期", undefined], ["shiyu", "下期", undefined], ["tower", "下期", undefined],
+      ["shiyu", "下期", Date.parse("2026-11-20T12:00:00+08:00")],
+    ]);
+    expect(replies).toEqual([...Array(6).fill("名称资料"), ...Array(8).fill("挑战资料")]);
+    for (const msg of ["#深渊", "#当期深渊", "*本期末日", "%防卫战", "#绝区零上期危局", "#芙宁娜面板",
+      "*卡芙卡排行", "#芙宁娜攻略", "#芙宁娜练度统计", "%最强艾莲", "#刷新cookie", "#全量更新图鉴"])
+      expect(await command(msg)).toBe(false);
+    await command("#2026年2月29日本期深渊");
+    expect(replies.at(-1)).toBe("日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。");
+    expect(calls).toHaveLength(14);
+  } finally {
+    if (prior) Object.defineProperty(target, "plugin", prior);
+    else Reflect.deleteProperty(target, "plugin");
   }
 });
 
@@ -126,10 +142,12 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
   const root = await mkdtemp(join(tmpdir(), "lotus-atlas-traditional-"));
   try {
     await mkdir(join(root, "items"));
-    await writeFile(join(root, "items/202.json"), JSON.stringify({
-      meta: { gameId: "gi", pageId: "artifact", recordId: "202", version: "1" },
-      content: { list: { set: { two: { name: { zh: "西风剑" } } } } },
-    }));
+    for (const [id, name] of [["202", "西风剑"], ["14001", "冰风迷途的勇士"]]) {
+      await writeFile(join(root, `items/${id}.json`), JSON.stringify({
+        meta: { gameId: "gi", pageId: "artifact", recordId: id, version: "1" },
+        content: { list: { set: { two: { name: { zh: name } } } } },
+      }));
+    }
     await writeFile(join(root, "map.json"), JSON.stringify({
       games: {
         gi: { locales: { zh: { pages: {
@@ -137,7 +155,7 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
             { id: "10000005-2", name: "旅行者" }, { id: "10000007-3", name: "旅行者" }),
           weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" },
             { id: "11505", name: "磐岩结绿" }),
-          artifact: page({ id: "202", name: "索引名应由详情修正" }),
+          artifact: page({ id: "202", name: "索引名应由详情修正" }, { id: "14001", name: "另一组件名称" }),
         } } } },
         hsr: { locales: { zh: { pages: { lightcone: page({ id: "300", name: "西风剑" }, { id: "21018", name: "舞！舞！舞！" }) } } } },
         zzz: { locales: { zh: { pages: { bangboo: page({ id: "400", name: "企鹅布" }) } } } },
@@ -158,6 +176,13 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("西风剑", "hsr", "equipment")).toEqual([["hsr", "equipment", "300"]]);
     expect(hits("西风剑", "gi", "equipment")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"]]);
     expect(hits("西风剑", "gi", "weapon")).toEqual([["gi", "equipment", "100"]]);
+    expect(hits("西风剑", "gi", "bare")).toEqual([["gi", "equipment", "100"]]);
+    expect(hits("西风剑客", "gi", "bare")).toEqual([["gi", "character", "10"]]);
+    expect(hits("西风剑客", "hsr", "bare")).toEqual([]);
+    expect(hits("冰风迷途的勇士", "gi", "bare")).toEqual([["gi", "set", "14001"]]);
+    expect(hits("冰封迷途的勇士", "gi", "bare")).toEqual([["gi", "set", "14001"]]);
+    expect(hits("西风", "gi", "bare")).toEqual([]);
+    expect(hits("企鹅布", "zzz", "bare")).toEqual([]);
     expect(hits("绿剑", "gi", "weapon")).toEqual([["gi", "equipment", "11505"]]);
     expect(hits("舞舞舞", "hsr", "weapon")).toEqual([["hsr", "equipment", "21018"]]);
     expect(hits("舞舞舞", "gi", "weapon")).toEqual([]);

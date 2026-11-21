@@ -276,9 +276,10 @@ async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
   try {
-    const result = mode === "weapon" ? await catalog.readForEquipmentShortcut() : await catalog.read();
+    const quickLookup = mode === "bare" || mode === "weapon";
+    const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
     let matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
-    if ((!game || game === "zzz") && mode !== "weapon" && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
+    if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
     }
@@ -302,7 +303,7 @@ async function traditionalQuery(
     }
     if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
     const first = matches[0]!;
-    if (mode === "weapon") {
+    if (quickLookup && first.kind === "equipment") {
       if (matches.length !== 1) return;
       return await weaponCard(first.entry) ?? equipmentLine(first.entry);
     }
@@ -454,12 +455,10 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const relative = previous || forecast;
-  const unverifiedRotation = `${mode.name}${relative ? target : "本期"}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  const unverifiedRotation = `${mode.name}${currentRequested ? "本期" : target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
   if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
-  if (mode.id === arbitrationMode.id && /^(?:上期|下期)$/u.test(target)) {
-    return `${mode.name}${target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
-  }
-  if (!relative && /^(?:上期|下期|第\s*\d+\s*期)$/u.test(target)) {
+  if (!relative && /^(?:上期|下期)$/u.test(target)) return unverifiedRotation;
+  if (/^第\s*\d+\s*期$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
   }
 
@@ -490,7 +489,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
       const matched = forecast
         ? await (mode.id === shiyuMode.id
-          ? findNextShiyu(category.entries, readFacts) : findAnnouncedChallengeNext(mode, category.entries, readFacts))
+          ? findNextShiyu(category.entries, readFacts, at) : findAnnouncedChallengeNext(mode, category.entries, readFacts, at))
         : previous ? await findPreviousChallenge(mode, category.entries, readFacts, at)
         : await findCurrentChallenge(mode, category.entries, readFacts, at);
       if (!matched) return unverifiedRotation;
@@ -516,7 +515,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       if (image) return image;
     }
     if (mode.id === theaterMode.id) {
-      const theater = await catalog.theaterDetails(entry, result, currentRequested);
+      const theater = await catalog.theaterDetails(entry, result, displayCurrent);
       if (theater) {
         try {
           const { renderTheater } = await import("./role-render.ts");
@@ -545,7 +544,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       if (image) return image;
     }
     if (mode.id === shiyuMode.id) {
-      const shiyu = await catalog.shiyuDetails(entry, result, forecast ? "next" : currentRequested ? "current" : undefined);
+      const shiyu = await catalog.shiyuDetails(entry, result, forecast ? "next" : displayCurrent ? "current" : undefined);
       if (shiyu) {
         try {
           const { renderShiyu } = await import("./role-render.ts");
@@ -557,7 +556,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       }
     }
     if (mode.id === deadlyAssaultMode.id) {
-      const deadlyAssault = await catalog.deadlyAssaultDetails(entry, result, currentRequested);
+      const deadlyAssault = await catalog.deadlyAssaultDetails(entry, result, displayCurrent);
       if (deadlyAssault) {
         try {
           const { renderDeadlyAssault } = await import("./role-render.ts");
