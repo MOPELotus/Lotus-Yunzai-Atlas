@@ -13,6 +13,7 @@ import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./tradit
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
+import { readZzzAliasRegistry, zzzRoleName } from "./zzz-aliases.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
 export { createAtlasCatalog, findBangboos, findSets, findCharacters, findEquipment, findMonsters } from "./catalog.ts";
@@ -260,12 +261,26 @@ async function genshinCardReply(entry: AtlasEntry): Promise<AtlasReply> {
   }
 }
 
+async function localZzzAlias(catalogue: Awaited<ReturnType<typeof catalog.read>>, query: string) {
+  const registry = await readZzzAliasRegistry(Bun.env.LOTUS_ZZZ_LEGACY_RESOURCES_DIR, globalThis.redis).catch(() => undefined);
+  const candidates = registry?.aliases.get(zzzRoleName(query));
+  if (candidates?.length !== 1) return;
+  const alias = candidates[0]!;
+  const entries = findTraditionalEntries(catalogue, alias.role, "zzz", "character");
+  const matches = entries.filter(({ entry }) => !alias.id || entry.id === alias.id);
+  if (matches.length === 1) return matches[0];
+}
+
 async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
   try {
     const result = mode === "weapon" ? await catalog.readForEquipmentShortcut() : await catalog.read();
-    const matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
+    let matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
+    if ((!game || game === "zzz") && mode !== "weapon" && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
+      const alias = await localZzzAlias(result, query);
+      if (alias) matches = [alias];
+    }
     if (mode === "character" && !game && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
       const category = await traditionalAchievementCategory(query, result, game);
@@ -684,7 +699,12 @@ const atlas = {
 
       try {
         const result = await catalog.read();
-        const matches = findCharacters(result, query, game);
+        let matches = findCharacters(result, query, game);
+        if ((!game || game === "zzz") &&
+            findTraditionalEntries(result, query, game, "character").every(({ score }) => score < 2.5)) {
+          const alias = await localZzzAlias(result, query);
+          if (alias) matches = [alias.entry];
+        }
         if (!matches.length) return "未找到匹配的角色。";
         const lines = await Promise.all(matches.slice(0, 8).map((character) => characterLine(character)));
         if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的角色名。");

@@ -5,7 +5,8 @@
   "exports": {
     ".": "./index.ts",
     "./catalog": "./catalog.ts",
-    "./gallery": "./gallery.ts"
+    "./gallery": "./gallery.ts",
+    "./zzz-aliases": "./zzz-aliases.ts"
   },
   "dependencies": {
     "@lotus-yunzai/skia": "workspace:*",
