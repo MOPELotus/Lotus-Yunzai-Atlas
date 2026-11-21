@@ -732,21 +732,22 @@ export async function renderShiyu(shiyu: ShiyuDetails, options: RoleRenderOption
   const period = forecast ? `快照预计 · ${range}`
     : window?.from === "export" ? `导出时间 ${range}（轮换待核对）`
       : range || "起止时间待核对";
-  const blocks = [text(period)];
+  const intro = [text(period)];
   if (effects.length) {
-    blocks.push(heading("环境与全局效果"));
-    for (const effect of effects) blocks.push(heading(effect.name), text(effect.description));
+    intro.push(heading("环境与全局效果"));
+    for (const effect of effects) intro.push(heading(effect.name), text(effect.description));
   }
+  const continuation = [intro];
   for (const line of lines) {
     const effects = line.rooms.length && line.effects.length ? line.effects.join(" / ") : "";
-    blocks.push(heading(line.name), text([line.level ? `Lv${line.level}` : "", line.goals, effects].filter(Boolean).join(" · ")));
+    const blocks = [heading(line.name), text([line.level ? `Lv${line.level}` : "", line.goals, effects].filter(Boolean).join(" · "))];
     if (!line.rooms.length && !line.challenges.length) blocks.push(text("阵容待核对"));
     blocks.push(...zzzRoomBlocks(line.rooms, { heading, text }, images));
+    continuation.push(blocks);
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  return renderAtlasPages([{ section: "挑战图鉴", panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
     "zzz", version, icon, background, options, 152);
-  return page!;
 }
 
 function zzzRoomBlocks(rooms: readonly ZzzChallengeRoom[],

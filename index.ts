@@ -548,8 +548,9 @@ async function challengeQuery(argument: string, at?: number, delivery?: AtlasDel
       if (shiyu) {
         try {
           const { renderShiyu } = await import("./role-render.ts");
-          const { png } = await renderShiyu(shiyu, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
-          return { type: "image", file: png };
+          const pages = await renderShiyu(shiyu, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
+          const reply = detailBook(shiyu.name, pages);
+          if (reply) return reply;
         } catch {
           // The verified challenge summary remains usable without rendering.
         }
