@@ -9,7 +9,11 @@ test("明确的旧图鉴配置沿用两种周期，新部署只启用手动", ()
   const legacy = parseAtlasUpdatePolicy({});
   expect(legacy.version.cron).toBe("0 0 */6 * * *");
   expect(legacy.challenge.cron).toBe("0 15 */2 * * *");
-  expect(legacy.challenge.selections).toEqual(["gi/leyline", "gi/rolecombat", "gi/tower", "hsr/maze_boss", "hsr/maze", "hsr/maze_peak", "hsr/maze_extra", "zzz/boss", "zzz/shiyu"]);
+  expect(legacy.challenge.selections).toEqual([
+    "gi/monster", "gi/leyline", "gi/rolecombat", "gi/tower", "hsr/monster",
+    "hsr/maze_boss", "hsr/maze", "hsr/maze_peak", "hsr/maze_extra", "hsr/monstervalue",
+    "hsr/EliteGroup", "hsr/HardLevelGroup", "hsr/InfiniteEliteGroup", "zzz/monster", "zzz/boss", "zzz/shiyu",
+  ]);
   const disabled = parseAtlasUpdatePolicy({ auto_update: { enable: false } });
   expect(disabled.version.cron).toBeUndefined();
   expect(disabled.challenge.cron).toBeUndefined();
@@ -24,7 +28,7 @@ test("旧 game 和 page 取交集，只选已核实分类，分别保留两个�
     selected_pages: { zzz: ["equipment"] },
   });
   expect(version.selections).toEqual(["gi/artifact", "gi/weapon", "zzz/character", "zzz/bangboo", "zzz/boss"]);
-  expect(challenge.selections).toEqual(["hsr/maze", "zzz/shiyu"]);
+  expect(challenge.selections).toEqual(["hsr/maze", "zzz/monster", "zzz/shiyu"]);
   const noChinese = parseAtlasUpdatePolicy({ update_args: ["--locale", "ja"] });
   expect(noChinese.version.selections).toEqual([]);
   expect(noChinese.version.cron).toBeUndefined();

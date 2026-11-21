@@ -3,7 +3,10 @@ import { object } from "./source-values.ts";
 
 export type AtlasScheduleKind = "version" | "challenge";
 export const atlasExportSelections = legacyAtlasSourcePages.map(({ game, pageId }) => `${game}/${pageId}`);
-const challengePages = new Set(["leyline", "rolecombat", "tower", "maze", "maze_extra", "maze_boss", "maze_peak", "boss", "shiyu"]);
+export const atlasRotationPages: ReadonlySet<string> = new Set([
+  "leyline", "rolecombat", "tower", "maze", "maze_extra", "maze_boss", "maze_peak", "boss", "shiyu",
+]);
+const challengeDependencies = new Set(["monster", "monstervalue", "EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"]);
 
 interface AtlasSchedulePolicy {
   readonly selections: readonly string[];
@@ -128,7 +131,8 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
   }
   return {
     version: policy("version", atlasExportSelections),
-    challenge: policy("challenge", legacyAtlasSourcePages.filter(({ pageId }) => challengePages.has(pageId))
+    challenge: policy("challenge", legacyAtlasSourcePages.filter(({ pageId }) =>
+      atlasRotationPages.has(pageId) || challengeDependencies.has(pageId))
       .map(({ game, pageId }) => `${game}/${pageId}`)),
   };
 }

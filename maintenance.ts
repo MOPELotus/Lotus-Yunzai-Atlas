@@ -7,7 +7,7 @@ import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-point
 import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot } from "./publish-candidate.ts";
 import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.ts";
 import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
-import { validateAtlasCandidate } from "./validate-candidate.ts";
+import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
 import { atlasExportSelections, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
@@ -65,7 +65,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
   const workspace = join(dirname(root), "atlas-download");
   let updating = false;
 
-  async function run(kind: "check" | "update", selections: readonly string[]) {
+  async function run(kind: "check" | "update", selections: readonly string[], scheduledKind?: AtlasScheduleKind) {
     if (signal?.aborted) return "图鉴维护已中止。";
     if (!selections.length) return "图鉴配置未选中已核实的分类。";
     if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
@@ -102,7 +102,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
       lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
 
-      if (channel === "latest" || native.length !== scope.length || selections.length === atlasExportSelections.length ||
+      if (scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || selections.length === atlasExportSelections.length ||
           native.some(({ selection }) => {
             const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
             return entry?.action === "review" && entry.reason === "unproven-upgrade";
@@ -118,15 +118,24 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
           }
         } else if (missing.length) {
           lines.push(`未能核实 ${missing.join("、")} 的目标版本，本次范围未发布。`);
-        } else if (allCurrent) {
+        } else if (allCurrent && scheduledKind !== "challenge") {
           lines.push(`本地所选 ${scope.length} 类版本均为目标版本。`);
         } else {
           try {
-            const { downloadAtlasVersion } = await import("./download-legacy-atlas.ts");
-            const result = await downloadAtlasVersion(workspace, root, versions,
-              (source, pages) => applyAtlasCandidate(root, source, pages, signal, active), signal, request, scope, baseline);
-            lines.push(result.status === "published" ? `所选 ${scope.length} 类已核对并发布至快照 ${result.version}。`
-              : `所选 ${scope.length} 类未发布，${describeRefresh(result, "")}。`);
+            const observed = scheduledKind === "challenge" ? await (await import("./challenge-refresh-plan.ts"))
+              .planAtlasChallengeRefresh(baseline, local.pages, scope, versions, signal, request) : undefined;
+            if (observed?.length === 0) {
+              lines.push("已核对挑战轮换，来源索引与现用资料一致。");
+              return lines.join("\n");
+            }
+            const { downloadAtlasVersion, downloadAtlasVersionFromIndexes } = await import("./download-legacy-atlas.ts");
+            const publish = (source: string, pages: readonly AtlasCandidatePage[]) =>
+              applyAtlasCandidate(root, source, pages, signal, active);
+            const result = observed ? await downloadAtlasVersionFromIndexes(workspace, root, observed, publish, signal, baseline)
+              : await downloadAtlasVersion(workspace, root, versions, publish, signal, request, scope, baseline);
+            const coverage = observed ? `轮换变化 ${observed.length} 类` : `所选 ${scope.length} 类`;
+            lines.push(result.status === "published" ? `${coverage}已核对并发布至快照 ${result.version}。`
+              : `${coverage}未发布，${describeRefresh(result, "")}。`);
           } catch (error) {
             if (signal?.aborted) return "图鉴维护已中止。";
             console.warn("[atlas]", error instanceof Error ? error.message : "图鉴增量更新失败。");
@@ -228,7 +237,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
 
   function scheduled(kind: AtlasScheduleKind) {
     const { cron, issue, selections } = policy[kind];
-    return { cron, issue, run: () => cron ? run("update", selections) : Promise.resolve("图鉴自动更新未启用。") };
+    return { cron, issue, run: () => cron ? run("update", selections, kind) : Promise.resolve("图鉴自动更新未启用。") };
   }
 
   return {

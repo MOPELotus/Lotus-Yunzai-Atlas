@@ -21,8 +21,8 @@ const seedStagingName = /^\.atlas-export-seed-[A-Za-z0-9]{6}$/u;
 export type AtlasExportVersions = Readonly<Partial<Record<Game, string>>>;
 export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
 type ExportPage = Required<AtlasCandidatePage>;
-type VerifiedIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
-type ExportScope = ExportPage & { readonly rows?: VerifiedIndex["rows"] };
+export type AtlasSourceIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
+type ExportScope = ExportPage & { readonly rows?: AtlasSourceIndex["rows"] };
 
 function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly AtlasExportPageSelection[]) {
   let profiles = legacyAtlasSourcePages;
@@ -43,9 +43,9 @@ function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly A
 }
 
 export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
-  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[]): Promise<readonly VerifiedIndex[]> {
+  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[]): Promise<readonly AtlasSourceIndex[]> {
   const selected = selectedExporterPages(versions, scope);
-  const indexes: VerifiedIndex[] = [];
+  const indexes: AtlasSourceIndex[] = [];
   for (let start = 0; start < selected.length; start += 4) {
     const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexPath, indexShape }) => {
       const bytes = await readAtlasSourceBytes(`${atlasSourceOrigin}${indexPath}`, "application/json",
@@ -203,6 +203,27 @@ async function matchesExportIndex(directory: string, map: Record<string, unknown
   return true;
 }
 
+export async function changedAtlasSourceIndexes(directory: string, indexes: readonly AtlasSourceIndex[], signal?: AbortSignal) {
+  const map = object(await Bun.file(await candidateFile(directory, "map.json")).json());
+  const changed: AtlasSourceIndex[] = [];
+  for (const index of indexes) {
+    const { game, pageId, version, rows, recordCount } = index;
+    signal?.throwIfAborted();
+    const gameData = object(object(map.games)[game]);
+    const locale = object(object(gameData.locales).zh);
+    const page = object(object(locale.pages)[pageId]);
+    if (page.version === version) {
+      const missing = Object.keys(object(page.records)).find(id => !rows.has(id));
+      if (missing) throw new Error(`${game}/${pageId} 同版索引缺少现用条目 ${missing}。`);
+      if (page.recordCount === recordCount && await matchesExportIndex(directory, map, { game, pageId, version, recordCount, rows }, signal)) {
+        continue;
+      }
+    }
+    changed.push(index);
+  }
+  return changed;
+}
+
 export async function inspectExporterPages(root: string, signal?: AbortSignal, scope: readonly ExportScope[] = legacyAtlasSourcePages) {
   const data = join(root, "data");
   await verifyExporterOutput(data, signal);
@@ -326,4 +347,11 @@ export function downloadAtlasVersion<T>(path: string, target: string, versions: 
   request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string): Promise<T> {
   return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
     publishedBaseline);
+}
+
+/** Use the same checked source indexes for discovery and for the downloaded candidate. */
+export function downloadAtlasVersionFromIndexes<T>(path: string, target: string, indexes: readonly AtlasSourceIndex[],
+  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
+  publishedBaseline?: string): Promise<T> {
+  return downloadAtlasExport(path, target, async () => indexes, consume, signal, publishedBaseline);
 }
