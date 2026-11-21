@@ -54,3 +54,27 @@ test("快照原图校验失败时拒绝用作下载种子", () => fixture(async 
   expect(await Bun.file(join(backend, "data", "gallery-index.json")).exists()).toBe(false);
   expect(await readFile(join(snapshot, localPath), "utf8")).toBe("broken");
 }));
+
+test("新增七圣留在现用快照，旧导出器种子继续只复用可管理的旧分类", () => fixture(async (snapshot, backend) => {
+  const data = join(snapshot, "data");
+  const mapPath = join(data, "map.json");
+  const map = JSON.parse(await readFile(mapPath, "utf8"));
+  const card = { id: "1101", name: "甘雨", hasDetail: false, path: "items/gcg-1101.json" };
+  map.games.gi.locales.zh.pages.gcg = { id: "gcg", version: "7.2", sampled: false, recordCount: 1,
+    totalRecordCount: 1, records: { [card.id]: card } };
+  const original = JSON.stringify(map);
+  await writeFile(mapPath, original);
+  const details = JSON.stringify({
+    meta: { gameId: "gi", pageId: "gcg", recordId: card.id, version: "7.2", name: card.name, locale: "zh", hasDetail: false },
+    content: { list: { zh: card.name }, detail: null },
+  });
+  await writeFile(join(data, card.path), details);
+
+  await seedExporterFromPublished(data, backend);
+  const inspected = await inspectExporterPages(backend, undefined, scope);
+  expect(inspected.exactScope).toBe(true);
+  expect([...inspected.completed]).toEqual(["gi/monster"]);
+  expect(await Bun.file(join(backend, "data", card.path)).exists()).toBe(false);
+  expect(await readFile(mapPath, "utf8")).toBe(original);
+  expect(await readFile(join(data, card.path), "utf8")).toBe(details);
+}));

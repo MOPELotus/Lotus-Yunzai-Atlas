@@ -11,6 +11,7 @@ import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
 import type { WeaponDetails } from "./weapon-data.ts";
 import type { SetDetails, SetPart } from "./set-data.ts";
+import type { GenshinCardDetails } from "./gcg-data.ts";
 import type { OnslaughtDetails } from "./onslaught-data.ts";
 import type { TheaterDetails } from "./theater-data.ts";
 import type { AbyssDetails } from "./abyss-data.ts";
@@ -524,6 +525,28 @@ export async function renderAchievementCategory(category: AchievementCategory, a
   const { wrap, text } = makeLayout();
   const [page] = await renderAtlasPages([{ section: "成就", panels: [[text("")]], trailingGap: false }],
     wrap(name, 620, 33), game, version, icon, background, options, 152);
+  return page!;
+}
+
+export async function renderGenshinCard(card: GenshinCardDetails, options: RoleRenderOptions = {}) {
+  const sourceBackground = backgrounds.find(([pattern]) => pattern.test(card.tags.join("、")))?.[1] ?? "sr";
+  const [images, background, texture] = await Promise.all([
+    galleryImages("gi", [card.artwork], options.assetRoot),
+    themeImage(`bg/bg-${sourceBackground}.webp`),
+    themeImage("card-bg.png"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, heading, text } = makeLayout(texture);
+  const art = card.artwork ? images.get(card.artwork) : undefined;
+  const meta = [`ID ${card.id}`, card.type, card.hp === undefined ? "" : `生命 ${card.hp}`, card.cost && `费用 ${card.cost}`, ...card.tags].filter(Boolean);
+  const panels: Block[][] = [[text(meta.join(" · "))]];
+  if (card.description) panels[0]!.push(heading("简介"), text(card.description));
+  if (card.source) panels[0]!.push(heading("获得方式"), text(card.source));
+  for (const skill of card.skills) {
+    panels.push([heading(skill.name), ...(skill.cost ? [text(skill.cost)] : []), text(skill.description)]);
+  }
+  const [page] = await renderAtlasPages([{ section: "七圣召唤", panels }], wrap(card.name, 620, 33),
+    "gi", card.version, art, background, options);
   return page!;
 }
 

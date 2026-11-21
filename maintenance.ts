@@ -9,7 +9,7 @@ import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.t
 import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
-import { atlasExportSelections, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { atlasExportSelections, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 
@@ -74,7 +74,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (kind === "update") updating = true;
     try {
       let active = dataOverride ? undefined : await discoverAtlasDataDirectory(root).catch(() => undefined);
-      const baseline = dataOverride ? await realpath(dataOverride).catch(() => undefined) : active?.root;
+      let baseline = dataOverride ? await realpath(dataOverride).catch(() => undefined) : active?.root;
       if (!baseline) {
         if (!dataOverride) {
           const fallback = await discoverRuntimeAtlasDataDirectory(root).catch((error: unknown) => {
@@ -85,13 +85,42 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         return "图鉴数据未初始化或无法验证，请先准备完整快照。";
       }
 
-      const local = await validateAtlasCandidate(baseline, [], signal);
+      let local = await validateAtlasCandidate(baseline, [], signal);
       if (!local.ok) return "图鉴数据未初始化或无法验证，请先准备完整快照。";
       const listing = await manifest(signal).catch(() => undefined);
       if (signal?.aborted) return "图鉴维护已中止。";
       if (!listing) return "图鉴版本清单不可用，保留现有资料。";
+      const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
+      if (selections.includes(atlasGenshinCardSelection)) {
+        const selection = atlasGenshinCardSelection;
+        const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
+        if (entry?.kind === "versioned") {
+          let summary: string;
+          if (entry.action === "review") summary = reviewReasons[entry.reason];
+          else if (entry.action === "current") summary = `已是同一版本 ${entry.targetVersion}`;
+          else if (kind === "check") summary = `${entry.localVersion ?? "未准备"} → ${entry.targetVersion}，可准备候选`;
+          else {
+            try {
+              const result = await refreshAtlasSource(root, { selection, expected: active, signal, request, channel, manifest: async () => listing });
+              summary = describeRefresh(result, entry.targetVersion);
+              if (result.status === "published") {
+                active = { version: result.version, root: result.directory };
+                baseline = result.directory;
+                local = await validateAtlasCandidate(baseline, [], signal);
+                if (!local.ok) return [...lines, `七圣召唤 · ${summary}`, "无法核对更新后的快照，已停止其他更新。"].join("\n");
+              } else if (result.status === "busy" || result.status === "stale") {
+                return [...lines, `七圣召唤 · ${summary}`, "其余待更新分类留待下次检查。"].join("\n");
+              }
+            } catch {
+              summary = signal?.aborted ? "维护已中止" : "更新未完成，保留现有资料";
+            }
+          }
+          lines.push(`七圣召唤 · ${summary}`);
+        }
+      }
       const scope = legacyAtlasSourcePages.filter(({ game, pageId }) => selections.includes(`${game}/${pageId}`));
-      const native = atlasSourceSelections.filter(({ selection }) => selections.includes(selection));
+      if (!scope.length || signal?.aborted) return lines.join("\n");
+      const native = atlasSourceSelections.filter(({ selection }) => selection !== atlasGenshinCardSelection && selections.includes(selection));
       const versions = Object.fromEntries([...new Set(scope.map(({ game }) => game))]
         .map((game) => [game, atlasManifestVersion(listing, game, channel)]));
       const missing = Object.entries(versions).filter(([, version]) => !version).map(([game]) => game);
@@ -99,10 +128,9 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         versions[game] && local.pages.some((page) => page.game === game && page.pageId === pageId && page.version === versions[game]));
       const targetNotes = Object.entries(versions).map(([game, version]) => `${game} ${version ?? "版本未知"}`).join("、");
       const channelLabel = channel === "live" ? "正式版" : "网站最新版";
-      const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
       lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
 
-      if (scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || selections.length === atlasExportSelections.length ||
+      if (scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
           native.some(({ selection }) => {
             const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
             return entry?.action === "review" && entry.reason === "unproven-upgrade";
@@ -221,8 +249,16 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     try {
       const donor = configuredChannel === undefined ? await findLegacyAtlasExport(root) : undefined;
       const result = donor ? await initializeAtlas(root, donor, signal)
-        : await initializeAtlasFromPublic(root, workspace, signal, channel);
-      if (result.status === "published") return `图鉴初始化完成，已发布第 ${result.version} 版。`;
+        : await initializeAtlasFromPublic(root, workspace, signal, channel, { manifest, request });
+      if (result.status === "published") {
+        const initial = `图鉴初始化完成，已发布第 ${result.version} 版。`;
+        if (!donor) return initial;
+        const next = await refreshAtlasSource(root, { selection: atlasGenshinCardSelection, channel, signal, request, manifest,
+          expected: { version: result.version, root: result.directory } }).catch(() => undefined);
+        if (next?.status === "published") return `${initial}七圣召唤已发布至第 ${next.version} 版。`;
+        if (next?.status === "current") return initial;
+        return `${initial}七圣召唤待更新，可发送 ${updateCommand} 重试。`;
+      }
       if (result.status === "stale") return "现用快照已切换，本次候选未发布。";
       if (result.status === "busy") return "已有图鉴发布正在进行，请稍后再试。";
       return "图鉴候选校验未通过，保留现有资料。";

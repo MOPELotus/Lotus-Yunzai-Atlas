@@ -246,6 +246,19 @@ async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
   }
 }
 
+async function genshinCardReply(entry: AtlasEntry): Promise<AtlasReply> {
+  const title = `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
+  const card = await catalog.genshinCardDetails(entry);
+  if (!card) return title;
+  try {
+    const { renderGenshinCard } = await import("./role-render.ts");
+    const { png } = await renderGenshinCard(card, { assetRoot: catalog.assetRoot(entry) });
+    return { type: "image", file: png };
+  } catch {
+    return [title, card.description, ...card.skills.map(({ name, description }) => `${name}：${description}`)].filter(Boolean).join("\n");
+  }
+}
+
 async function traditionalQuery(
   query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
 ): Promise<AtlasReply | undefined> {
@@ -293,6 +306,7 @@ async function traditionalQuery(
       const book = await bangbooBook(first.entry);
       if (book) return book;
     }
+    if (matches.length === 1 && first.kind === "gcg") return genshinCardReply(first.entry);
     if (matches.length === 1 && first.kind === "monster") {
       const reply = await monsterReply(first.entry);
       return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
@@ -311,6 +325,7 @@ async function traditionalQuery(
         case "character": return characterLine(entry, true);
         case "bangboo": return bangbooLine(entry);
         case "monster": return monsterLine(entry);
+        case "gcg": return `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
         case "challenge": return challengeTitle(entry, onslaughtMode);
       }
     }));

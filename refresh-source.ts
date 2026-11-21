@@ -36,6 +36,7 @@ const sourcePages = {
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "原神成就", iconFields: ["icon"] },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "星铁成就", iconFields: [] },
   "gi/artifact": { game: "gi", pageId: "artifact", title: "原神圣遗物", iconFields: itemIcons },
+  "gi/gcg": { game: "gi", pageId: "gcg", title: "七圣召唤", iconFields: itemIcons },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
@@ -151,7 +152,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
       if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
       if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
-      if ((preserveRecords || pageId === "character" || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
+      if ((preserveRecords || pageId === "gcg" || pageId === "character" || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
         issues.push(`${title} ${id} 缺少已有条目。`);
       }
       continue;
@@ -165,6 +166,7 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
     }
     if (pageId === "character" && old.name !== next.name) issues.push(`${title} ${id} 与已有角色身份不符。`);
+    if (pageId === "gcg" && old.name !== next.name) issues.push(`${title} ${id} 与已有卡牌身份不符。`);
     if (game === "zzz" && pageId === "monster" && old.name !== "OfficialName_" && old.name !== next.name) {
       issues.push(`${title} ${id} 与已有敌人身份不符。`);
     }
@@ -194,7 +196,9 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
 export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
   local: Awaited<ReturnType<typeof validateAtlasCandidate>>, channel?: AtlasVersionChannel) {
   const { game, pageId } = sourcePages[selection];
-  if (!local.pages.some((page) => page.game === game && page.pageId === pageId)) local = { ...local, ok: false };
+  if (selection !== "gi/gcg" && !local.pages.some((page) => page.game === game && page.pageId === pageId)) {
+    local = { ...local, ok: false };
+  }
   if (isStarrailRotationPage(pageId)) return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId }, channel);
   return pageId === "boss" || pageId === "shiyu" ? planPublishedChallengeRefresh(listing, local, { game: "zzz", pageId }, channel)
     : planAtlasUpdate(listing, local, [{ game, pageId }], channel);
@@ -216,7 +220,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
   if (options.expected && (options.expected.version !== baseline.version || options.expected.root !== baseline.root)) {
     return { status: "stale", current: baseline.version };
   }
-  const local = await validateAtlasCandidate(baseline.root, scope, signal);
+  const local = await validateAtlasCandidate(baseline.root, selection === "gi/gcg" ? [] : scope, signal);
   if (!local.ok) return { status: "review", reason: "local-unverified" };
 
   const listing = await manifest(signal).catch(() => {

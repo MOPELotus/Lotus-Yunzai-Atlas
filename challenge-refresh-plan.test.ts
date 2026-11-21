@@ -41,6 +41,14 @@ async function fixture(channel: "latest" | "live") {
     }));
     byPath.set(indexPath.replace(`/${previous}/`, `/${version}/`), indexShape === "array" ? [row] : { [id]: row });
   }
+  const gcgEntry = { id: "1101", name: "甘雨", path: "items/gi-gcg.json", hasDetail: false };
+  const gcgVersion = listings.gi[channel];
+  games.gi!.locales.zh.pages.gcg = { id: "gcg", version: gcgVersion, sampled: false,
+    recordCount: 1, totalRecordCount: 1, records: { [gcgEntry.id]: gcgEntry } };
+  await writeFile(join(data, gcgEntry.path), JSON.stringify({
+    meta: { gameId: "gi", pageId: "gcg", version: gcgVersion, locale: "zh", recordId: gcgEntry.id, name: gcgEntry.name, hasDetail: false },
+    content: { list: { zh: gcgEntry.name }, detail: null },
+  }));
   await writeFile(join(data, "map.json"), JSON.stringify({ games }));
   const current = await validateAtlasCandidate(data);
   const versions = Object.fromEntries(Object.entries(listings).map(([game, row]) => [game, row[channel]]));
@@ -61,7 +69,9 @@ test.each(["latest", "live"] as const)("同版挑战在 %s 只核对轮换索引
   try {
     const maintenance = createAtlasMaintenance(run.root, { updateConfig: { version_channel }, manifest: async () => listings, request: run.request });
     expect(maintenance.atlasSchedule.challenge.cron).toBe("0 15 */2 * * *");
-    expect(await maintenance.atlasSchedule.version.run()).toContain("本地所选 29 类版本均为目标版本");
+    const checked = await maintenance.atlasSchedule.version.run();
+    expect(checked).toContain(`七圣召唤 · 已是同一版本 ${listings.gi[version_channel]}`);
+    expect(checked).toContain("本地所选 29 类版本均为目标版本");
     expect(run.calls).toHaveLength(0);
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(await maintenance.atlasSchedule.challenge.run()).toContain("来源索引与现用资料一致");

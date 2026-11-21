@@ -2,7 +2,8 @@ import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { object } from "./source-values.ts";
 
 export type AtlasScheduleKind = "version" | "challenge";
-export const atlasExportSelections = legacyAtlasSourcePages.map(({ game, pageId }) => `${game}/${pageId}`);
+export const atlasGenshinCardSelection = "gi/gcg";
+export const atlasExportSelections = [...legacyAtlasSourcePages.map(({ game, pageId }) => `${game}/${pageId}`), atlasGenshinCardSelection];
 export const atlasRotationPages: ReadonlySet<string> = new Set([
   "leyline", "rolecombat", "tower", "maze", "maze_extra", "maze_boss", "maze_peak", "boss", "shiyu",
 ]);

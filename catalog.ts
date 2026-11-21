@@ -13,6 +13,7 @@ import { normalizeAbyss } from "./abyss-data.ts";
 import { normalizeStarrailChallenge, type StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
+import { genshinCardPage, normalizeGenshinCard } from "./gcg-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
@@ -38,7 +39,7 @@ const setPages = {
 
 const achievementPage = { id: "achievement/achievement", name: "成就" } as const;
 const bangbooPage = { id: "bangboo", name: "邦布" } as const;
-const kinds = ["character", "equipment", "set", "bangboo", "monster", "achievement"] as const;
+const kinds = ["character", "equipment", "set", "bangboo", "monster", "achievement", "gcg"] as const;
 type StandardKind = typeof kinds[number];
 type Kind = StandardKind | "challenge";
 
@@ -49,6 +50,7 @@ function pageFor(game: Game, kind: StandardKind): { id: string; name: string } |
     case "set": return setPages[game];
     case "achievement": return achievementPage;
     case "bangboo": return game === "zzz" ? bangbooPage : undefined;
+    case "gcg": return game === "gi" ? genshinCardPage : undefined;
     case "monster": return { id: "monster", name: "敌人" };
   }
 }
@@ -183,7 +185,10 @@ export function findTraditionalEntries(catalog: Catalog, query: string, game?: G
   if (mode === "equipment") return findMatches(catalog, ["equipment", "set"], query, game, true);
   if (mode === "character") return findMatches(catalog, ["character"], query, game, true);
   const pages = catalog.pages.filter((page) => page.kind !== "challenge" || page.challengeMode?.id === "leyline");
-  return findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"], query, game, mode === "name");
+  const existing = findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"],
+    query, game, mode === "name");
+  const cards = findMatches(catalog, ["gcg"], query, game, mode === "name");
+  return cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
 }
 
 export function findCharacters(catalog: Catalog, query: string, game?: Game): Character[] {
@@ -438,6 +443,11 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       if (character.game !== "zzz") return character.rarity;
       const { rank } = object((await readContent(character, "character")).list);
       return rank === 2 ? "" : zzzRarity(rank);
+    },
+    async genshinCardDetails(entry: AtlasEntry) {
+      if (entry.game !== "gi") return;
+      const item = await readItem(entry, genshinCardPage.id);
+      if (item) return normalizeGenshinCard(entry.id, entry.version, item.content, item.meta.images);
     },
     async roleDetails(character: Character): Promise<RoleDetails | undefined> {
       const item = await readItem(character, "character");

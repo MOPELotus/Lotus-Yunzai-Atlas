@@ -5,7 +5,7 @@ test("明确的旧图鉴配置沿用两种周期，新部署只启用手动", ()
   const unconfigured = parseAtlasUpdatePolicy(undefined);
   expect(unconfigured.version.cron).toBeUndefined();
   expect(unconfigured.challenge.cron).toBeUndefined();
-  expect(unconfigured.version.selections).toHaveLength(29);
+  expect(unconfigured.version.selections).toHaveLength(30);
   const legacy = parseAtlasUpdatePolicy({});
   expect(legacy.version.cron).toBe("0 0 */6 * * *");
   expect(legacy.challenge.cron).toBe("0 15 */2 * * *");

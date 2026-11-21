@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { branchAndBladeIcon, effectText, label, object } from "./source-values.ts";
 import { isStarrailRotationPage, mazeIndexMatches, mazeSourceOutline, starrailSourceRotation } from "./maze-source-data.ts";
 import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
+import { genshinCardIndexIcon, matchesGenshinCardDetail } from "./gcg-data.ts";
 import { readAchievementCategories } from "./achievements.ts";
 import { bossSourceImages, bossSourceIndex } from "./boss-source-data.ts";
 import { shiyuSourceImages, shiyuSourceIndex } from "./shiyu-source-data.ts";
@@ -59,6 +60,7 @@ const pages = {
   "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
   "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
   "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: "星铁成就", timeout: 60_000, maxRecords: 256 },
+  "gi/gcg": { game: "gi", pageId: "gcg", title: "Genius Invokation TCG", folder: "七圣召唤", timeout: 900_000, maxRecords: 1024 },
   "gi/artifact": { game: "gi", pageId: "artifact", title: "Artifact Set", folder: "原神圣遗物", timeout: 360_000, maxRecords: 256 },
   "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
   "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
@@ -205,6 +207,11 @@ function sourceIndex(category: SourcePage, value: unknown) {
     }
     if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
     const name = zh.trim();
+    if (category === "gi/gcg") {
+      const iconName = genshinCardIndexIcon(icon);
+      if (!iconName || (type !== "Character" && type !== "Action")) throw new Error(`七圣召唤来源索引条目结构无效（${id}）。`);
+      return { id, list, name, rarity: "", rank: undefined, iconName };
+    }
     if (category === "zzz/monster") {
       const iconName = zzzMonsterIndexIcon(icon);
       if (!iconName || typeof list.rarity !== "number" || ![1, 2, 3, 4].includes(list.rarity) ||
@@ -395,6 +402,7 @@ function genshinArtifactDetail(item: Record<string, unknown>, id: string, list: 
 function detailMatches(category: SourcePage, detail: unknown, entry: ReturnType<typeof sourceIndex>[number]) {
   const { id, name, rank, iconName, list } = entry;
   const item = object(detail);
+  if (category === "gi/gcg") return matchesGenshinCardDetail(list, item);
   if (category === "gi/artifact") return genshinArtifactDetail(item, id, list);
   const { pageId } = pages[category];
   if (isStarrailRotationPage(pageId)) return Boolean(mazeSourceOutline(pageId, detail, name, id));
@@ -500,6 +508,18 @@ export async function acquireAtlasSource(destination: string, requirements: read
     if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
+    const cardNames = category === "gi/gcg" ? new Map(entries.map(({ id, name }) => [`a${id}`, name])) : undefined;
+    if (cardNames) {
+      for (const [prefix, table] of [["c", "card"], ["k", "keyword"], ["s", "skill"]] as const) {
+        const rows = object(await sourceJson(`${atlasSourceOrigin}/gi/${version}/zh/gcg/${table}.json`,
+          false, active, request, maxLargeIndexBytes));
+        if (!Object.keys(rows).length) throw new Error(`七圣召唤来源缺少 ${table} 引用表。`);
+        for (const [id, value] of Object.entries(rows)) {
+          const name = label(object(value).name);
+          if (/^[1-9]\d{0,9}$/u.test(id) && name) cardNames.set(`${prefix}${id}`, name);
+        }
+      }
+    }
     const images = new Map<string, Awaited<ReturnType<typeof readIcon>>>();
     const loadIcon = async (name: string, paths: readonly string[] = [name]) => {
       if (!images.has(name)) images.set(name, await readIcon(name, paths, category, target, active, request));
@@ -602,8 +622,15 @@ export async function acquireAtlasSource(destination: string, requirements: read
       }
       const path = `${items}/${id}.json`;
       const metadata = { sourceUrl, sourcePath, sourceLocale, localeMode, detailSourceUrl };
+      const referencedNames = cardNames ? Object.fromEntries([...new Set(JSON.stringify(detail).match(/(?<=\$\[)[acks]\d+(?=\])/giu) ?? [])]
+        .flatMap(token => {
+          const key = token.toLowerCase();
+          const name = cardNames.get(key);
+          return name ? [[key, name]] : [];
+        })) : undefined;
       await writeJson(join(data, path), { meta: { ...metadata, gameId: game, pageId, locale,
-        recordId: id, name, version, rarity, hasDetail, images: references }, content: { list, detail: detail ?? null } });
+        recordId: id, name, version, rarity, hasDetail, images: references },
+        content: { list, detail: detail ?? null, ...(referencedNames && { references: referencedNames }) } });
       records[id] = { id, name, rarity, path, hasDetail, detailSourceUrl, imageCount: references.length };
     }
     if (usedPlaceholder) {

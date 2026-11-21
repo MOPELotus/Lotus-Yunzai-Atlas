@@ -1,21 +1,42 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { candidateFile, candidateGallery, copyCandidateFile } from "./candidate-gallery.ts";
+import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
-/** Prepare the already-private exporter tree from one fixed published snapshot. */
+const exporterPages = new Set(legacyAtlasSourcePages.map(({ game, pageId }) => `${game}/${pageId}`));
+
+/** Prepare the already-private exporter tree from the portions of a published snapshot owned by this exporter. */
 export async function seedExporterFromPublished(data: string, backend: string, signal?: AbortSignal) {
   const validation = await validateAtlasCandidate(data, [], signal);
   if (!validation.ok) throw new Error(`现用图鉴无法用作下载种子。${validation.issues[0] ?? ""}`);
   const target = join(backend, "data");
   const snapshotRoot = dirname(data);
   const map = await candidateFile(data, "map.json");
-  await copyCandidateFile(map, join(target, "map.json"));
-  const listing = object(JSON.parse(await readFile(join(target, "map.json"), "utf8")));
+  const listing = object(JSON.parse(await readFile(map, "utf8")));
+  const games = object(listing.games);
+  const pages = validation.pages.filter(({ game, pageId }) => exporterPages.has(`${game}/${pageId}`));
+  if (!pages.length) throw new Error("现用图鉴没有旧导出器支持的分类。");
+  const selectedPages: Record<string, string[]> = {};
+  for (const { game, pageId } of pages) (selectedPages[game] ??= []).push(pageId);
+  for (const [game, value] of Object.entries(games)) {
+    if (!selectedPages[game]) {
+      delete games[game];
+      continue;
+    }
+    const localized = object(object(object(value).locales).zh);
+    const catalog = object(localized.pages);
+    for (const key of Object.keys(catalog)) {
+      if (!selectedPages[game].includes(key)) delete catalog[key];
+    }
+  }
+  listing.meta = { ...object(listing.meta), selectedPages };
+  await mkdir(target, { recursive: true });
+  await writeFile(join(target, "map.json"), JSON.stringify(listing) + "\n", { flag: "wx", signal });
   const gallery = candidateGallery(backend);
   const images = [];
-  for (const { game, pageId } of validation.pages) {
+  for (const { game, pageId } of pages) {
     const gameData = object(object(listing.games)[game]);
     const localized = object(object(gameData.locales).zh);
     const page = object(object(localized.pages)[pageId]);
@@ -36,7 +57,7 @@ export async function seedExporterFromPublished(data: string, backend: string, s
       }
     }
   }
-  const verified = await validateAtlasCandidate(target, validation.pages, signal);
-  if (!verified.ok || verified.pages.length !== validation.pages.length) throw new Error("种子图鉴在准备时发生变化。");
+  const verified = await validateAtlasCandidate(target, pages, signal);
+  if (!verified.ok || verified.pages.length !== pages.length) throw new Error("种子图鉴在准备时发生变化。");
   await writeFile(join(target, "gallery-index.json"), JSON.stringify({ images }) + "\n", { flag: "wx", signal });
 }

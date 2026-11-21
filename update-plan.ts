@@ -12,7 +12,7 @@ const maxManifestBytes = 1024 * 1024;
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 
 const pageIds = {
-  gi: { versioned: ["character", "weapon", "artifact", "achievement/achievement", "monster"],
+  gi: { versioned: ["character", "weapon", "artifact", "achievement/achievement", "monster", "gcg"],
     challenge: ["tower", "rolecombat", "leyline"] },
   hsr: { versioned: ["character", "lightcone", "relicset", "achievement/achievement", "monster", "monstervalue", "EliteGroup", "HardLevelGroup", "InfiniteEliteGroup"],
     challenge: ["maze", "maze_boss", "maze_extra", "maze_peak"] },
@@ -96,7 +96,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
     }
     const requireLive = (game === "zzz" && (pageId === "character" || pageId === "monster" ||
       pageId === "equipment" || pageId === "weapon" || pageId === "achievement/achievement")) ||
-      (game === "hsr" && (pageId === "relicset" || pageId === "monster" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && pageId === "artifact");
+      (game === "hsr" && (pageId === "relicset" || pageId === "monster" || pageId === "monstervalue" || isMonsterGroupPage(pageId))) || (game === "gi" && (pageId === "artifact" || pageId === "gcg"));
     const target = atlasManifestVersion(manifest, game, channel ?? (requireLive ? "live" : "latest"));
     entries.push(planVersionedPage(current, local, target));
   }
