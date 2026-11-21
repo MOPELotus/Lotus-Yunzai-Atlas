@@ -268,7 +268,8 @@ async function localZzzAlias(catalogue: Awaited<ReturnType<typeof catalog.read>>
   const alias = candidates[0]!;
   const entries = findTraditionalEntries(catalogue, alias.role, "zzz", "character");
   const matches = entries.filter(({ entry }) => !alias.id || entry.id === alias.id);
-  if (matches.length === 1) return matches[0];
+  const match = matches[0];
+  if (matches.length === 1 && match) return { ...match, kind: "character" as const };
 }
 
 async function traditionalQuery(
