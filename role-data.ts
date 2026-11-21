@@ -98,10 +98,11 @@ const zenlessButtons: Readonly<Record<string, string>> = {
   Icon_SpecialReady: "强化特殊技", Icon_SpecialReady_Rp: "强化特殊技", Icon_UltimateReady: "终结技",
   Icon_Switch: "切换", Icon_QTE: "快速支援", Icon_Chain: "连携技", Icon_Assist: "支援技", Icon_CoreSkill: "核心技",
 };
-const focusFields = {
-  gi: ["derived.avatarGacha", "detail.derived.avatarGacha", "derived.avatarBust", "detail.derived.avatarBust",
+export const genshinRolePortraitFields = ["derived.avatarGacha", "detail.derived.avatarGacha", "derived.avatarBust", "detail.derived.avatarBust",
     "derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.gacha", "gacha", "detail.bust", "bust",
-    "detail.portrait", "portrait"],
+    "detail.portrait", "portrait"] as const;
+const focusFields = {
+  gi: genshinRolePortraitFields,
   hsr: ["derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.portrait", "portrait"],
   zzz: ["derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.portrait", "portrait", "detail.partner_info.role_icon"],
 } as const;

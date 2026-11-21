@@ -285,7 +285,7 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
 
 async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly ExportScope[]>,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  publishedBaseline?: string): Promise<T> {
+  publishedBaseline?: string, request?: AtlasSourceFetch): Promise<T> {
   signal?.throwIfAborted();
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
@@ -328,6 +328,11 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
         throw new Error("原导出的分类范围与所选图鉴不符。");
       }
     }
+    const roles = scope.find(({ game, pageId, rows }) => game === "gi" && pageId === "character" && rows);
+    if (roles) {
+      const { completeGenshinPortraits } = await import("./genshin-original-portraits.ts");
+      await completeGenshinPortraits(root, roles.version, signal, request);
+    }
     const pages = scope.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
     return await consume(root, pages);
   } finally {
@@ -346,12 +351,12 @@ export function downloadAtlasVersion<T>(path: string, target: string, versions: 
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
   request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string): Promise<T> {
   return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
-    publishedBaseline);
+    publishedBaseline, request);
 }
 
 /** Use the same checked source indexes for discovery and for the downloaded candidate. */
 export function downloadAtlasVersionFromIndexes<T>(path: string, target: string, indexes: readonly AtlasSourceIndex[],
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  publishedBaseline?: string): Promise<T> {
-  return downloadAtlasExport(path, target, async () => indexes, consume, signal, publishedBaseline);
+  publishedBaseline?: string, request?: AtlasSourceFetch): Promise<T> {
+  return downloadAtlasExport(path, target, async () => indexes, consume, signal, publishedBaseline, request);
 }

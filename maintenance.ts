@@ -130,6 +130,39 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       const channelLabel = channel === "live" ? "正式版" : "网站最新版";
       lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
 
+      if (allCurrent && scheduledKind !== "challenge" &&
+          versions.gi && scope.some(({ game, pageId }) => game === "gi" && pageId === "character")) {
+        try {
+          const { genshinOriginalPortraitStatus } = await import("./genshin-original-portraits.ts");
+          const version = versions.gi;
+          const { pending } = await genshinOriginalPortraitStatus(baseline, version, signal);
+          if (kind === "check" && pending.length) {
+            lines.push(`原神角色还有 ${pending.length} 张已核原立绘待补齐。`);
+          } else if (pending.length) {
+            const { changedAtlasSourceIndexes, downloadAtlasVersionFromIndexes, readSelectedExporterIndexes } =
+              await import("./download-legacy-atlas.ts");
+            const indexes = await readSelectedExporterIndexes({ gi: version }, signal, request, [{ game: "gi", pageId: "character" }]);
+            if ((await changedAtlasSourceIndexes(baseline, indexes, signal)).length) {
+              lines.push("原神角色同版索引已变化，本次立绘补齐保留现用快照。");
+              return lines.join("\n");
+            }
+            let recovered = 0;
+            const repaired = await downloadAtlasVersionFromIndexes(workspace, root, indexes, async (source, pages) => {
+              const { ready } = await genshinOriginalPortraitStatus(join(source, "data"), version, signal);
+              recovered = pending.filter((id) => ready.includes(id)).length;
+              if (recovered) return applyAtlasCandidate(root, source, pages, signal, active);
+            }, signal, baseline, request);
+            lines.push(repaired?.status === "published"
+              ? `原神角色已补齐 ${recovered} 张原立绘，发布至快照 ${repaired.version}。`
+              : "同版原神角色未发布可用的新立绘，保留现用快照。");
+            return lines.join("\n");
+          }
+        } catch {
+          lines.push(signal?.aborted ? "图鉴维护已中止。" : "原神角色原立绘补齐未完成，保留现用快照。");
+          return lines.join("\n");
+        }
+      }
+
       if (scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
           native.some(({ selection }) => {
             const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];

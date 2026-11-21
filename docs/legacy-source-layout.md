@@ -113,6 +113,8 @@ bun plugins/atlas/acquire-legacy-achievement-art.ts /path/to/legacy-export /path
 
 原神旅行者按已核角色与形态读取图库，例如 `gs-character/旅行者·荧（水）/`。元素形态可以读取原插件的同一角色通用元素立绘，射击形态保留独立 ID 和图库目录。
 
+原公开导出器将原神头像 `UI_AvatarIcon_` 改为 `UI_Gacha_AvatarImg_` 作为同一条目的备用图。按原索引、详情与独立图片摘要核验后，正式版 7.2 可补米提亚 `10000136` 和瓦列里 `10000137`，网站版 7.2.52 还可补达妮卡 `10000147` 和安娜丝塔夏 `10000149`。正常图鉴更新可补同版仍缺的立绘，取得可用的新图后才发布。四个条目仍沿用当前渠道，图库和已安装原立绘保持优先。奇偶男女的同名规则结果实际是字节相同的双人合图，因此各形态仍用源头像。
+
 ## 装备旧指令和别名
 
 旧版会为武器、光锥和音擎的准确名称生成可省略「图鉴」的捷径。宿主只对相应游戏的唯一装备记录处理裸捷径。武器和光锥的别名分别摘自固定版 Miao-Plugin 的 [原神武器表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-gs/weapon/alias.js) 和 [星铁光锥表](https://github.com/MOPELotus/miao-plugin/blob/2860761836069af80bacee5cb85b6dd2e91ea0b0/resources/meta-sr/weapon/alias.js)，按各自分类中的名称核对。原许可随附于 [LICENSES/Miao-Plugin-MIT.txt](../LICENSES/Miao-Plugin-MIT.txt)。
