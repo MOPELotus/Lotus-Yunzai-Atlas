@@ -1,6 +1,6 @@
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { candidateFile, candidateGallery, copyCandidateFile } from "./candidate-gallery.ts";
+import { candidateFile, candidateGallery, copyCandidateFile, type CandidateImageRecovery } from "./candidate-gallery.ts";
 import type { Game } from "./catalog.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
@@ -95,8 +95,8 @@ function composeMap(baseline: Root, replacement: Root, pages: readonly SelectedP
   return { meta: { source, mode: "merged", locales: ["zh"], selectedPages: Object.fromEntries(selected), requestedVersions }, games };
 }
 
-async function copyPages(pages: readonly SelectedPage[], target: string, signal?: AbortSignal) {
-  const gallery = candidateGallery(target);
+async function copyPages(pages: readonly SelectedPage[], target: string, signal?: AbortSignal, recovery?: CandidateImageRecovery) {
+  const gallery = candidateGallery(target, recovery);
   let detailCount = 0;
   for (const { source, page, payload } of pages) {
     for (const record of Object.values(object(payload.records))) {
@@ -121,12 +121,12 @@ export async function copyAtlasCandidate(source: string, destination: string, sc
 }
 
 export async function copyAtlasSelectedPages(source: string, destination: string, scope: readonly Page[],
-  signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
-  return copyPagesFromAtlas(source, destination, scope, true, undefined, signal);
+  signal?: AbortSignal, recovery?: CandidateImageRecovery): Promise<AtlasAssembledCandidate> {
+  return copyPagesFromAtlas(source, destination, scope, true, undefined, signal, recovery);
 }
 
 async function copyPagesFromAtlas(source: string, destination: string, scope: readonly Page[], subset: boolean,
-  counts: { readonly imageCount: number; readonly detailCount: number } | undefined, signal?: AbortSignal) {
+  counts: { readonly imageCount: number; readonly detailCount: number } | undefined, signal?: AbortSignal, recovery?: CandidateImageRecovery) {
   signal?.throwIfAborted();
   const resolved = resolve(destination);
   const [base, parent] = await Promise.all([realpath(source), realpath(dirname(resolved))]);
@@ -141,7 +141,7 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
-    const { imageCount, detailCount } = await copyPages(pages, target, signal);
+    const { imageCount, detailCount } = await copyPages(pages, target, signal, recovery);
     if (counts && (imageCount !== counts.imageCount || detailCount !== counts.detailCount)) {
       throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
     }
@@ -159,7 +159,7 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
 
 /** Source roots contain data/map.json and optionally gallery/. The destination must not exist. */
 export async function assembleAtlasCandidate(baseline: string, replacement: string, destination: string,
-  scope: readonly AtlasCandidatePage[], signal?: AbortSignal): Promise<AtlasAssembledCandidate> {
+  scope: readonly AtlasCandidatePage[], signal?: AbortSignal, recovery?: CandidateImageRecovery): Promise<AtlasAssembledCandidate> {
   signal?.throwIfAborted();
   if (!scope.length || new Set(scope.map(pageKey)).size !== scope.length) throw new Error("请选择一个或多个不重复的候选分类。");
   const resolved = resolve(destination);
@@ -173,7 +173,7 @@ export async function assembleAtlasCandidate(baseline: string, replacement: stri
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
-    const { imageCount } = await copyPages(pages, target, signal);
+    const { imageCount } = await copyPages(pages, target, signal, recovery);
     const dataDirectory = join(target, "data");
     await writeFile(join(dataDirectory, "map.json"), JSON.stringify(composeMap(existing, updates, pages, scope)) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(dataDirectory, pages.map(({ page }) => page), signal);

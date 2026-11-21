@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, realpath } from "node:fs/promises";
+import { copyFile, lstat, mkdir, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { Game } from "./catalog.ts";
 import { object } from "./source-values.ts";
@@ -40,8 +40,14 @@ export function candidateImageReference(image: Record<string, unknown>, game: Ga
   return { path, sha256 };
 }
 
+export interface CandidateImageRecovery {
+  readonly placeholderSha256: string;
+  read(source: string, game: Game, reference: Readonly<Record<string, unknown>>, path: string,
+    sha256: string, signal?: AbortSignal): Promise<Buffer | undefined>;
+}
+
 /** Check referenced images once per source. When assembling, also copy each verified image once. */
-export function candidateGallery(destination?: string) {
+export function candidateGallery(destination?: string, recovery?: CandidateImageRecovery) {
   const images = new Map<string, { sha256: string; sources: Set<string> }>();
   return {
     get count() { return images.size; },
@@ -49,21 +55,44 @@ export function candidateGallery(destination?: string) {
       const { images: list } = object(object(item).meta);
       for (const row of Array.isArray(list) ? list : []) {
         signal?.throwIfAborted();
-        const asset = candidateImageReference(object(row), game);
+        const reference = object(row);
+        const asset = candidateImageReference(reference, game);
         if (!asset) continue;
+        const expected = asset.sha256 ?? recovery?.placeholderSha256;
         const earlier = images.get(asset.path);
-        if (earlier && asset.sha256 && earlier.sha256 !== asset.sha256) throw new Error(`图库路径冲突：${asset.path}`);
+        if (earlier && expected && earlier.sha256 !== expected) throw new Error(`图库路径冲突：${asset.path}`);
         if (earlier?.sources.has(source)) continue;
-        const imageFile = await candidateFile(source, asset.path);
-        const checksum = await hashCandidateFile(imageFile, signal);
-        if ((asset.sha256 && checksum !== asset.sha256) || (earlier && earlier.sha256 !== checksum)) {
-          throw new Error(`图库文件内容与记录不符：${asset.path}`);
+        let imageFile: string | undefined;
+        let checksum: string;
+        let bytes: Buffer | undefined;
+        try {
+          imageFile = await candidateFile(source, asset.path);
+          checksum = await hashCandidateFile(imageFile, signal);
+          if ((expected && checksum !== expected) || (earlier && earlier.sha256 !== checksum)) {
+            throw new Error(`图库文件内容与记录不符：${asset.path}`);
+          }
+        } catch (error) {
+          signal?.throwIfAborted();
+          if (!recovery || !expected) throw error;
+          if (earlier?.sha256 === expected) {
+            earlier.sources.add(source);
+            continue;
+          }
+          bytes = await recovery.read(source, game, reference, asset.path, expected, signal);
+          if (!bytes) throw error;
+          checksum = createHash("sha256").update(bytes).digest("hex");
+          if (checksum !== expected) throw new Error(`补取的图库文件与原记录不符：${asset.path}`);
         }
         if (earlier) earlier.sources.add(source);
         else {
           if (destination) {
             const output = join(destination, asset.path);
-            await copyCandidateFile(imageFile, output);
+            if (bytes) {
+              await mkdir(dirname(output), { recursive: true });
+              await writeFile(output, bytes, { flag: "wx", signal });
+            } else {
+              await copyCandidateFile(imageFile!, output);
+            }
             if (await hashCandidateFile(output, signal) !== checksum) throw new Error(`复制时图库文件发生变化：${asset.path}`);
           }
           images.set(asset.path, { sha256: checksum, sources: new Set([source]) });

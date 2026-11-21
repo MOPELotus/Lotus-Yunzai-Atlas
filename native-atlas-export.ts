@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { candidateFile, copyCandidateFile } from "./candidate-gallery.ts";
+import { candidateFile, copyCandidateFile, type CandidateImageRecovery } from "./candidate-gallery.ts";
 import { isAtlasSourceWebp, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { atlasSourcePlaceholder } from "./source-acquisition.ts";
 import { object } from "./source-values.ts";
-import { nativeAtlasAssetMetadata, nativeAtlasGameNames, nativeAtlasPageOrigin, readNativeAtlasRecord, type NativeAtlasPage } from "./native-record-export.ts";
+import { nativeAtlasAssetMetadata, nativeAtlasAssetUrl, nativeAtlasGameNames, nativeAtlasPageOrigin, readNativeAtlasRecord, type NativeAtlasPage } from "./native-record-export.ts";
 
 interface NativeAtlasIndex extends NativeAtlasPage {
   readonly recordCount: number;
@@ -23,6 +23,7 @@ interface NativeExportOptions {
 }
 
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
+const maxNativeImageBytes = 12 * 1024 * 1024;
 const recordId = /^[a-z0-9_-]{1,80}$/iu;
 const missingFile = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
@@ -49,6 +50,9 @@ async function digestCache(root: string, url: string, make: () => Promise<Buffer
   valid: (bytes: Buffer) => boolean) {
   const key = sha256(url);
   const base = join(root, key.slice(0, 2), key);
+  const parent = dirname(base);
+  await mkdir(parent, { recursive: true });
+  if (await realpath(parent) !== parent) throw new Error("图鉴缓存目录须为工作区内的实体目录。");
   const expected = (await readFileIfExists(base + ".sha256"))?.toString("utf8");
   if (expected) {
     const bytes = await readFileIfExists(base);
@@ -60,6 +64,32 @@ async function digestCache(root: string, url: string, make: () => Promise<Buffer
   await atomic(base, bytes);
   await atomic(base + ".sha256", sha256(bytes));
   return bytes;
+}
+
+/** Repair a reused file in the candidate only, preserving the previously accepted bytes. */
+export function nativeAtlasImageRecovery(cache: string, sourceRoots: readonly string[],
+  request: AtlasSourceFetch = fetch): CandidateImageRecovery {
+  const placeholder = Buffer.from(atlasSourcePlaceholder);
+  return {
+    placeholderSha256: sha256(placeholder),
+    async read(source, game, reference, path, expected, signal) {
+      if (reference.placeholder === true) return placeholder;
+      const valid = (bytes: Buffer) => isAtlasSourceWebp(bytes) && sha256(bytes) === expected;
+      for (const donor of sourceRoots) {
+        if (donor === source) continue;
+        signal?.throwIfAborted();
+        const file = await candidateFile(donor, path).catch(() => undefined);
+        if (!file || Bun.file(file).size > maxNativeImageBytes) continue;
+        const bytes = await readFile(file);
+        if (valid(bytes)) return bytes;
+      }
+      const remote = reference.remoteUrl ?? reference.url;
+      if (typeof remote !== "string") return;
+      const url = nativeAtlasAssetUrl(game, remote).href;
+      return digestCache(join(cache, "images"), url,
+        () => readAtlasSourceBytes(url, "image/webp", maxNativeImageBytes, true, signal, request, { retry: true }), valid);
+    },
+  };
 }
 
 type SeedImage = { readonly root: string; readonly path: string; readonly sha256: string };
@@ -132,7 +162,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
         pending = (async () => {
           for (const seed of seeds.get(url) ?? []) {
             const file = await candidateFile(seed.root, seed.path).catch(() => undefined);
-            if (!file || Bun.file(file).size > 12 * 1024 * 1024) continue;
+            if (!file || Bun.file(file).size > maxNativeImageBytes) continue;
             const bytes = await readFile(file);
             if (!isAtlasSourceWebp(bytes) || sha256(bytes) !== seed.sha256) continue;
             const meta = nativeAtlasAssetMetadata(game, url, bytes);
@@ -140,7 +170,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
             return meta;
           }
           const bytes = await digestCache(join(cache, "images"), url,
-            () => readAtlasSourceBytes(url, "image/webp", 12 * 1024 * 1024, true, signal, request, { retry: true }),
+            () => readAtlasSourceBytes(url, "image/webp", maxNativeImageBytes, true, signal, request, { retry: true }),
             isAtlasSourceWebp);
           if (!bytes) return;
           const meta = nativeAtlasAssetMetadata(game, url, bytes);

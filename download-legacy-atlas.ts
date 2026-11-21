@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { candidateFile, candidateImageReference, hashCandidateFile } from "./candidate-gallery.ts";
 import type { Game } from "./catalog.ts";
 import { assembleAtlasCandidate, copyAtlasSelectedPages } from "./assemble-candidate.ts";
-import { nativeAtlasExport } from "./native-atlas-export.ts";
+import { nativeAtlasExport, nativeAtlasImageRecovery } from "./native-atlas-export.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
@@ -261,10 +261,11 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       source = join(stage, "original");
       await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal });
     }
+    const recovery = nativeAtlasImageRecovery(cache, sources, request);
     for (const [index, donor] of reusable.entries()) {
       const destination = join(stage, `merge-${index}`);
-      const combined = source ? await assembleAtlasCandidate(source, donor.seed, destination, donor.pages, signal)
-        : await copyAtlasSelectedPages(donor.seed, destination, donor.pages, signal);
+      const combined = source ? await assembleAtlasCandidate(source, donor.seed, destination, donor.pages, signal, recovery)
+        : await copyAtlasSelectedPages(donor.seed, destination, donor.pages, signal, recovery);
       source = combined.directory;
     }
     if (!source) throw new Error("未选中图鉴下载分类。");

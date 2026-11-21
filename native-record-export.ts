@@ -116,14 +116,19 @@ export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, l
     content: { list, detail } };
 }
 
-export function nativeAtlasAssetMetadata(game: Game, url: string, bytes: Buffer): OriginImage {
+export function nativeAtlasAssetUrl(game: Game, url: string) {
   const original = new URL(url);
   const prefix = `/assets/${game}/`;
   if (original.origin !== atlasSourceOrigin || !original.pathname.startsWith(prefix) || original.username ||
       original.password || original.search || original.hash || !original.pathname.endsWith(".webp")) {
     throw new Error("原图地址未指向对应游戏的 Nanoka CDN。");
   }
-  const relative = original.pathname.slice(prefix.length);
+  return original;
+}
+
+export function nativeAtlasAssetMetadata(game: Game, url: string, bytes: Buffer): OriginImage {
+  const original = nativeAtlasAssetUrl(game, url);
+  const relative = original.pathname.slice(`/assets/${game}/`.length);
   return { remoteUrl: original.href, localPath: `gallery/${game}/${relative}`, sha256: createHash("sha256").update(bytes).digest("hex"),
     contentType: "image/webp", bytes: bytes.length };
 }
