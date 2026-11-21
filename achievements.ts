@@ -5,6 +5,9 @@ export interface Achievement {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  readonly priority?: number;
+  readonly points?: number;
+  readonly target?: number;
 }
 
 export interface AchievementCategory {
@@ -12,6 +15,7 @@ export interface AchievementCategory {
   readonly id: string;
   readonly name: string;
   readonly parent?: string;
+  readonly priority?: number;
   readonly version: string;
   readonly sourceUrl: string;
   readonly entries: readonly Achievement[];
@@ -35,13 +39,23 @@ function idOf(value: unknown): string {
   return /^\d+$/u.test(id) ? id : "";
 }
 
-function achievement(value: unknown, sourceId?: string): Achievement {
+function integer(value: unknown): number | undefined {
+  const number = typeof value === "string" && /^\d+$/u.test(value) ? Number(value) : value;
+  if (typeof number === "number" && Number.isSafeInteger(number) && number >= 0) return number;
+}
+
+function achievement(value: unknown, sourceId?: string, game?: Game): Achievement {
   const row = object(value);
   const id = sourceId === undefined ? idOf(row.id) : idOf(sourceId);
   const name = label(row.name);
   if (!id || !name) throw new Error("成就条目的 ID 或名称无效。");
-  return { id, name, description: effectText(row.desc,
-    Array.isArray(row.param_list) ? row.param_list : undefined, true) };
+  const reward = object(row.reward);
+  return {
+    id, name, description: effectText(row.desc, Array.isArray(row.param_list) ? row.param_list : undefined, true),
+    ...(game === "gi" ? {
+      priority: integer(row.priority), points: integer(reward.item_count ?? reward.count), target: integer(row.param),
+    } : {}),
+  };
 }
 
 function readGroups(game: "gi" | "hsr", page: SourcePage): AchievementCategory[] {
@@ -52,7 +66,8 @@ function readGroups(game: "gi" | "hsr", page: SourcePage): AchievementCategory[]
     }
     return {
       game, id, name, version: page.version, sourceUrl: page.sourceUrl,
-      entries: category.list.map((row) => achievement(row)),
+      ...(game === "gi" ? { priority: integer(category.priority) } : {}),
+      entries: category.list.map((row) => achievement(row, undefined, game)),
     };
   });
 }
