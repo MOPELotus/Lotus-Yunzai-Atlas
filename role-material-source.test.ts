@@ -33,7 +33,8 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
       const path = `items/${game}.json`;
       const indexEntry = { id: "1", name: "资料角色", rarity: "A", path, hasDetail: true };
       games[game] = { locales: { zh: { pages: { character: { id: "character", version, sampled: false,
-        recordCount: 1, totalRecordCount: 1, records: { "1": indexEntry } } } } } };
+        recordCount: 1, totalRecordCount: 1, records: { "1": indexEntry },
+        ...(game === "zzz" && { materialItemsVersion: version }) } } } } };
       await Bun.write(join(data, path), JSON.stringify({
         meta: { gameId: game, version, name: indexEntry.name, recordId: "1", pageId: "character",
           locale: "zh", hasDetail: true, images: [] },
@@ -43,6 +44,8 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
     await Bun.write(join(data, "map.json"), JSON.stringify({ games }));
     const paths: string[] = [];
     let starRailAvailable = false;
+    let zzzItemAvailable = false;
+    let zzzIconAvailable = false;
     const request: AtlasSourceFetch = async (url) => {
       const entry = new URL(url);
       expect(entry.origin).toBe("https://static.nanoka.cc");
@@ -50,7 +53,14 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
       for (const { game, version } of scopes) {
         if (entry.pathname !== `/${game}/${version}/zh/item_all.json`) continue;
         if (game === "hsr" && !starRailAvailable) return new Response(null, { status: 404 });
+        if (game === "zzz" && zzzItemAvailable) return Response.json({
+          ...itemTables.zzz as object,
+          "11": { id: 11, name: "绝区零同版补齐材料", icon_path: "IconRecovered.png" },
+        });
         return Response.json(itemTables[game]);
+      }
+      if (entry.pathname === "/assets/zzz/IconRecovered.webp") {
+        return zzzIconAvailable ? new Response(webp) : new Response(null, { status: 404 });
       }
       if (entry.pathname === "/assets/gi/UI_ItemIcon_Genuine.webp" ||
           entry.pathname === "/assets/hsr/itemfigures/Original.webp" || entry.pathname === "/assets/zzz/IconCoin.webp") {
@@ -63,12 +73,23 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
     const otherGames = selected.filter(page => page.game !== "hsr");
     expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual(otherGames);
     expect(paths).toHaveLength(5);
-    expect(await pendingAtlasRoleMaterials(data, selected)).toEqual([starRail]);
+    const zzz = selected.find(page => page.game === "zzz")!;
+    expect(await pendingAtlasRoleMaterials(data, selected)).toEqual([starRail, zzz]);
     starRailAvailable = true;
     expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([starRail]);
-    expect(paths).toHaveLength(7);
+    expect(paths).toHaveLength(8);
+    zzzItemAvailable = true;
+    expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([zzz]);
+    const partial = await Bun.file(join(data, "items/zzz.json")).text();
+    expect(await pendingAtlasRoleMaterials(data, selected)).toEqual([zzz]);
     expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([]);
-    expect(paths).toHaveLength(7);
+    expect(await Bun.file(join(data, "items/zzz.json")).text()).toBe(partial);
+    zzzIconAvailable = true;
+    expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([zzz]);
+    expect(await pendingAtlasRoleMaterials(data, selected)).toEqual([]);
+    const requestCount = paths.length;
+    expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([]);
+    expect(paths).toHaveLength(requestCount);
     const catalog = createAtlasCatalog(data);
     const { pages } = await catalog.read();
     expect(pages).toHaveLength(3);
@@ -81,7 +102,7 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
       expect(await Bun.file(join(root, item!.artwork!)).exists()).toBeTrue();
       if (page.game === "zzz") {
         expect((await catalog.roleDetails(page.entries[0]!))?.materials[0]?.items[1])
-          .toEqual({ id: "11", name: undefined, count: 2, artwork: undefined });
+          .toEqual({ id: "11", name: "绝区零同版补齐材料", count: 2, artwork: "gallery/zzz/materials/IconRecovered.webp" });
       }
     }
   } finally {

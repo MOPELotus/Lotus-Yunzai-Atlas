@@ -81,7 +81,7 @@ async function readRoleMaterials(data: string, path: unknown, recordId: string, 
   if (metadata.recordId !== recordId || metadata.gameId !== game || metadata.version !== version || metadata.pageId !== "character") {
     throw new Error(`图鉴角色材料记录身份不符（${game}/${recordId}）。`);
   }
-  const items = roleMaterialGroups(game, object(object(role.content).detail), metadata.images)
+  const items = roleMaterialGroups(game, object(object(role.content).detail), metadata.images, metadata.materialNames)
     .flatMap(({ items }) => items).filter((item) => item.id && itemId.test(item.id));
   return { file, raw, items };
 }
@@ -94,10 +94,11 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
     const { game, pageId, version } = page;
     if (pageId !== "character" || !version) continue;
     const source = characterPage(map, game);
-    if (source.version !== version || source.materialItemsVersion === version) continue;
+    if (source.version !== version) continue;
     for (const [recordId, record] of Object.entries(object(source.records))) {
       signal?.throwIfAborted();
-      if ((await readRoleMaterials(data, object(record).path, recordId, game, version)).items.length) {
+      const { items } = await readRoleMaterials(data, object(record).path, recordId, game, version);
+      if (items.some(item => !item.name || !item.artwork)) {
         pending.push(page);
         break;
       }
@@ -110,11 +111,9 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
 export async function completeAtlasRoleMaterials(root: string, scope: readonly AtlasCandidatePage[],
   signal?: AbortSignal, request: AtlasSourceFetch = fetch) {
   const data = join(root, "data");
-  const mapFile = await candidateFile(data, "map.json");
+  const map = await Bun.file(await candidateFile(data, "map.json")).json();
   const pending = await pendingAtlasRoleMaterials(data, scope, signal);
   if (!pending.length) return [];
-  const rawMap = await Bun.file(mapFile).text();
-  const map = JSON.parse(rawMap);
   const updated: AtlasCandidatePage[] = [];
   for (const { game, version } of pending) {
     try {
@@ -126,7 +125,6 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
       console.warn(`[atlas] ${game}/character 材料来源暂不可用：${error instanceof Error ? error.message : "读取失败。"}`);
     }
   }
-  if (updated.length) await writeAtomic(mapFile, JSON.stringify(map, null, 2) + "\n", signal);
   return updated;
 }
 
@@ -169,11 +167,10 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
     const failure = results.find((result) => result.status === "rejected");
     if (failure) throw failure.reason;
   }
+  let changed = false;
   for (const { file, raw, items } of roles) {
-    const record = evidenceObject(parseLegacyJsonEvidence(raw));
-    const meta = evidenceObject(record.meta!);
-    const names = Object.fromEntries(items.flatMap(({ id }) => {
-      const name = sources.get(id!)?.name;
+    const names = Object.fromEntries(items.flatMap(({ id, name: existing }) => {
+      const name = existing ? undefined : sources.get(id!)?.name;
       return name ? [[id!, name]] : [];
     }));
     const missing = new Set(items.flatMap(({ id, artwork }) => artwork ? [] : [id!]));
@@ -181,12 +178,15 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
       const icon = icons.get(id);
       return icon ? [{ ...icon, fieldPath: `derived.material.${id}` }] : [];
     });
+    if (!Object.keys(names).length && !images.length) continue;
+    const record = evidenceObject(parseLegacyJsonEvidence(raw));
+    const meta = evidenceObject(record.meta!);
     const additions = evidenceObject(parseLegacyJsonEvidence(JSON.stringify({ materialNames: names, images })));
     const next = { ...record, meta: { ...meta, materialNames: { ...evidenceObject(meta.materialNames ?? null),
       ...evidenceObject(additions.materialNames!) },
       images: [...Array.isArray(meta.images) ? meta.images : [], ...Array.isArray(additions.images) ? additions.images : []] } };
     await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
+    changed = true;
   }
-  rolePage.materialItemsVersion = version;
-  return true;
+  return changed;
 }
