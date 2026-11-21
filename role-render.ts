@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderPng } from "@lotus-yunzai/skia";
+import { ImageSizeLimitError, renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
 import { zzzCharacterGalleryRoot } from "./gallery.ts";
@@ -28,6 +28,7 @@ export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
   readonly scale?: number;
   readonly assetRoot?: string;
+  readonly inlineImageByteLimit?: number;
   readonly galleryName?: string | readonly string[];
 }
 
@@ -37,7 +38,6 @@ const inner = width - 2 * margin;
 const contentWidth = inner - 40;
 const header = 184;
 const footer = 62;
-const maxDimension = 24_000;
 const maxImageBytes = 8 * 1024 * 1024;
 const font = '"MiaoWiki", MiSans, "Noto Sans CJK SC", sans-serif';
 const gold = "#d3bc8e";
@@ -91,7 +91,7 @@ function themeImage(asset: ThemeAsset): Promise<Image | undefined> {
 }
 
 type Block = { readonly height: number; paint(ctx: Context, top: number): void };
-type Page = { section: string; panels: Block[][]; trailingGap?: false };
+type Page = { section: string; panels: Block[][]; trailingGap?: false; continuation?: Block[][] };
 
 function rounded(ctx: Context, x: number, y: number, w: number, h: number, radius: number, fill: string) {
   ctx.fillStyle = fill;
@@ -491,7 +491,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
   ]) });
 
-  return renderAtlasPages(pages, title, role.game, role.version, icon, background, options);
+  return renderAtlasPages(pages, title, role.game, role.version, icon, background, options, undefined, true);
 }
 
 export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOptions = {}) {
@@ -679,28 +679,30 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
   const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
-  const blocks = [text(period)];
+  const intro = [text(period)];
   if (effects.length || rooms.every(({ description }) => !description)) {
-    blocks.push(heading("环境与全局效果"));
-    if (!effects.length) blocks.push(text("增益说明待核对"));
+    intro.push(heading("环境与全局效果"));
+    if (!effects.length) intro.push(text("增益说明待核对"));
     for (const effect of effects) {
-      if (effect.name) blocks.push(heading(effect.name));
-      blocks.push(text(effect.description || "增益说明待核对"));
+      if (effect.name) intro.push(heading(effect.name));
+      intro.push(text(effect.description || "增益说明待核对"));
     }
   }
-  const addOptional = (buffs: typeof optional) => {
+  const addOptional = (blocks: Block[], buffs: typeof optional) => {
     if (!buffs.length) return;
     blocks.push(heading("可选增益"));
     for (const buff of buffs) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));
   };
-  addOptional(optional);
+  addOptional(intro, optional);
+  const continuation = [intro];
   for (const room of rooms) {
+    const blocks: Block[] = [];
     const weaknesses = room.sides.flatMap((side) => side.weaknesses.length
       ? [`${side.name === "星启模式" || side.name === "敌人" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
     blocks.push(heading(room.name));
     if (weaknesses.length || room.goals.length) blocks.push(text([...weaknesses, ...room.goals].join(" · ")));
     if (room.description) blocks.push(text(room.description));
-    if (room.optional) addOptional(room.optional);
+    if (room.optional) addOptional(blocks, room.optional);
     for (const side of room.sides) {
       blocks.push(heading(side.name));
       if (!side.enemies.length) blocks.push(text("阵容待核对"));
@@ -710,11 +712,11 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
         if (enemy.description) blocks.push(text(enemy.description));
       }
     }
+    continuation.push(blocks);
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  return renderAtlasPages([{ section: "挑战图鉴", panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
     "hsr", version, icon, background, options, 152);
-  return page!;
 }
 
 export async function renderShiyu(shiyu: ShiyuDetails, options: RoleRenderOptions = {}) {
@@ -862,17 +864,14 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
 }
 
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
-  background: Image | undefined, { mode = "auto", scale = 4 }: RoleRenderOptions, titleX = icon ? 152 : margin + 20) {
+  background: Image | undefined, { mode = "auto", scale = 4, inlineImageByteLimit }: RoleRenderOptions, titleX = icon ? 152 : margin + 20,
+  allowPanelContinuation = false) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const game = gameNames[gameId];
   const head = Math.max(header, 118 + title.length * 39);
-  const output = [];
-  for (const [index, { section, panels, trailingGap }] of pages.entries()) {
+  const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
     const { heights, height } = measurePage(head, panels, trailingGap !== false);
-    if (height > maxDimension) throw new RangeError(`图鉴「${section}」超出可渲染高度。`);
-    const zoom = Math.min(scale, maxDimension / height);
-    const { png, engine } = await renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
-      ctx.scale(zoom, zoom);
+    const paint = (ctx: Context) => {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.fillStyle = "#252c40";
@@ -894,7 +893,6 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
         ctx.stroke();
       }
       paintLines(ctx, title, titleX, 30, 33, 39, white);
-      const page = `${index + 1}/${pages.length}`;
       paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
       paintLines(ctx, [version ? `资料版本 ${version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
 
@@ -915,8 +913,56 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
         y += 16;
       }
       paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, muted);
-    }, mode);
-    output.push({ section, png, engine });
+    };
+    return renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
+      ctx.scale(zoom, zoom);
+      paint(ctx);
+    }, mode, { allowHalfScale });
+  };
+  const fits = (image: { readonly png: Uint8Array }) =>
+    inlineImageByteLimit === undefined || image.png.byteLength <= inlineImageByteLimit;
+  const renderWithinCodec = (...args: Parameters<typeof renderPage>) => renderPage(...args).catch(error => {
+    if (error instanceof ImageSizeLimitError) return error;
+    throw error;
+  });
+  const output = [];
+  for (const [index, layout] of pages.entries()) {
+    const { section, continuation } = layout;
+    const pageNumber = `${index + 1}/${pages.length}`;
+    let image = await renderWithinCodec(layout, section, pageNumber, scale, scale === 4);
+    if (!(image instanceof ImageSizeLimitError) && !fits(image) && scale === 4 && image.reducedScaleReason === undefined) {
+      const smaller = await renderWithinCodec(layout, section, pageNumber, 2);
+      image = smaller instanceof ImageSizeLimitError ? smaller :
+        { ...smaller, reducedScaleReason: "四倍图超过当前聊天的单图大小上限。" };
+    }
+    if (!(image instanceof ImageSizeLimitError) && fits(image)) {
+      output.push({ section, ...image });
+      continue;
+    }
+    const groups = continuation ?? (allowPanelContinuation ? layout.panels : []);
+    const sizeError = new RangeError(`图鉴「${section}」超过当前聊天的单图大小上限。`);
+    const failure = image instanceof ImageSizeLimitError ? image : sizeError;
+    if (scale !== 4 || groups.length < 2) throw failure;
+    // Keep each room or section intact. Split only after 2× exceeds the codec or chat limit.
+    const renderContinuation = async (start: number, end: number): Promise<void> => {
+      const selected = groups.slice(start, end);
+      const range = end === start + 1 ? String(end) : `${start + 1}–${end}`;
+      const part = `${range}/${groups.length}`;
+      const partSection = `${section}（${part}）`;
+      const panels = continuation ? [selected.flat()] : selected;
+      const next = await renderWithinCodec({ ...layout, panels }, section, `${pageNumber} · 原分项 ${part}`, 2);
+      if (!(next instanceof ImageSizeLimitError) && fits(next)) {
+        output.push({ section: partSection, ...next, reducedScaleReason: `二倍整图超限，按原分项续页。${failure.message}` });
+        return;
+      }
+      if (end - start < 2) throw next instanceof ImageSizeLimitError ? next : sizeError;
+      const middle = start + Math.ceil((end - start) / 2);
+      await renderContinuation(start, middle);
+      await renderContinuation(middle, end);
+    };
+    const middle = Math.ceil(groups.length / 2);
+    await renderContinuation(0, middle);
+    await renderContinuation(middle, groups.length);
   }
   return output;
 }

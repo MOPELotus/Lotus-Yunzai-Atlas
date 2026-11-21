@@ -76,14 +76,17 @@ test("V3 图鉴路由把裸全名、日期和下期交给对应的公共查询�
   const target = globalThis as typeof globalThis & { plugin?: unknown };
   const prior = Object.getOwnPropertyDescriptor(target, "plugin");
   const calls: unknown[][] = [];
+  const byteLimits: (number | undefined)[] = [];
   try {
     Object.defineProperty(target, "plugin", { value: class {}, configurable: true });
     const { AtlasTraditionalCommands: Atlas } = traditionalAtlasApps(
-      async (query, kind, game) => {
+      async (query, kind, game, delivery) => {
+        byteLimits.push(delivery?.inlineImageByteLimit);
         calls.push([query, kind, game]);
         return "名称资料";
       },
-      async (mode, period, at) => {
+      async (mode, period, at, delivery) => {
+        byteLimits.push(delivery?.inlineImageByteLimit);
         calls.push([mode.id, period, at]);
         return "挑战资料";
       },
@@ -111,6 +114,10 @@ test("V3 图鉴路由把裸全名、日期和下期交给对应的公共查询�
     await command("#2026年2月29日本期深渊");
     expect(replies.at(-1)).toBe("日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。");
     expect(calls).toHaveLength(14);
+    expect(byteLimits).toEqual(Array(14).fill(undefined));
+    await app.lookup({ msg: "#芙宁娜", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
+    await app.lookup({ msg: "#2026年11月16日本期深渊", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
+    expect(byteLimits.slice(-2)).toEqual([16 * 1024 * 1024, 16 * 1024 * 1024]);
   } finally {
     if (prior) Object.defineProperty(target, "plugin", prior);
     else Reflect.deleteProperty(target, "plugin");

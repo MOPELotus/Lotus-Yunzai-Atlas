@@ -9,7 +9,7 @@ import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
-import { traditionalAtlasApps, type AtlasImage, type AtlasReply } from "./traditional.ts";
+import { traditionalAtlasApps, type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
@@ -60,7 +60,7 @@ async function bangbooLine(item: AtlasEntry): Promise<string> {
   return ["绝区零", "邦布", item.name, await catalog.bangbooRarity(item) || "等级待核对", `ID ${item.id}`].join(" · ");
 }
 
-async function equipmentQuery(argument: string, command: string, fixedGame?: Game): Promise<string | AtlasImage> {
+async function equipmentQuery(argument: string, command: string, fixedGame?: Game, delivery?: AtlasDelivery): Promise<string | AtlasImage> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
   if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的装备。`;
   if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}名称或 ID`;
@@ -69,7 +69,7 @@ async function equipmentQuery(argument: string, command: string, fixedGame?: Gam
     const matches = findEquipment(result, query, game);
     if (!matches.length) return "未找到匹配的武器、光锥或音擎。";
     if (matches.length === 1) {
-      const image = await weaponCard(matches[0]!);
+      const image = await weaponCard(matches[0]!, delivery);
       if (image) return image;
     }
     const lines = await Promise.all(matches.slice(0, 8).map(equipmentLine));
@@ -81,7 +81,7 @@ async function equipmentQuery(argument: string, command: string, fixedGame?: Gam
   }
 }
 
-async function setsQuery(argument: string, command: string, fixedGame?: Game): Promise<AtlasReply> {
+async function setsQuery(argument: string, command: string, fixedGame?: Game, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
   if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的套装。`;
   if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}套装名或 ID`;
@@ -90,7 +90,7 @@ async function setsQuery(argument: string, command: string, fixedGame?: Game): P
     const matches = findSets(result, query, game);
     if (!matches.length) return "未找到匹配的套装。";
     if (matches.length === 1) {
-      const book = await setBook(matches[0]!);
+      const book = await setBook(matches[0]!, delivery);
       if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, 8).map((item) => setLines(item, matches.length === 1)));
@@ -102,7 +102,7 @@ async function setsQuery(argument: string, command: string, fixedGame?: Game): P
   }
 }
 
-async function bangbooQuery(argument: string): Promise<AtlasReply> {
+async function bangbooQuery(argument: string, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { query, mismatched } = searchTerms(argument, "zzz");
   if (mismatched) return "#邦布图鉴用于查询绝区零的邦布。";
   if (!query) return "用法：#邦布图鉴 名称或 ID";
@@ -111,7 +111,7 @@ async function bangbooQuery(argument: string): Promise<AtlasReply> {
     const matches = findBangboos(result, query);
     if (!matches.length) return "未找到匹配的邦布。";
     if (matches.length === 1) {
-      const book = await bangbooBook(matches[0]!);
+      const book = await bangbooBook(matches[0]!, delivery);
       if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, 8).map(bangbooLine));
@@ -123,13 +123,13 @@ async function bangbooQuery(argument: string): Promise<AtlasReply> {
   }
 }
 
-async function characterBook(entry: AtlasEntry, roster: readonly AtlasEntry[]): Promise<AtlasReply> {
+async function characterBook(entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
   if (!role) return characterLine(entry, true);
   try {
     const { renderRoleBook } = await import("./role-render.ts");
     const galleryName = characterGalleryName(entry, roster, role.overview.name);
-    const pages = await renderRoleBook(role, { assetRoot: catalog.assetRoot(entry), galleryName });
+    const pages = await renderRoleBook(role, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName });
     const sections = pages.map(({ section }) => section).join(" → ");
     const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
     return { type: "forward", nodes: [title, ...pages.map(({ png }) => ({ type: "image" as const, file: png }))] };
@@ -138,24 +138,24 @@ async function characterBook(entry: AtlasEntry, roster: readonly AtlasEntry[]): 
   }
 }
 
-async function weaponCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
+async function weaponCard(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasImage | undefined> {
   const details = await catalog.weaponDetails(entry);
   if (!details) return;
   try {
     const { renderWeapon } = await import("./role-render.ts");
-    const { png } = await renderWeapon(details, { assetRoot: catalog.assetRoot(entry) });
+    const { png } = await renderWeapon(details, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return undefined;
   }
 }
 
-async function setBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
+async function setBook(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasReply | undefined> {
   const set = await catalog.setDetails(entry);
   if (!set) return;
   try {
     const { renderSet } = await import("./role-render.ts");
-    return detailBook(set.name, await renderSet(set, { assetRoot: catalog.assetRoot(entry) }));
+    return detailBook(set.name, await renderSet(set, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) }));
   } catch {
     return undefined;
   }
@@ -168,12 +168,12 @@ function detailBook(name: string, pages: readonly { section: string; png: Uint8A
   return { type: "forward", nodes: [`${name}完整图鉴\n${sections}\n共 ${pages.length} 页`, ...images] };
 }
 
-async function bangbooBook(entry: AtlasEntry): Promise<AtlasReply | undefined> {
+async function bangbooBook(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasReply | undefined> {
   const bangboo = await catalog.bangbooDetails(entry);
   if (!bangboo) return;
   try {
     const { renderBangboo } = await import("./role-render.ts");
-    return detailBook(bangboo.name, await renderBangboo(bangboo, { assetRoot: catalog.assetRoot(entry) }));
+    return detailBook(bangboo.name, await renderBangboo(bangboo, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) }));
   } catch {
     return undefined;
   }
@@ -209,12 +209,12 @@ async function challengeDetails(entry: AtlasEntry, mode: ChallengeMode, current:
   return lines;
 }
 
-async function onslaughtCard(entry: AtlasEntry): Promise<AtlasImage | undefined> {
+async function onslaughtCard(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasImage | undefined> {
   const onslaught = await catalog.onslaughtDetails(entry);
   if (!onslaught) return;
   try {
     const { renderOnslaught } = await import("./role-render.ts");
-    const { png } = await renderOnslaught(onslaught, { assetRoot: catalog.assetRoot(entry) });
+    const { png } = await renderOnslaught(onslaught, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return undefined;
@@ -222,39 +222,39 @@ async function onslaughtCard(entry: AtlasEntry): Promise<AtlasImage | undefined>
 }
 
 async function starrailChallengeCard(entry: AtlasEntry, result: Awaited<ReturnType<typeof catalog.read>>,
-  mode: StarrailChallengeMode, period?: "current" | "next"): Promise<AtlasImage | undefined> {
+  mode: StarrailChallengeMode, period?: "current" | "next", delivery?: AtlasDelivery): Promise<AtlasReply | undefined> {
   const challenge = await catalog.starrailChallengeDetails(entry, result, mode, period === "current");
   if (!challenge) return;
   try {
     const { renderStarrailChallenge } = await import("./role-render.ts");
     const card = period === "next" ? { ...challenge, name: `下期${challenge.name}（预览）` } : challenge;
-    const { png } = await renderStarrailChallenge(card, { assetRoot: catalog.assetRoot(entry) });
-    return { type: "image", file: png };
+    const pages = await renderStarrailChallenge(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
+    return detailBook(card.name, pages);
   } catch {
     return undefined;
   }
 }
 
-async function monsterReply(entry: AtlasEntry): Promise<string | AtlasImage> {
+async function monsterReply(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<string | AtlasImage> {
   const title = monsterLine(entry);
   const monster = await catalog.monsterDetails(entry);
   if (!monster) return `${title}\n当前快照缺少已核对的敌人简介。`;
   try {
     const { renderMonster } = await import("./role-render.ts");
-    const { png } = await renderMonster(monster, { assetRoot: catalog.assetRoot(entry) });
+    const { png } = await renderMonster(monster, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return `${title}\n${monster.description}`;
   }
 }
 
-async function genshinCardReply(entry: AtlasEntry): Promise<AtlasReply> {
+async function genshinCardReply(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const title = `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
   const card = await catalog.genshinCardDetails(entry);
   if (!card) return title;
   try {
     const { renderGenshinCard } = await import("./role-render.ts");
-    const { png } = await renderGenshinCard(card, { assetRoot: catalog.assetRoot(entry) });
+    const { png } = await renderGenshinCard(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return [title, card.description, ...card.skills.map(({ name, description }) => `${name}：${description}`)].filter(Boolean).join("\n");
@@ -273,7 +273,7 @@ async function localZzzAlias(catalogue: Awaited<ReturnType<typeof catalog.read>>
 }
 
 async function traditionalQuery(
-  query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search",
+  query: string, game?: Game, mode: TraditionalLookup | "shortcut" = "search", delivery?: AtlasDelivery,
 ): Promise<AtlasReply | undefined> {
   try {
     const quickLookup = mode === "bare" || mode === "weapon";
@@ -285,7 +285,7 @@ async function traditionalQuery(
     }
     if (mode === "character" && !game && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
-      const category = await traditionalAchievementCategory(query, result, game);
+      const category = await traditionalAchievementCategory(query, result, game, delivery);
       if (category) return category;
     }
     if (!matches.length && mode === "shortcut" && game === "hsr") {
@@ -296,7 +296,7 @@ async function traditionalQuery(
         ...named.map(({ name, id }) => `${name} · ID ${id}`)].join("\n");
       const [entry] = named;
       if (entry) {
-        const image = await starrailChallengeCard(entry, result, arbitrationMode);
+        const image = await starrailChallengeCard(entry, result, arbitrationMode, undefined, delivery);
         if (image) return image;
         return (await challengeDetails(entry, arbitrationMode, false)).join("\n");
       }
@@ -305,32 +305,32 @@ async function traditionalQuery(
     const first = matches[0]!;
     if (quickLookup && first.kind === "equipment") {
       if (matches.length !== 1) return;
-      return await weaponCard(first.entry) ?? equipmentLine(first.entry);
+      return await weaponCard(first.entry, delivery) ?? equipmentLine(first.entry);
     }
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
-      return characterBook(entry, roster);
+      return characterBook(entry, roster, delivery);
     }
     if (matches.length === 1 && first.kind === "equipment") {
-      const image = await weaponCard(first.entry);
+      const image = await weaponCard(first.entry, delivery);
       if (image) return image;
     }
     if (matches.length === 1 && first.kind === "set") {
-      const book = await setBook(first.entry);
+      const book = await setBook(first.entry, delivery);
       if (book) return book;
     }
     if (matches.length === 1 && first.kind === "bangboo") {
-      const book = await bangbooBook(first.entry);
+      const book = await bangbooBook(first.entry, delivery);
       if (book) return book;
     }
-    if (matches.length === 1 && first.kind === "gcg") return genshinCardReply(first.entry);
+    if (matches.length === 1 && first.kind === "gcg") return genshinCardReply(first.entry, delivery);
     if (matches.length === 1 && first.kind === "monster") {
-      const reply = await monsterReply(first.entry);
+      const reply = await monsterReply(first.entry, delivery);
       return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
     }
     if (matches.length === 1 && first.kind === "challenge") {
-      const image = await onslaughtCard(first.entry);
+      const image = await onslaughtCard(first.entry, delivery);
       if (image) return image;
       const lines = await challengeDetails(first.entry, onslaughtMode, false);
       if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
@@ -359,7 +359,7 @@ function achievementCategoryLabel(category: AchievementCategory): string {
   return [gameNames[category.game], category.parent, category.name].filter(Boolean).join(" · ");
 }
 
-async function traditionalAchievementCategory(query: string, result: Awaited<ReturnType<typeof catalog.read>>, game?: Game) {
+async function traditionalAchievementCategory(query: string, result: Awaited<ReturnType<typeof catalog.read>>, game?: Game, delivery?: AtlasDelivery) {
   const key = compareKey(query);
   if (!key) return;
   const categories = result.pages.flatMap((page) => page.achievementCategories ?? []);
@@ -374,7 +374,7 @@ async function traditionalAchievementCategory(query: string, result: Awaited<Ret
     try {
       const { renderAchievementCategory } = await import("./role-render.ts");
       const artwork = await catalog.achievementCategoryArtwork(source);
-      const { png } = await renderAchievementCategory(category, artwork, { assetRoot: catalog.assetRoot(source) });
+      const { png } = await renderAchievementCategory(category, artwork, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(source) });
       return { type: "image" as const, file: png };
     } catch {
       // The category stays available as text if the card renderer is unavailable.
@@ -436,7 +436,7 @@ async function achievementCategoryQuery(argument: string): Promise<string> {
   }
 }
 
-async function challengeQuery(argument: string, at?: number): Promise<string | AtlasImage> {
+async function challengeQuery(argument: string, at?: number, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { game, query } = searchTerms(argument);
   if (!game) return "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]";
   const [modeName = "", ...terms] = query.split(/\s+/u);
@@ -511,7 +511,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
 
     if (!entry) return "未找到挑战记录。";
     if (mode.id === onslaughtMode.id) {
-      const image = await onslaughtCard(entry);
+      const image = await onslaughtCard(entry, delivery);
       if (image) return image;
     }
     if (mode.id === theaterMode.id) {
@@ -520,7 +520,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
         try {
           const { renderTheater } = await import("./role-render.ts");
           const card = forecast ? { ...theater, name: "下期幻想真境剧诗（预览）" } : theater;
-          const { png } = await renderTheater(card, { assetRoot: catalog.assetRoot(entry) });
+          const { png } = await renderTheater(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
           // The verified challenge summary remains usable without rendering.
@@ -532,7 +532,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       if (abyss) {
         try {
           const { renderAbyss } = await import("./role-render.ts");
-          const { png } = await renderAbyss(abyss, { assetRoot: catalog.assetRoot(entry) });
+          const { png } = await renderAbyss(abyss, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
           // The verified challenge summary remains usable without rendering.
@@ -540,7 +540,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       }
     }
     if (mode.id === apocalypseMode.id || mode.id === arbitrationMode.id || mode.id === fictionMode.id || mode.id === chaosMode.id) {
-      const image = await starrailChallengeCard(entry, result, mode, forecast ? "next" : displayCurrent ? "current" : undefined);
+      const image = await starrailChallengeCard(entry, result, mode, forecast ? "next" : displayCurrent ? "current" : undefined, delivery);
       if (image) return image;
     }
     if (mode.id === shiyuMode.id) {
@@ -548,7 +548,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       if (shiyu) {
         try {
           const { renderShiyu } = await import("./role-render.ts");
-          const { png } = await renderShiyu(shiyu, { assetRoot: catalog.assetRoot(entry) });
+          const { png } = await renderShiyu(shiyu, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
           // The verified challenge summary remains usable without rendering.
@@ -560,7 +560,7 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
       if (deadlyAssault) {
         try {
           const { renderDeadlyAssault } = await import("./role-render.ts");
-          const { png } = await renderDeadlyAssault(deadlyAssault, { assetRoot: catalog.assetRoot(entry) });
+          const { png } = await renderDeadlyAssault(deadlyAssault, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
           // The verified challenge summary remains usable without rendering.
@@ -575,11 +575,15 @@ async function challengeQuery(argument: string, at?: number): Promise<string | A
   }
 }
 
-export const apps = traditionalAtlasApps((argument, kind, game) => {
-  if (kind !== "glued") return traditionalQuery(argument, game, kind);
+export const apps = traditionalAtlasApps((argument, kind, game, delivery) => {
+  if (kind !== "glued") return traditionalQuery(argument, game, kind, delivery);
   const { query, game: statedGame } = searchTerms(argument);
-  return traditionalQuery(query, statedGame, "name");
-}, (mode, period, at) => challengeQuery(`${gameNames[mode.game]} ${mode.name} ${period}`, at));
+  return traditionalQuery(query, statedGame, "name", delivery);
+}, (mode, period, at, delivery) => challengeQuery(`${gameNames[mode.game]} ${mode.name} ${period}`, at, delivery));
+
+function challengeCommand(query: string) {
+  return (_argument: string, delivery?: AtlasDelivery) => challengeQuery(query, undefined, delivery);
+}
 
 const atlas = {
   aliases: {
@@ -630,54 +634,54 @@ const atlas = {
     "#绝区零上期强袭战图鉴": "#绝区零上期危局图鉴",
   },
   commands: {
-    async "#图鉴"(argument: string) {
+    async "#图鉴"(argument: string, delivery?: AtlasDelivery) {
       const { game, query } = searchTerms(argument);
       if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
-      return await traditionalQuery(query, game) ?? missing;
+      return await traditionalQuery(query, game, "search", delivery) ?? missing;
     },
-    "#武器图鉴": (argument: string) => equipmentQuery(argument, "#武器图鉴"),
-    "#光锥图鉴": (argument: string) => equipmentQuery(argument, "#光锥图鉴", "hsr"),
-    "#音擎图鉴": (argument: string) => equipmentQuery(argument, "#音擎图鉴", "zzz"),
-    "#套装图鉴": (argument: string) => setsQuery(argument, "#套装图鉴"),
-    "#圣遗物图鉴": (argument: string) => setsQuery(argument, "#圣遗物图鉴", "gi"),
-    "#遗器图鉴": (argument: string) => setsQuery(argument, "#遗器图鉴", "hsr"),
-    "#驱动盘图鉴": (argument: string) => setsQuery(argument, "#驱动盘图鉴", "zzz"),
+    "#武器图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(argument, "#武器图鉴", undefined, delivery),
+    "#光锥图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(argument, "#光锥图鉴", "hsr", delivery),
+    "#音擎图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(argument, "#音擎图鉴", "zzz", delivery),
+    "#套装图鉴": (argument: string, delivery?: AtlasDelivery) => setsQuery(argument, "#套装图鉴", undefined, delivery),
+    "#圣遗物图鉴": (argument: string, delivery?: AtlasDelivery) => setsQuery(argument, "#圣遗物图鉴", "gi", delivery),
+    "#遗器图鉴": (argument: string, delivery?: AtlasDelivery) => setsQuery(argument, "#遗器图鉴", "hsr", delivery),
+    "#驱动盘图鉴": (argument: string, delivery?: AtlasDelivery) => setsQuery(argument, "#驱动盘图鉴", "zzz", delivery),
     "#邦布图鉴": bangbooQuery,
     "#成就图鉴": achievementQuery,
     "#成就分类": achievementCategoryQuery,
-    "#挑战图鉴": challengeQuery,
+    "#挑战图鉴": (argument: string, delivery?: AtlasDelivery) => challengeQuery(argument, undefined, delivery),
     "#图鉴帮助": atlasHelp,
-    "#本期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
-    "#本期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
-    "#本期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 本期"),
-    "#上期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
-    "#上期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
-    "#上期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 上期"),
-    "#下期幻想图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
-    "#下期幻想真境剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
-    "#下期剧诗图鉴": () => challengeQuery("原神 幻想真境剧诗 下期"),
-    "#本期深渊图鉴": () => challengeQuery("原神 深境螺旋 本期"),
-    "#本期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 本期"),
-    "#上期深渊图鉴": () => challengeQuery("原神 深境螺旋 上期"),
-    "#上期深境螺旋图鉴": () => challengeQuery("原神 深境螺旋 上期"),
-    "#星铁本期末日图鉴": () => challengeQuery("星铁 末日幻影 本期"),
-    "#星铁上期末日图鉴": () => challengeQuery("星铁 末日幻影 上期"),
-    "#星铁下期末日图鉴": () => challengeQuery("星铁 末日幻影 下期"),
-    "#星铁本期虚构图鉴": () => challengeQuery("星铁 虚构叙事 本期"),
-    "#星铁上期虚构图鉴": () => challengeQuery("星铁 虚构叙事 上期"),
-    "#星铁下期虚构图鉴": () => challengeQuery("星铁 虚构叙事 下期"),
-    "#星铁本期混沌图鉴": () => challengeQuery("星铁 混沌回忆 本期"),
-    "#星铁上期混沌图鉴": () => challengeQuery("星铁 混沌回忆 上期"),
-    "#星铁下期混沌图鉴": () => challengeQuery("星铁 混沌回忆 下期"),
-    "#星铁异相图鉴": () => challengeQuery("星铁 异相仲裁"),
-    "#星铁本期异相图鉴": () => challengeQuery("星铁 异相仲裁 本期"),
-    "#星铁上期异相图鉴": () => challengeQuery("星铁 异相仲裁 上期"),
-    "#星铁下期异相图鉴": () => challengeQuery("星铁 异相仲裁 下期"),
-    "#绝区零本期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 本期"),
-    "#绝区零上期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 上期"),
-    "#绝区零下期防卫战图鉴": () => challengeQuery("绝区零 式舆防卫战 下期"),
-    "#绝区零本期危局图鉴": () => challengeQuery("绝区零 危局强袭战 本期"),
-    "#绝区零上期危局图鉴": () => challengeQuery("绝区零 危局强袭战 上期"),
+    "#本期幻想图鉴": challengeCommand("原神 幻想真境剧诗 本期"),
+    "#本期幻想真境剧诗图鉴": challengeCommand("原神 幻想真境剧诗 本期"),
+    "#本期剧诗图鉴": challengeCommand("原神 幻想真境剧诗 本期"),
+    "#上期幻想图鉴": challengeCommand("原神 幻想真境剧诗 上期"),
+    "#上期幻想真境剧诗图鉴": challengeCommand("原神 幻想真境剧诗 上期"),
+    "#上期剧诗图鉴": challengeCommand("原神 幻想真境剧诗 上期"),
+    "#下期幻想图鉴": challengeCommand("原神 幻想真境剧诗 下期"),
+    "#下期幻想真境剧诗图鉴": challengeCommand("原神 幻想真境剧诗 下期"),
+    "#下期剧诗图鉴": challengeCommand("原神 幻想真境剧诗 下期"),
+    "#本期深渊图鉴": challengeCommand("原神 深境螺旋 本期"),
+    "#本期深境螺旋图鉴": challengeCommand("原神 深境螺旋 本期"),
+    "#上期深渊图鉴": challengeCommand("原神 深境螺旋 上期"),
+    "#上期深境螺旋图鉴": challengeCommand("原神 深境螺旋 上期"),
+    "#星铁本期末日图鉴": challengeCommand("星铁 末日幻影 本期"),
+    "#星铁上期末日图鉴": challengeCommand("星铁 末日幻影 上期"),
+    "#星铁下期末日图鉴": challengeCommand("星铁 末日幻影 下期"),
+    "#星铁本期虚构图鉴": challengeCommand("星铁 虚构叙事 本期"),
+    "#星铁上期虚构图鉴": challengeCommand("星铁 虚构叙事 上期"),
+    "#星铁下期虚构图鉴": challengeCommand("星铁 虚构叙事 下期"),
+    "#星铁本期混沌图鉴": challengeCommand("星铁 混沌回忆 本期"),
+    "#星铁上期混沌图鉴": challengeCommand("星铁 混沌回忆 上期"),
+    "#星铁下期混沌图鉴": challengeCommand("星铁 混沌回忆 下期"),
+    "#星铁异相图鉴": challengeCommand("星铁 异相仲裁"),
+    "#星铁本期异相图鉴": challengeCommand("星铁 异相仲裁 本期"),
+    "#星铁上期异相图鉴": challengeCommand("星铁 异相仲裁 上期"),
+    "#星铁下期异相图鉴": challengeCommand("星铁 异相仲裁 下期"),
+    "#绝区零本期防卫战图鉴": challengeCommand("绝区零 式舆防卫战 本期"),
+    "#绝区零上期防卫战图鉴": challengeCommand("绝区零 式舆防卫战 上期"),
+    "#绝区零下期防卫战图鉴": challengeCommand("绝区零 式舆防卫战 下期"),
+    "#绝区零本期危局图鉴": challengeCommand("绝区零 危局强袭战 本期"),
+    "#绝区零上期危局图鉴": challengeCommand("绝区零 危局强袭战 上期"),
     async "#图鉴状态"(): Promise<string> {
       try {
         const result = await catalog.read();
