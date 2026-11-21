@@ -861,7 +861,7 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
 }
 
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
-  background: Image | undefined, { mode = "auto", scale = 2 }: RoleRenderOptions, titleX = icon ? 152 : margin + 20) {
+  background: Image | undefined, { mode = "auto", scale = 4 }: RoleRenderOptions, titleX = icon ? 152 : margin + 20) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const game = gameNames[gameId];
   const head = Math.max(header, 118 + title.length * 39);
