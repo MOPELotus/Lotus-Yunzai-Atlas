@@ -61,3 +61,52 @@ test("原 Bun 下载能从空目录续跑，复用已验证的同版详情和原
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("首次与同版增量保留索引及详情大整数的原表示，稳定复用不会重请求详情", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-native-atlas-precision-"));
+  try {
+    const target = join(root, "target");
+    const workspace = join(root, "workspace");
+    await mkdir(target);
+    const scopes = [{ game: "hsr", pageId: "maze_boss" }] as const;
+    const indexPath = "/hsr/4.7.52/maze_boss.json";
+    const detailPath = "/hsr/4.7.52/zh/boss/3022.json";
+    const recordPath = "data/items/简体中文/hsr/maze_boss/3022.json";
+    const first = "3513447881416968543";
+    const next = "3513447881416968544";
+    const calls: string[] = [];
+    let token = first;
+    expect(Number(first)).toBe(Number(next));
+    const indexRow = () => `{"zh":"验证条目","stage_name":${token},"ratio":1.2500}`;
+    const detail = () => `{"name":"原正文","stages":[{"stage_name":${token},"desc":"原文字"}],"factor":-0}`;
+    const request: AtlasSourceFetch = async (url) => {
+      const { pathname } = new URL(url);
+      calls.push(pathname);
+      if (pathname === indexPath) return new Response(`{"3022":${indexRow()}}`);
+      if (pathname === detailPath) return new Response(detail());
+      throw new Error(pathname);
+    };
+    function download(baseline?: string, save?: string) {
+      return downloadAtlasVersion(workspace, target, { hsr: "4.7.52" }, async (source, pages) => {
+        const raw = await Bun.file(join(source, recordPath)).text();
+        expect(raw).toContain(`"list":${indexRow()}`);
+        expect(raw).toContain(`"detail":${detail()}`);
+        expect(JSON.parse(raw).content.detail.stages[0].desc).toBe("原文字");
+        if (save) await copyAtlasSelectedPages(source, save, pages);
+      }, undefined, request, scopes, baseline);
+    }
+    const firstSeed = join(root, "first-seed");
+    await download(undefined, firstSeed);
+    expect(calls.splice(0)).toEqual([indexPath, detailPath]);
+
+    await download(join(firstSeed, "data"));
+    expect(calls.splice(0)).toEqual([indexPath]);
+
+    token = next;
+    await download(join(firstSeed, "data"));
+    expect(calls).toEqual([indexPath, detailPath]);
+    expect(await Bun.file(join(firstSeed, recordPath)).text()).toContain(first);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

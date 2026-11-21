@@ -90,7 +90,8 @@ export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, l
   const detailUrl = legacyIndexedOnlyPages.has(game + "/" + pageId) ? undefined
     : `${atlasSourceOrigin}/${game}/${version}/zh/${detailPath(game, pageId)}/${id}.json`;
   const bytes = detailUrl && await readAtlasSourceBytes(detailUrl, "application/json", 8 * 1024 * 1024, true, signal, request, { retry: true });
-  const detail: unknown = bytes ? JSON.parse(utf8.decode(bytes)) : null;
+  const detailSource = bytes ? utf8.decode(bytes) : "null";
+  const detail: unknown = JSON.parse(detailSource);
   if (bytes && (detail === null || typeof detail !== "object" || (Array.isArray(detail) && !(game === "hsr" && pageId === "maze")))) throw new Error("原图鉴详情格式无效。");
   const references = [...nativeAtlasImageReferences(game, pageId, id, list),
     ...(detail ? nativeAtlasImageReferences(game, pageId, id, detail, "detail.") : [])];
@@ -113,7 +114,7 @@ export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, l
   return { meta: { gameId: game, gameName, gameFolder, locale: "zh", localeFolder: "简体中文", localeLabel: "Chinese",
     pageId, pageFolder: folder, ...origin, detailSourceUrl: hasDetail ? detailUrl : null, hasDetail,
     version, recordId: id, name, rarity: rarity(list, detail), images },
-    content: { list, detail } };
+    content: { list, detail }, detailSource };
 }
 
 export function nativeAtlasAssetUrl(game: Game, url: string) {

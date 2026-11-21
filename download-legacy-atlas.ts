@@ -5,6 +5,7 @@ import { candidateFile, candidateImageReference, hashCandidateFile } from "./can
 import type { Game } from "./catalog.ts";
 import { assembleAtlasCandidate, copyAtlasSelectedPages } from "./assemble-candidate.ts";
 import { nativeAtlasExport, nativeAtlasImageRecovery } from "./native-atlas-export.ts";
+import { evidenceObject, parseLegacyJsonEvidence, serializeLegacyJsonEvidence } from "./legacy-json-evidence.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
@@ -45,13 +46,13 @@ export async function readSelectedExporterIndexes(versions: AtlasExportVersions,
     const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexPath, indexShape }) => {
       const bytes = await readAtlasSourceBytes(`${atlasSourceOrigin}${indexPath}`, "application/json",
         maxExportIndexBytes, false, signal, request, { retry: true });
-      const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      const listing = indexShape === "array" && Array.isArray(value) ? value : object(value);
+      const value = parseLegacyJsonEvidence(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      const listing = indexShape === "array" && Array.isArray(value) ? value : evidenceObject(value);
       const entries = Object.entries(listing);
       if ((indexShape === "array" && !Array.isArray(listing)) || !entries.length ||
-          entries.some(([, row]) => row !== object(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
+          entries.some(([, row]) => row !== evidenceObject(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
       return { game, pageId, version, recordCount: entries.length,
-        rows: new Map(entries.map(([id, row]) => [id, JSON.stringify(row)])) };
+        rows: new Map(entries.map(([id, row]) => [id, serializeLegacyJsonEvidence(row)])) };
     }));
     indexes.push(...batch);
   }
@@ -114,8 +115,9 @@ async function matchesExportIndex(directory: string, map: Record<string, unknown
     const { path } = object(records[id]);
     if (typeof path !== "string" || !path.startsWith("items/")) return false;
     const file = await candidateFile(directory, path);
-    const item = object(await Bun.file(file).json());
-    if (JSON.stringify(object(item.content).list) !== row) return false;
+    const item = evidenceObject(parseLegacyJsonEvidence(await Bun.file(file).text()));
+    const list = evidenceObject(item.content ?? null).list;
+    if (list === undefined || serializeLegacyJsonEvidence(list) !== row) return false;
   }
   return true;
 }

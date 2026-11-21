@@ -6,6 +6,7 @@ import { isAtlasSourceWebp, readAtlasSourceBytes, type AtlasSourceFetch } from "
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 import { atlasSourcePlaceholder } from "./source-acquisition.ts";
 import { object } from "./source-values.ts";
+import { parseLegacyJsonEvidence, serializeLegacyJsonEvidence } from "./legacy-json-evidence.ts";
 import { nativeAtlasAssetMetadata, nativeAtlasAssetUrl, nativeAtlasGameNames, nativeAtlasPageOrigin, readNativeAtlasRecord, type NativeAtlasPage } from "./native-record-export.ts";
 
 interface NativeAtlasIndex extends NativeAtlasPage {
@@ -188,7 +189,10 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
         if (!recordId.test(id)) throw new Error("图鉴来源编号无效。");
         const record = await readNativeAtlasRecord(page, id, JSON.parse(list), image, signal, details);
         const path = `items/简体中文/${game}/${pageId}/${id}.json`;
-        await Bun.write(join(data, path), JSON.stringify(record, null, 2) + "\n");
+        const exact = { meta: parseLegacyJsonEvidence(JSON.stringify(record.meta)), content: {
+          list: parseLegacyJsonEvidence(list), detail: parseLegacyJsonEvidence(record.detailSource),
+        } };
+        await Bun.write(join(data, path), serializeLegacyJsonEvidence(exact) + "\n");
         return { record, path };
       }));
       const failed = group.find(result => result.status === "rejected");
