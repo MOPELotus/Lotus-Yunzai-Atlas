@@ -12,6 +12,7 @@ import { object } from "./source-values.ts";
 import { atlasExportSelections, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
+import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
@@ -50,6 +51,7 @@ function describeRefresh(result: AtlasSourceRefresh, targetVersion: string): str
 export interface AtlasMaintenanceOptions extends Pick<AtlasRefreshOptions, "manifest" | "request" | "signal"> {
   readonly dataOverride?: string;
   readonly updateConfig?: unknown;
+  readonly downloadVersion?: typeof DownloadAtlasVersion;
 }
 
 interface AtlasMaintenanceContext {
@@ -91,35 +93,18 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
       if (signal?.aborted) return "图鉴维护已中止。";
       if (!listing) return "图鉴版本清单不可用，保留现有资料。";
       const lines = [kind === "check" ? "图鉴版本检查" : "图鉴更新结果"];
-      if (selections.includes(atlasGenshinCardSelection)) {
-        const selection = atlasGenshinCardSelection;
-        const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
-        if (entry?.kind === "versioned") {
-          let summary: string;
-          if (entry.action === "review") summary = reviewReasons[entry.reason];
-          else if (entry.action === "current") summary = `已是同一版本 ${entry.targetVersion}`;
-          else if (kind === "check") summary = `${entry.localVersion ?? "未准备"} → ${entry.targetVersion}，可准备候选`;
-          else {
-            try {
-              const result = await refreshAtlasSource(root, { selection, expected: active, signal, request, channel, manifest: async () => listing });
-              summary = describeRefresh(result, entry.targetVersion);
-              if (result.status === "published") {
-                active = { version: result.version, root: result.directory };
-                baseline = result.directory;
-                local = await validateAtlasCandidate(baseline, [], signal);
-                if (!local.ok) return [...lines, `七圣召唤 · ${summary}`, "无法核对更新后的快照，已停止其他更新。"].join("\n");
-              } else if (result.status === "busy" || result.status === "stale") {
-                return [...lines, `七圣召唤 · ${summary}`, "其余待更新分类留待下次检查。"].join("\n");
-              }
-            } catch {
-              summary = signal?.aborted ? "维护已中止" : "更新未完成，保留现有资料";
-            }
-          }
-          lines.push(`七圣召唤 · ${summary}`);
-        }
+      const wantsCards = selections.includes(atlasGenshinCardSelection);
+      const cardsVersion = wantsCards ? atlasManifestVersion(listing, "gi", channel) : undefined;
+      const currentCards = local.pages.find(({ game, pageId }) => game === "gi" && pageId === "gcg")?.version;
+      const changeCards = cardsVersion !== undefined && currentCards !== cardsVersion;
+      if (wantsCards) {
+        const status = !cardsVersion ? reviewReasons["manifest-unavailable"]
+          : !changeCards ? `已是同一版本 ${cardsVersion}`
+          : `${currentCards ?? "未准备"} → ${cardsVersion}，待更新`;
+        lines.push(`七圣召唤 · ${status}`);
       }
       const scope = legacyAtlasSourcePages.filter(({ game, pageId }) => selections.includes(`${game}/${pageId}`));
-      if (!scope.length || signal?.aborted) return lines.join("\n");
+      if ((!scope.length && !changeCards) || signal?.aborted) return lines.join("\n");
       const native = atlasSourceSelections.filter(({ selection }) => selection !== atlasGenshinCardSelection && selections.includes(selection));
       const versions = Object.fromEntries([...new Set(scope.map(({ game }) => game))]
         .map((game) => [game, atlasManifestVersion(listing, game, channel)]));
@@ -128,11 +113,11 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         versions[game] && local.pages.some((page) => page.game === game && page.pageId === pageId && page.version === versions[game]));
       const targetNotes = Object.entries(versions).map(([game, version]) => `${game} ${version ?? "版本未知"}`).join("、");
       const channelLabel = channel === "live" ? "正式版" : "网站最新版";
-      lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length} 类`);
+      if (scope.length) lines.push(`${channelLabel} · ${targetNotes} · 本次范围 ${scope.length + Number(wantsCards)} 类`);
 
       const currentRoles = local.pages.filter(({ game, pageId, version }) => pageId === "character" &&
         version === versions[game] && scope.some(page => page.game === game && page.pageId === pageId));
-      if (scheduledKind !== "challenge" && currentRoles.length) {
+      if (scheduledKind !== "challenge" && currentRoles.length && (!wantsCards || cardsVersion && !changeCards)) {
         const { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } = await import("./role-material-source.ts");
         const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal);
         if (pending.length && kind === "check") {
@@ -144,7 +129,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
             const prepared = await copyAtlasSelectedPages(dirname(baseline), join(stage, "source"), pending, signal);
             const updated = await completeAtlasRoleMaterials(prepared.directory, pending, signal, request);
             if (pending.length > updated.length) {
-              lines.push(`${pending.length - updated.length} 个角色分类的同版材料表暂不可用。`);
+              lines.push(`${pending.length - updated.length} 个角色分类仍缺同版材料名称或原图。`);
             }
             if (updated.length) {
               const result = await applyAtlasCandidate(root, prepared.directory, updated, signal, active);
@@ -165,7 +150,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
       }
 
-      if (allCurrent && scheduledKind !== "challenge" &&
+      if (allCurrent && scheduledKind !== "challenge" && (!wantsCards || cardsVersion && !changeCards) &&
           versions.gi && scope.some(({ game, pageId }) => game === "gi" && pageId === "character")) {
         try {
           const { genshinOriginalPortraitStatus } = await import("./genshin-original-portraits.ts");
@@ -198,7 +183,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
       }
 
-      if (scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
+      if (changeCards || (wantsCards && !cardsVersion) || scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
           native.some(({ selection }) => {
             const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
             return entry?.action === "review" && entry.reason === "unproven-upgrade";
@@ -212,11 +197,12 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
               : `${current ?? "未准备"} → ${target}，待更新`;
             lines.push(`${title} · ${summary}`);
           }
-        } else if (missing.length) {
-          lines.push(`未能核实 ${missing.join("、")} 的目标版本，本次范围未发布。`);
-        } else if (allCurrent && scheduledKind !== "challenge") {
+        } else if (missing.length || (wantsCards && !cardsVersion)) {
+          lines.push(`未能核实 ${[...new Set([...missing, ...(wantsCards && !cardsVersion ? ["gi"] : [])])].join("、")} 的目标版本，本次范围未发布。`);
+        } else if (allCurrent && !changeCards && scheduledKind !== "challenge") {
           lines.push(`本地所选 ${scope.length} 类版本均为目标版本。`);
         } else {
+          const updateCount = (allCurrent ? 0 : scope.length) + (changeCards ? 1 : 0);
           try {
             const observed = scheduledKind === "challenge" ? await (await import("./challenge-refresh-plan.ts"))
               .planAtlasChallengeRefresh(baseline, local.pages, scope, versions, signal, request) : undefined;
@@ -224,18 +210,36 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
               lines.push("已核对挑战轮换，来源索引与现用资料一致。");
               return lines.join("\n");
             }
+            const publishWithCards = async (source?: string, pages: readonly AtlasCandidatePage[] = []) => {
+              const stage = await mkdtemp(join(dirname(root), ".atlas-version-cards-"));
+              try {
+                const { acquireAtlasSource } = await import("./source-acquisition.ts");
+                const cards = await acquireAtlasSource(join(stage, "cards"), [
+                  { game: "gi", pageId: "gcg", version: cardsVersion },
+                ], signal, request);
+                if (!source) return await applyAtlasCandidate(root, cards.directory, cards.pages, signal, active);
+                const { assembleAtlasCandidate } = await import("./assemble-candidate.ts");
+                const combined = await assembleAtlasCandidate(source, cards.directory, join(stage, "combined"), cards.pages, signal);
+                return await applyAtlasCandidate(root, combined.directory, [...pages, ...cards.pages], signal, active);
+              } finally {
+                await rm(stage, { recursive: true, force: true }).catch(() => undefined);
+              }
+            };
+            const publish = (source: string, pages: readonly AtlasCandidatePage[]) => changeCards
+              ? publishWithCards(source, pages)
+              : applyAtlasCandidate(root, source, pages, signal, active);
             const { downloadAtlasVersion, downloadAtlasVersionFromIndexes } = await import("./download-legacy-atlas.ts");
-            const publish = (source: string, pages: readonly AtlasCandidatePage[]) =>
-              applyAtlasCandidate(root, source, pages, signal, active);
             const result = observed ? await downloadAtlasVersionFromIndexes(workspace, root, observed, publish, signal, baseline)
-              : await downloadAtlasVersion(workspace, root, versions, publish, signal, request, scope, baseline);
-            const coverage = observed ? `轮换变化 ${observed.length} 类` : `所选 ${scope.length} 类`;
+              : allCurrent ? await publishWithCards()
+              : await (options.downloadVersion ?? downloadAtlasVersion)(workspace, root, versions, publish, signal, request, scope, baseline);
+            const coverage = observed ? `轮换变化 ${observed.length} 类`
+              : allCurrent ? "七圣召唤" : `所选 ${updateCount} 类`;
             lines.push(result.status === "published" ? `${coverage}已核对并发布至快照 ${result.version}。`
               : `${coverage}未发布，${describeRefresh(result, "")}。`);
           } catch (error) {
             if (signal?.aborted) return "图鉴维护已中止。";
             console.warn("[atlas]", error instanceof Error ? error.message : "图鉴增量更新失败。");
-            lines.push(`所选 ${scope.length} 类未完成更新，现用快照仍可用。`);
+            lines.push(`所选 ${updateCount} 类未完成更新，现用快照仍可用。`);
           }
         }
         return lines.join("\n");

@@ -158,7 +158,7 @@ test("旧配置默认核对网站最新版，并能识别未更新或未准备�
   const maintenance = createAtlasMaintenance(root, { manifest: async () => listing });
   const check = await maintenance.commands["#检查图鉴更新"]("", owner);
   expect(check).toContain("网站最新版");
-  expect(check).toContain("本次范围 29 类");
+  expect(check).toContain("本次范围 30 类");
   expect(check).toContain(`邦布 · ${original} → ${upgrade}`);
   expect(check).toContain(`绝区零角色 · 未准备 → ${upgrade}`);
   expect(check).toContain("星铁精英组 · 来源版本未知");
