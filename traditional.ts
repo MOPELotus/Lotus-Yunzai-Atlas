@@ -104,55 +104,49 @@ interface ShortcutEvent extends AtlasDelivery {
   reply(value: AtlasNode): unknown;
 }
 
-type PluginConstructor = new (options: { name: string; rule: { reg: RegExp; fnc: string }[] }) => { e?: ShortcutEvent };
+async function send(event: ShortcutEvent, reply: AtlasReply | undefined): Promise<boolean> {
+  if (reply === undefined) return false;
+  if (typeof reply === "string" || reply.type === "image") {
+    await event.reply(reply);
+    return true;
+  }
+  if (event.forward) {
+    try {
+      if (await event.forward(reply.nodes)) return true;
+    } catch {
+      await event.reply("合并转发结果未确认，请在聊天中核对。");
+      return true;
+    }
+  }
+  for (const node of reply.nodes) await event.reply(node);
+  return true;
+}
 
-export function traditionalAtlasApps(
+export function traditionalAtlasEvent(
   findReply: (query: string, kind: Lookup, game?: Game, delivery?: AtlasDelivery) => Promise<AtlasReply | undefined>,
   findChallengeReply: (mode: ChallengeMode, period: ChallengePeriod, at?: number, delivery?: AtlasDelivery) => Promise<AtlasReply>,
 ) {
   return {
-    // The host installs the V3 base before it enumerates the exported apps.
-    get AtlasTraditionalCommands() {
-      const Base = (globalThis as typeof globalThis & { plugin?: PluginConstructor }).plugin;
-      if (!Base) return;
-      return class extends Base {
-        constructor() {
-          super({ name: "图鉴旧指令", rule: [{ reg: command, fnc: "lookup" }] });
-        }
-
-        async lookup(event: ShortcutEvent) {
-          const delivery = { inlineImageByteLimit: event.inlineImageByteLimit };
-          const query = parseGluedLookup(event.msg);
-          if (query) return this.send(event, await findReply(query, "glued", undefined, delivery));
-          const role = parseRoleShortcut(event.msg);
-          if (role) return this.send(event, await findReply(role.query, "character", role.game, delivery));
-          const challenge = parseChallengeShortcut(event.msg);
-          if (challenge) return this.send(event, challenge.invalidDate
-            ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
-            : await findChallengeReply(challenge.mode, challenge.period, challenge.at, delivery));
-          const target = parseEquipmentShortcut(event.msg);
-          if (target) return this.send(event, await findReply(target.query, "shortcut", target.game, delivery));
-          const bare = parseBareNameShortcut(event.msg);
-          return bare ? this.send(event, await findReply(bare.query, "bare", bare.game, delivery)) : false;
-        }
-
-        async send(event: ShortcutEvent, reply: AtlasReply | undefined) {
-          if (reply === undefined) return false;
-          if (typeof reply === "string" || reply.type === "image") {
-            await event.reply(reply);
-            return;
-          }
-          if (event.forward) {
-            try {
-              if (await event.forward(reply.nodes)) return;
-            } catch {
-              await event.reply("合并转发结果未确认，请在聊天中核对。");
-              return;
-            }
-          }
-          for (const node of reply.nodes) await event.reply(node);
-        }
-      };
+    name: "图鉴旧指令",
+    event: "message",
+    priority: 5000,
+    rule: {
+      pattern: command,
+      async run(event: ShortcutEvent) {
+        const delivery = { inlineImageByteLimit: event.inlineImageByteLimit };
+        const query = parseGluedLookup(event.msg);
+        if (query) return send(event, await findReply(query, "glued", undefined, delivery));
+        const role = parseRoleShortcut(event.msg);
+        if (role) return send(event, await findReply(role.query, "character", role.game, delivery));
+        const challenge = parseChallengeShortcut(event.msg);
+        if (challenge) return send(event, challenge.invalidDate
+          ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
+          : await findChallengeReply(challenge.mode, challenge.period, challenge.at, delivery));
+        const target = parseEquipmentShortcut(event.msg);
+        if (target) return send(event, await findReply(target.query, "shortcut", target.game, delivery));
+        const bare = parseBareNameShortcut(event.msg);
+        return bare ? send(event, await findReply(bare.query, "bare", bare.game, delivery)) : false;
+      },
     },
   };
 }

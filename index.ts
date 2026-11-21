@@ -9,7 +9,7 @@ import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
-import { traditionalAtlasApps, type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
+import { traditionalAtlasEvent, type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
@@ -576,7 +576,7 @@ async function challengeQuery(argument: string, at?: number, delivery?: AtlasDel
   }
 }
 
-export const apps = traditionalAtlasApps((argument, kind, game, delivery) => {
+const traditional = traditionalAtlasEvent((argument, kind, game, delivery) => {
   if (kind !== "glued") return traditionalQuery(argument, game, kind, delivery);
   const { query, game: statedGame } = searchTerms(argument);
   return traditionalQuery(query, statedGame, "name", delivery);
@@ -726,7 +726,7 @@ export function createModule({ signal, atlasUpdateConfig }: { readonly signal?: 
   const { commands, atlasSchedule } = createAtlasMaintenance(atlasRoot, {
     signal, updateConfig: atlasUpdateConfig, dataOverride: Bun.env.LOTUS_ATLAS_DATA_DIR,
   });
-  return { ...atlas, commands: { ...atlas.commands, ...commands }, atlasSchedule };
+  return { ...atlas, commands: { ...atlas.commands, ...commands }, atlasSchedule, nativeEvents: [traditional] };
 }
 
 export default createModule();

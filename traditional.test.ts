@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
 import { abyssMode, apocalypseMode, chaosMode, deadlyAssaultMode, fictionMode, shiyuMode, theaterMode } from "./challenges.ts";
-import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut, traditionalAtlasApps } from "./traditional.ts";
+import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut, traditionalAtlasEvent } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -72,55 +72,66 @@ test("挑战日期别名沿用中国服中午，保留明确的游戏、所属�
   }
 });
 
-test("V3 图鉴路由把裸全名、日期和下期交给对应的公共查询，个人入口仍让行", async () => {
-  const target = globalThis as typeof globalThis & { plugin?: unknown };
-  const prior = Object.getOwnPropertyDescriptor(target, "plugin");
+test("原生图鉴路由把裸全名、日期和下期交给对应的公共查询，个人入口仍让行", async () => {
   const calls: unknown[][] = [];
   const byteLimits: (number | undefined)[] = [];
-  try {
-    Object.defineProperty(target, "plugin", { value: class {}, configurable: true });
-    const { AtlasTraditionalCommands: Atlas } = traditionalAtlasApps(
-      async (query, kind, game, delivery) => {
-        byteLimits.push(delivery?.inlineImageByteLimit);
-        calls.push([query, kind, game]);
-        return "名称资料";
-      },
-      async (mode, period, at, delivery) => {
-        byteLimits.push(delivery?.inlineImageByteLimit);
-        calls.push([mode.id, period, at]);
-        return "挑战资料";
-      },
-    );
-    const app = new Atlas!();
+  const route = traditionalAtlasEvent(
+    async (query, kind, game, delivery) => {
+      byteLimits.push(delivery?.inlineImageByteLimit);
+      calls.push([query, kind, game]);
+      return "名称资料";
+    },
+    async (mode, period, at, delivery) => {
+      byteLimits.push(delivery?.inlineImageByteLimit);
+      calls.push([mode.id, period, at]);
+      return "挑战资料";
+    },
+  );
+  expect(route).toMatchObject({ name: "图鉴旧指令", event: "message", priority: 5000 });
+  expect(route.rule.pattern.test("*卡芙卡")).toBe(true);
+  const replies: unknown[] = [];
+  const command = (msg: string) => route.rule.run({ msg, reply: (value) => replies.push(value) });
+  for (const msg of ["#芙宁娜", "#星铁卡芙卡", "#绝区零艾莲·乔", "#冰风迷途的勇士", "*太空封印站", "％啄木鸟电音"])
+    await command(msg);
+  for (const msg of ["#2026年11月16日本期深渊", "#星铁2026-10-26本期末日", "%2026-11-20本期危局",
+    "#下期幻想", "*下期末日", "%下期防卫战", "#下期深渊", "%2026-11-20下期防卫战"])
+    await command(msg);
+  expect(calls).toEqual([
+    ["芙宁娜", "bare", "gi"], ["卡芙卡", "bare", "hsr"], ["艾莲·乔", "bare", "zzz"],
+    ["冰风迷途的勇士", "bare", "gi"], ["太空封印站", "bare", "hsr"], ["啄木鸟电音", "bare", "zzz"],
+    ["tower", "本期", Date.parse("2026-11-16T12:00:00+08:00")], ["maze_boss", "本期", Date.parse("2026-10-26T12:00:00+08:00")],
+    ["boss", "本期", Date.parse("2026-11-20T12:00:00+08:00")], ["rolecombat", "下期", undefined],
+    ["maze_boss", "下期", undefined], ["shiyu", "下期", undefined], ["tower", "下期", undefined],
+    ["shiyu", "下期", Date.parse("2026-11-20T12:00:00+08:00")],
+  ]);
+  expect(replies).toEqual([...Array(6).fill("名称资料"), ...Array(8).fill("挑战资料")]);
+  for (const msg of ["#深渊", "#当期深渊", "*本期末日", "%防卫战", "#绝区零上期危局", "#芙宁娜面板",
+    "*卡芙卡排行", "#芙宁娜攻略", "#芙宁娜练度统计", "%最强艾莲", "#刷新cookie", "#全量更新图鉴"])
+    expect(await command(msg)).toBe(false);
+  await command("#2026年2月29日本期深渊");
+  expect(replies.at(-1)).toBe("日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。");
+  expect(calls).toHaveLength(14);
+  expect(byteLimits).toEqual(Array(14).fill(undefined));
+  await route.rule.run({ msg: "#芙宁娜", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
+  await route.rule.run({ msg: "#2026年11月16日本期深渊", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
+  expect(byteLimits.slice(-2)).toEqual([16 * 1024 * 1024, 16 * 1024 * 1024]);
+});
+
+test("原生图鉴按网关的转发结果处理整册，转发未知时不会重发各页", async () => {
+  const nodes = ["整册", { type: "image", file: Uint8Array.of(1) }] as const;
+  const route = traditionalAtlasEvent(async () => ({ type: "forward", nodes }), async () => "挑战");
+  for (const receipt of [true, false, "unknown"] as const) {
     const replies: unknown[] = [];
-    const command = (msg: string) => app.lookup({ msg, reply: (value) => replies.push(value) });
-    for (const msg of ["#芙宁娜", "#星铁卡芙卡", "#绝区零艾莲·乔", "#冰风迷途的勇士", "*太空封印站", "％啄木鸟电音"])
-      await command(msg);
-    for (const msg of ["#2026年11月16日本期深渊", "#星铁2026-10-26本期末日", "%2026-11-20本期危局",
-      "#下期幻想", "*下期末日", "%下期防卫战", "#下期深渊", "%2026-11-20下期防卫战"])
-      await command(msg);
-    expect(calls).toEqual([
-      ["芙宁娜", "bare", "gi"], ["卡芙卡", "bare", "hsr"], ["艾莲·乔", "bare", "zzz"],
-      ["冰风迷途的勇士", "bare", "gi"], ["太空封印站", "bare", "hsr"], ["啄木鸟电音", "bare", "zzz"],
-      ["tower", "本期", Date.parse("2026-11-16T12:00:00+08:00")], ["maze_boss", "本期", Date.parse("2026-10-26T12:00:00+08:00")],
-      ["boss", "本期", Date.parse("2026-11-20T12:00:00+08:00")], ["rolecombat", "下期", undefined],
-      ["maze_boss", "下期", undefined], ["shiyu", "下期", undefined], ["tower", "下期", undefined],
-      ["shiyu", "下期", Date.parse("2026-11-20T12:00:00+08:00")],
-    ]);
-    expect(replies).toEqual([...Array(6).fill("名称资料"), ...Array(8).fill("挑战资料")]);
-    for (const msg of ["#深渊", "#当期深渊", "*本期末日", "%防卫战", "#绝区零上期危局", "#芙宁娜面板",
-      "*卡芙卡排行", "#芙宁娜攻略", "#芙宁娜练度统计", "%最强艾莲", "#刷新cookie", "#全量更新图鉴"])
-      expect(await command(msg)).toBe(false);
-    await command("#2026年2月29日本期深渊");
-    expect(replies.at(-1)).toBe("日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。");
-    expect(calls).toHaveLength(14);
-    expect(byteLimits).toEqual(Array(14).fill(undefined));
-    await app.lookup({ msg: "#芙宁娜", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
-    await app.lookup({ msg: "#2026年11月16日本期深渊", inlineImageByteLimit: 16 * 1024 * 1024, reply: () => undefined });
-    expect(byteLimits.slice(-2)).toEqual([16 * 1024 * 1024, 16 * 1024 * 1024]);
-  } finally {
-    if (prior) Object.defineProperty(target, "plugin", prior);
-    else Reflect.deleteProperty(target, "plugin");
+    const handled = await route.rule.run({
+      msg: "#芙宁娜", reply: (value) => replies.push(value),
+      async forward(contents) {
+        expect(contents).toBe(nodes);
+        if (receipt === "unknown") throw new Error("网关回执丢失");
+        return receipt;
+      },
+    });
+    expect(handled).toBe(true);
+    expect(replies).toEqual(receipt === true ? [] : receipt === false ? [...nodes] : ["合并转发结果未确认，请在聊天中核对。"]);
   }
 });
 
