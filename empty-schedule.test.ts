@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readlink, readdir, rm, symlink } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
-import { createAtlasMaintenance } from "./maintenance.ts";
+import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const version = "7.2";
@@ -88,6 +88,34 @@ test("缺资料的版本定时复用完整首装，发布三游戏及七圣后�
   expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
 }));
 
+test("主人普通更新在定时停用时仍可按已选渠道首装，检查只读", () => fixture(async (directory) => {
+  const root = join(directory, "data/atlas");
+  const source = join(directory, "export");
+  await exportAll(source);
+  let checks = 0, downloads = 0;
+  const job = createAtlasMaintenance(root, {
+    updateConfig: { ...config, auto_update: { enable: false } },
+    manifest: async () => { checks++; return manifest; },
+    async downloadVersion(_work, _root, _versions, consume) { downloads++; return consume(source, pageList); },
+    request: cards,
+  });
+  const owner = { atlasMaintenance: true } as const;
+  const alias = atlasMaintenanceAliases["#图鉴更新"];
+  expect(alias).toBe("#更新图鉴");
+  expect(await job.commands["#更新图鉴"]("", {})).toContain("只有 bot 主人");
+  expect(await job.commands["#更新图鉴"]("", { ...owner, isDelegated: true })).toContain("只有 bot 主人");
+  expect(await job.commands["#更新图鉴"]("误传参数", owner)).toContain("请直接发送");
+  expect(await job.atlasSchedule.version.run()).toContain("未启用");
+  expect(await job.commands["#检查图鉴更新"]("", owner)).toContain("未初始化");
+  expect(checks).toBe(0);
+  expect(await job.commands["#更新图鉴"]("", owner)).toBe("图鉴初始化完成，已发布第 1 版。");
+  const data = join(root, "current");
+  expect((await validateAtlasCandidate(data, [...pageList, { game: "gi", pageId: "gcg" }])).ok).toBeTrue();
+  expect(await job.commands["#更新图鉴"]("", owner)).toContain("本地所选 1 类版本均为目标版本");
+  expect(downloads).toBe(1);
+  expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
+}));
+
 test("受管空根外的旧数据和显式禁用保持零取源", () => fixture(async (directory) => {
   const cases = ["disabled", "no-channel", "no-schedule", "external", "old", "dangling", "invalid-pointer", "reset", "partial-flat", "archive", "symlink", "damaged"];
   for (const name of cases) {
@@ -121,6 +149,8 @@ test("受管空根外的旧数据和显式禁用保持零取源", () => fixture(
       async downloadVersion() { throw new Error("不得触发首装"); },
     });
     await job.atlasSchedule.version.run();
+    await job.commands["#检查图鉴更新"]("", { atlasMaintenance: true });
+    if (name !== "no-schedule") await job.commands["#更新图鉴"]("", { atlasMaintenance: true });
     expect([name, checks]).toEqual([name, 0]);
     if (name === "reset") expect(await readlink(join(root, "current"))).toBe(".atlas-reset");
     if (name === "damaged") expect(await Bun.file(join(root, "snapshots/1/data/map.json")).text()).toBe("{corrupt");

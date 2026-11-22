@@ -112,6 +112,13 @@ function configuredScope(value: unknown, selections: readonly string[]): readonl
     (!pages.size || pages.has(selection)));
 }
 
+export function atlasAllowsMissingDataInitialization(value: unknown): boolean {
+  const configured = object(value).auto_update;
+  const auto = object(configured);
+  return (configured === undefined || configured === auto) &&
+    (auto.run_on_missing_data === undefined || auto.run_on_missing_data === true);
+}
+
 export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasScheduleKind, AtlasSchedulePolicy>> {
   const atlas = object(value);
   const configured = atlas === value;
@@ -128,7 +135,7 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
     const cronKey = kind === "version" ? "check_cron" : "challenge_cron";
     const configuredCron = auto[cronKey];
     const rule = cron(configuredCron === undefined ? defaults[kind] : configuredCron);
-    const initializeMissing = kind === "version" && (auto.run_on_missing_data === undefined || auto.run_on_missing_data === true);
+    const initializeMissing = kind === "version" && atlasAllowsMissingDataInitialization(atlas);
     return rule ? { selections: selected, cron: rule, ...(initializeMissing && { initializeMissing: true }) }
       : { selections: selected, issue: `图鉴 auto_update.${cronKey} 无效或无法等价转换。` };
   }

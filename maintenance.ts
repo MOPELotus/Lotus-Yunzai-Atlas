@@ -9,7 +9,7 @@ import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.t
 import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
-import { atlasExportSelections, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { atlasAllowsMissingDataInitialization, atlasExportSelections, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
@@ -67,7 +67,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
   const workspace = join(dirname(root), "atlas-download");
   let updating = false;
 
-  async function run(kind: "check" | "update", selections: readonly string[], scheduledKind?: AtlasScheduleKind) {
+  async function run(kind: "check" | "update", selections: readonly string[], trigger?: AtlasScheduleKind | "manual-update") {
     if (signal?.aborted) return "图鉴维护已中止。";
     if (!selections.length) return "图鉴配置未选中已核实的分类。";
     if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
@@ -84,13 +84,15 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
           });
           if (fallback?.legacy === true) return "当前图鉴只读使用旧版导出。请先运行本地初始化，再管理更新。";
         }
-        if (scheduledKind === "version" && policy.version.initializeMissing && channel === configuredChannel &&
-            !dataOverride && await atlasRootIsEmpty(root)) {
+        const initializeMissing = trigger === "version" ? policy.version.initializeMissing
+          : trigger === "manual-update" && atlasAllowsMissingDataInitialization(options.updateConfig);
+        if (initializeMissing && channel === configuredChannel && !dataOverride && await atlasRootIsEmpty(root)) {
           await mkdir(root, { recursive: true, mode: 0o700 });
           const result = await initializeAtlasFromPublic(root, workspace, signal, channel,
             { manifest, request, emptyOnly: true, downloadVersion: options.downloadVersion });
-          return result.status === "published" ? `图鉴自动初始化完成，已发布第 ${result.version} 版。`
-            : `图鉴未自动初始化，${describeRefresh(result, "")}。`;
+          const action = trigger === "version" ? "自动初始化" : "初始化";
+          return result.status === "published" ? `图鉴${action}完成，已发布第 ${result.version} 版。`
+            : `图鉴未${action}，${describeRefresh(result, "")}。`;
         }
         return "图鉴数据未初始化或无法验证，请先准备完整快照。";
       }
@@ -125,7 +127,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
 
       const currentRoles = local.pages.filter(({ game, pageId, version }) => pageId === "character" &&
         version === versions[game] && scope.some(page => page.game === game && page.pageId === pageId));
-      if (scheduledKind !== "challenge" && currentRoles.length && (!wantsCards || cardsVersion && !changeCards)) {
+      if (trigger !== "challenge" && currentRoles.length && (!wantsCards || cardsVersion && !changeCards)) {
         const { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } = await import("./role-material-source.ts");
         const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal);
         if (pending.length && kind === "check") {
@@ -158,7 +160,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
       }
 
-      if (allCurrent && scheduledKind !== "challenge" && (!wantsCards || cardsVersion && !changeCards) &&
+      if (allCurrent && trigger !== "challenge" && (!wantsCards || cardsVersion && !changeCards) &&
           versions.gi && scope.some(({ game, pageId }) => game === "gi" && pageId === "character")) {
         try {
           const { genshinOriginalPortraitStatus } = await import("./genshin-original-portraits.ts");
@@ -191,7 +193,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
       }
 
-      if (changeCards || (wantsCards && !cardsVersion) || scheduledKind === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
+      if (changeCards || (wantsCards && !cardsVersion) || trigger === "challenge" || channel === "latest" || native.length !== scope.length || scope.length === legacyAtlasSourcePages.length ||
           native.some(({ selection }) => {
             const entry = atlasSourcePlan(selection, listing, local, channel).entries[0];
             return entry?.action === "review" && entry.reason === "unproven-upgrade";
@@ -207,12 +209,12 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
           }
         } else if (missing.length || (wantsCards && !cardsVersion)) {
           lines.push(`未能核实 ${[...new Set([...missing, ...(wantsCards && !cardsVersion ? ["gi"] : [])])].join("、")} 的目标版本，本次范围未发布。`);
-        } else if (allCurrent && !changeCards && scheduledKind !== "challenge") {
+        } else if (allCurrent && !changeCards && trigger !== "challenge") {
           lines.push(`本地所选 ${scope.length} 类版本均为目标版本。`);
         } else {
           const updateCount = (allCurrent ? 0 : scope.length) + (changeCards ? 1 : 0);
           try {
-            const observed = scheduledKind === "challenge" ? await (await import("./challenge-refresh-plan.ts"))
+            const observed = trigger === "challenge" ? await (await import("./challenge-refresh-plan.ts"))
               .planAtlasChallengeRefresh(baseline, local.pages, scope, versions, signal, request) : undefined;
             if (observed?.length === 0) {
               lines.push("已核对挑战轮换，来源索引与现用资料一致。");
@@ -289,7 +291,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
   function command(kind: "check" | "update", argument: string, context: AtlasMaintenanceContext) {
     if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以操作图鉴更新。";
     if (argument) return `请直接发送 ${kind === "check" ? checkCommand : updateCommand}。`;
-    return run(kind, policy.version.selections);
+    return run(kind, policy.version.selections, kind === "update" ? "manual-update" : undefined);
   }
 
   async function reset(argument: string, context: AtlasMaintenanceContext) {
