@@ -1,3 +1,4 @@
+import { atlasBookReply } from "./book-reply.ts";
 import { LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { AtlasSnapshotReset } from "./snapshot-pointer.ts";
 import { characterGalleryName, starRailTrailblazerName } from "./role-data.ts";
@@ -129,10 +130,9 @@ async function characterBook(entry: AtlasEntry, roster: readonly AtlasEntry[], d
   try {
     const { renderRoleBook } = await import("./role-render.ts");
     const galleryName = characterGalleryName(entry, roster, role.overview.name);
-    const pages = await renderRoleBook(role, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName });
-    const sections = pages.map(({ section }) => section).join(" → ");
-    const title = `${role.overview.name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
-    return { type: "forward", nodes: [title, ...pages.map(({ png }) => ({ type: "image" as const, file: png }))] };
+    return await atlasBookReply(role.overview.name, scale => renderRoleBook(role, {
+      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName,
+    }), delivery, true) ?? characterLine(entry, true);
   } catch {
     return `${await characterLine(entry, true)}\n图鉴图片暂不可用。`;
   }
@@ -155,17 +155,12 @@ async function setBook(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<Atl
   if (!set) return;
   try {
     const { renderSet } = await import("./role-render.ts");
-    return detailBook(set.name, await renderSet(set, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) }));
+    return await atlasBookReply(set.name, scale => renderSet(set, {
+      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry),
+    }), delivery);
   } catch {
     return undefined;
   }
-}
-
-function detailBook(name: string, pages: readonly { section: string; png: Uint8Array }[]): AtlasReply | undefined {
-  const images: AtlasImage[] = pages.map(({ png }) => ({ type: "image", file: png }));
-  if (images.length <= 1) return images[0];
-  const sections = pages.map(({ section }) => section).join(" → ");
-  return { type: "forward", nodes: [`${name}完整图鉴\n${sections}\n共 ${pages.length} 页`, ...images] };
 }
 
 async function bangbooBook(entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasReply | undefined> {
@@ -173,7 +168,9 @@ async function bangbooBook(entry: AtlasEntry, delivery?: AtlasDelivery): Promise
   if (!bangboo) return;
   try {
     const { renderBangboo } = await import("./role-render.ts");
-    return detailBook(bangboo.name, await renderBangboo(bangboo, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) }));
+    return await atlasBookReply(bangboo.name, scale => renderBangboo(bangboo, {
+      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry),
+    }), delivery);
   } catch {
     return undefined;
   }
@@ -228,8 +225,9 @@ async function starrailChallengeCard(entry: AtlasEntry, result: Awaited<ReturnTy
   try {
     const { renderStarrailChallenge } = await import("./role-render.ts");
     const card = period === "next" ? { ...challenge, name: `下期${challenge.name}（预览）` } : challenge;
-    const pages = await renderStarrailChallenge(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
-    return detailBook(card.name, pages);
+    return await atlasBookReply(card.name, scale => renderStarrailChallenge(card, {
+      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry),
+    }), delivery);
   } catch {
     return undefined;
   }
@@ -548,8 +546,9 @@ async function challengeQuery(argument: string, at?: number, delivery?: AtlasDel
       if (shiyu) {
         try {
           const { renderShiyu } = await import("./role-render.ts");
-          const pages = await renderShiyu(shiyu, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
-          const reply = detailBook(shiyu.name, pages);
+          const reply = await atlasBookReply(shiyu.name, scale => renderShiyu(shiyu, {
+            scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry),
+          }), delivery);
           if (reply) return reply;
         } catch {
           // The verified challenge summary remains usable without rendering.

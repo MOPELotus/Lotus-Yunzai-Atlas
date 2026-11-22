@@ -943,7 +943,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
     const groups = continuation ?? (allowPanelContinuation ? layout.panels : []);
     const sizeError = new RangeError(`图鉴「${section}」超过当前聊天的单图大小上限。`);
     const failure = image instanceof ImageSizeLimitError ? image : sizeError;
-    if (scale !== 4 || groups.length < 2) throw failure;
+    if ((scale !== 4 && scale !== 2) || groups.length < 2) throw failure;
     // Keep each room or section intact. Split only after 2× exceeds the codec or chat limit.
     const renderContinuation = async (start: number, end: number): Promise<void> => {
       const selected = groups.slice(start, end);

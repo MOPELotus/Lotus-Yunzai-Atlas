@@ -1,3 +1,4 @@
+import { sendBatchedImageForward, type BatchedImageForward } from "@lotus-yunzai/skia/forward-images";
 import type { Game } from "./catalog.ts";
 import { challengeModes, theaterMode, type ChallengeMode } from "./challenges.ts";
 
@@ -91,7 +92,7 @@ export function parseRoleShortcut(message: string): { game?: Game; query: string
 
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
 type AtlasNode = string | AtlasImage;
-export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] };
+export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] } | BatchedImageForward;
 type Lookup = "glued" | "shortcut" | "bare" | "character";
 
 export interface AtlasDelivery {
@@ -108,6 +109,11 @@ async function send(event: ShortcutEvent, reply: AtlasReply | undefined): Promis
   if (reply === undefined) return false;
   if (typeof reply === "string" || reply.type === "image") {
     await event.reply(reply);
+    return true;
+  }
+  if (reply.type === "forward-image-batches") {
+    const notice = await sendBatchedImageForward(reply, event.forward?.bind(event));
+    if (notice) await event.reply(notice);
     return true;
   }
   if (event.forward) {
