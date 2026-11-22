@@ -6,13 +6,15 @@ import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasR
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot } from "./publish-candidate.ts";
 import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.ts";
-import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
+import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
 import { atlasAllowsMissingDataInitialization, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
+import { renderAtlasStatus } from "./help.ts";
+import type { AtlasImage } from "./traditional.ts";
 
 const checkCommand = "#检查图鉴更新";
 const updateCommand = "#更新图鉴";
@@ -57,6 +59,8 @@ export interface AtlasMaintenanceOptions extends Pick<AtlasRefreshOptions, "mani
 interface AtlasMaintenanceContext {
   readonly atlasMaintenance?: true;
   readonly isDelegated?: boolean;
+  readonly inlineImageByteLimit?: number;
+  readonly reply?: (message: string | AtlasImage) => boolean | Promise<boolean>;
 }
 
 export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOptions = {}) {
@@ -67,7 +71,8 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
   const workspace = join(dirname(root), "atlas-download");
   let updating = false;
 
-  async function run(kind: "check" | "update", selections: readonly string[], trigger?: AtlasScheduleKind | "manual-update") {
+  async function run(kind: "check" | "update", selections: readonly string[], trigger?: AtlasScheduleKind | "manual-update",
+    onStart?: () => Promise<void>) {
     if (signal?.aborted) return "图鉴维护已中止。";
     if (!selections.length) return "图鉴配置未选中已核实的分类。";
     if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
@@ -75,6 +80,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     if (kind === "update") updating = true;
     try {
+      await onStart?.();
       let active = dataOverride ? undefined : await discoverAtlasDataDirectory(root).catch(() => undefined);
       let baseline = dataOverride ? await realpath(dataOverride).catch(() => undefined) : active?.root;
       if (!baseline) {
@@ -288,10 +294,31 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     }
   }
 
-  function command(kind: "check" | "update", argument: string, context: AtlasMaintenanceContext) {
+  async function command(kind: "check" | "update", argument: string, context: AtlasMaintenanceContext) {
     if (context.isDelegated || context.atlasMaintenance !== true) return "只有 bot 主人可以操作图鉴更新。";
     if (argument) return `请直接发送 ${kind === "check" ? checkCommand : updateCommand}。`;
-    return run(kind, policy.version.selections, kind === "update" ? "manual-update" : undefined);
+    const title = kind === "check" ? "图鉴版本检查" : "图鉴更新结果";
+    let started = false;
+    const result = await run(kind, policy.version.selections, kind === "update" ? "manual-update" : undefined,
+      context.reply && (async () => {
+        started = true;
+        await feedback(context, kind === "check" ? "正在检查图鉴版本差异。" : "正在检查图鉴版本，随后增量更新有变化的分类。");
+      }));
+    return started ? presentResult(context, title, result) : result;
+  }
+
+  async function feedback(context: AtlasMaintenanceContext, message: string | AtlasImage) {
+    try { return await context.reply?.(message) === true; } catch { return false; }
+  }
+
+  async function presentResult(context: AtlasMaintenanceContext, title: string, result: string) {
+    if (!context.reply || signal?.aborted) return result;
+    const rows = result.split("\n");
+    if (rows[0] === title) rows.shift();
+    const [lead = "维护完成。", ...contents] = rows;
+    const card = await renderAtlasStatus(title, lead, contents, context.inlineImageByteLimit);
+    if (typeof card === "string" || signal?.aborted || !await feedback(context, card)) return result;
+    return [];
   }
 
   async function reset(argument: string, context: AtlasMaintenanceContext) {
@@ -320,6 +347,17 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     updating = true;
+    let result: string;
+    try {
+      if (context.reply) await feedback(context, "正在全量核对三款游戏图鉴，首次初始化可能需要较长时间。");
+      result = await runFullUpdate(channel);
+    } finally {
+      updating = false;
+    }
+    return presentResult(context, "图鉴全量更新结果", result);
+  }
+
+  async function runFullUpdate(channel: AtlasVersionChannel) {
     let existing = false;
     try {
       await mkdir(root, { recursive: true, mode: 0o700 });
@@ -363,8 +401,6 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         return "未完成全量图鉴更新，保留现用资料。";
       }
       return "图鉴初始化未完成，已保留现有资料和下载工作目录。";
-    } finally {
-      updating = false;
     }
   }
 

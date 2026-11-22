@@ -111,6 +111,34 @@ test("图鉴旧维护命令仅允许主人，检查只读，更新仅尝试正�
   }
 });
 
+test("聊天图鉴更新先回执再查版本，发送结果卡失败时回落到同一份文字", () => fixture(async (_work, root) => {
+  const events: string[] = [];
+  const { commands } = createAtlasMaintenance(root, {
+    updateConfig: { version_channel: "latest", update_args: ["--page", "zzz=bangboo"] },
+    async manifest() {
+      events.push("读取版本");
+      return { zzz: { latest: original, available: [original] } };
+    },
+  });
+  let delivered = true;
+  const context = { atlasMaintenance: true as const, reply(message: string | { readonly file: Uint8Array }) {
+    if (typeof message === "string") {
+      events.push(message);
+      return true;
+    }
+    expect([...message.file.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    events.push("结果卡");
+    return delivered;
+  } };
+  expect(await commands["#更新图鉴"]("", { ...context, isDelegated: true })).toContain("只有 bot 主人");
+  expect(events).toEqual([]);
+  expect(await commands["#更新图鉴"]("", context)).toEqual([]);
+  expect(events).toEqual(["正在检查图鉴版本，随后增量更新有变化的分类。", "读取版本", "结果卡"]);
+  delivered = false;
+  expect(await commands["#检查图鉴更新"]("", context)).toContain("图鉴版本检查");
+  expect(events.slice(-3)).toEqual(["正在检查图鉴版本差异。", "读取版本", "结果卡"]);
+}));
+
 test("定时与手动共用分类、发布互斥和生命周期，失败后下次重新检查", () => fixture(async (work, root) => {
   const release = "3.4.5";
   let checks = 0;

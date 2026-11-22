@@ -17,14 +17,17 @@ const rows = [
   "数据目录：默认 data/atlas，可用 LOTUS_ATLAS_DATA_DIR 指定快照",
 ] as const;
 
-export async function atlasHelp(): Promise<AtlasImage | string> {
+export async function renderAtlasStatus(title: string, lead: string, rows: readonly string[], byteLimit?: number): Promise<AtlasImage | string> {
   try {
     const directories = atlasThemeDirectories(import.meta.url, Bun.env.LOTUS_ATLAS_THEME_DIR);
     const themeDirectory = directories.find((directory) => existsSync(join(directory, "bg", "bg-hydro.webp"))) ?? directories[0];
     const { renderStatusCard } = await import("@lotus-yunzai/skia/status-card");
-    const { png } = await renderStatusCard(title, lead, rows, new Date(), { themeDirectory });
-    return { type: "image", file: png };
-  } catch {
-    return [title, lead, ...rows].join("\n");
-  }
+    for (const scale of byteLimit === undefined ? [4] : [4, 2]) {
+      const { png } = await renderStatusCard(title, lead, rows, new Date(), { themeDirectory, scale });
+      if (byteLimit === undefined || png.byteLength <= byteLimit) return { type: "image", file: png };
+    }
+  } catch { /* Keep the same result available when Skia cannot render the card. */ }
+  return [title, lead, ...rows].join("\n");
 }
+
+export const atlasHelp = () => renderAtlasStatus(title, lead, rows);
