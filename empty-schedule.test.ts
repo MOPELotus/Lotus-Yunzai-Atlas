@@ -116,6 +116,46 @@ test("主人普通更新在定时停用时仍可按已选渠道首装，检查�
   expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
 }));
 
+test("主人全量更新对齐选定渠道，工作期间拒绝其他写操作且不能降级现用资料", () => fixture(async (directory) => {
+  const root = join(directory, "data/atlas");
+  const source = join(directory, "export");
+  await exportAll(source);
+  const owner = { atlasMaintenance: true } as const;
+  const initial = createAtlasMaintenance(root, {
+    updateConfig: config,
+    manifest: async () => manifest,
+    async downloadVersion(_work, _root, _versions, consume) { return consume(source, pageList); },
+    request: cards,
+  });
+  await initial.commands["#更新图鉴"]("", owner);
+
+  const observed = Promise.withResolvers<void>();
+  const proceed = Promise.withResolvers<void>();
+  const older = { live: "7.1", latest: version, available: ["7.1", version] };
+  let reads = 0, downloads = 0;
+  const update = createAtlasMaintenance(root, {
+    updateConfig: { ...config, version_channel: "live" },
+    async manifest() { reads++; observed.resolve(); await proceed.promise; return { gi: older, hsr: older, zzz: older }; },
+    async request() { downloads++; throw new Error("降版不能开始取源"); },
+  });
+  expect(atlasMaintenanceAliases["#图鉴全量更新"]).toBe("#全量更新图鉴");
+  expect(await update.commands["#全量更新图鉴"]("", {})).toContain("只有 bot 主人");
+  expect(await update.commands["#全量更新图鉴"]("", { ...owner, isDelegated: true })).toContain("只有 bot 主人");
+  expect(reads).toBe(0);
+  const refreshing = update.commands["#全量更新图鉴"]("", owner);
+  try {
+    await observed.promise;
+    expect(await update.commands["#更新图鉴"]("", owner)).toContain("已有图鉴更新正在进行");
+    expect(await update.commands["#重置图鉴"]("", owner)).toContain("已有图鉴更新正在进行");
+  } finally {
+    proceed.resolve();
+  }
+  expect(await refreshing).toContain("低于现用版本");
+  expect(downloads).toBe(0);
+  expect(await readlink(join(root, "current"))).toBe("snapshots/1/data");
+  expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
+}));
+
 test("受管空根外的旧数据和显式禁用保持零取源", () => fixture(async (directory) => {
   const cases = ["disabled", "no-channel", "no-schedule", "external", "old", "dangling", "invalid-pointer", "reset", "partial-flat", "archive", "symlink", "damaged"];
   for (const name of cases) {

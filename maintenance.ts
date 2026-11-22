@@ -9,7 +9,7 @@ import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.t
 import { atlasManifestVersion, fetchAtlasManifest } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
-import { atlasAllowsMissingDataInitialization, atlasExportSelections, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { atlasAllowsMissingDataInitialization, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
@@ -318,17 +318,28 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
     if (signal?.aborted) return "图鉴维护已中止。";
     if (channel !== "live" && channel !== "latest") return "图鉴 version_channel 须为 live 或 latest，请先修正配置。";
-    try {
-      await mkdir(root, { recursive: true, mode: 0o700 });
-      if (await readAtlasSnapshotVersion(root) !== null || await hasLegacyAtlasData(root)) {
-        return run("update", atlasExportSelections);
-      }
-    } catch {
-      return "图鉴发布目录不可用，保留现有资料。";
-    }
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     updating = true;
+    let existing = false;
     try {
+      await mkdir(root, { recursive: true, mode: 0o700 });
+      existing = await readAtlasSnapshotVersion(root) !== null || await hasLegacyAtlasData(root);
+      if (existing) {
+        const { refreshFullAtlasFromPublic } = await import("./full-refresh.ts");
+        const result = await refreshFullAtlasFromPublic(root, workspace, channel, manifest, request, signal);
+        if (result.status === "current") return "三款游戏的全部 30 类图鉴已重新核对，和现用资料一致。";
+        if (result.status === "published") return `三款游戏的全部 30 类图鉴已更新，发布至快照 ${result.version}。`;
+        if (result.status === "review") {
+          if (result.reason === "manifest") return "未能核实三款游戏的目标版本，保留现用图鉴。";
+          if (result.reason === "older") return "所选渠道有分类低于现用版本或版本无法比较，保留现用图鉴。";
+          return "现用图鉴资料无法核实，请先检查本地快照。";
+        }
+        if (result.status === "invalid") {
+          console.warn("[atlas]", result.issues[0] ?? "图鉴全量更新候选校验未通过。");
+          return "全量图鉴候选校验未通过，保留现用资料。";
+        }
+        return `${describeRefresh(result, "")}。`;
+      }
       const donor = configuredChannel === undefined ? await findLegacyAtlasExport(root) : undefined;
       const result = donor ? await initializeAtlas(root, donor, signal)
         : await initializeAtlasFromPublic(root, workspace, signal, channel, { manifest, request });
@@ -347,6 +358,10 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     } catch (error) {
       if (error instanceof LegacyAtlasSourceConflict) return error.message;
       if (signal?.aborted) return "图鉴维护已中止。";
+      if (existing) {
+        console.warn("[atlas]", error instanceof Error ? error.message : "图鉴全量更新失败。");
+        return "未完成全量图鉴更新，保留现用资料。";
+      }
       return "图鉴初始化未完成，已保留现有资料和下载工作目录。";
     } finally {
       updating = false;

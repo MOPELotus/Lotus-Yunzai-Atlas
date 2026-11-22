@@ -5,13 +5,16 @@ import { isStarrailRotationPage, mazeSourceOutline, starrailSourceRotation } fro
 import { readAchievementCategories } from "./achievements.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { candidateFile } from "./candidate-gallery.ts";
-import { deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
+import { inspectFullAtlasImages, inspectFullAtlasArtwork } from "./full-candidate-gallery.ts";
+import { evidenceObject, legacyEffectiveEvidenceDigest, parseLegacyJsonEvidence } from "./legacy-json-evidence.ts";
+import type { Game } from "./catalog.ts";
+import { challengeModes, deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { readAtlasSnapshotVersion, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
-import { effectText, object } from "./source-values.ts";
-import { fetchAtlasManifest, planAtlasUpdate, planPublishedChallengeRefresh, type AtlasVersionChannel } from "./update-plan.ts";
-import { validateAtlasCandidate } from "./validate-candidate.ts";
+import { effectText, label, object } from "./source-values.ts";
+import { fetchAtlasManifest, isNewerAtlasVersion, planAtlasUpdate, planPublishedChallengeRefresh, type AtlasVersionChannel } from "./update-plan.ts";
+import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
 const itemIcons = ["icon", "detail.icon"] as const;
 const sourcePages = {
@@ -42,7 +45,20 @@ const sourcePages = {
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
 } as const;
 export type SourceSelection = keyof typeof sourcePages;
-type SourcePage = typeof sourcePages[SourceSelection];
+type SourcePage = { readonly game: Game; readonly pageId: string; readonly title: string; readonly iconFields: readonly string[] };
+type FullImageEvidence = ReturnType<typeof inspectFullAtlasImages>;
+type ChallengeFacts = ReturnType<typeof readChallengeFacts>;
+
+const otherTitles: Readonly<Partial<Record<string, string>>> = {
+  "gi/character": "原神角色", "gi/monster": "原神敌人", "hsr/character": "星铁角色",
+};
+
+function fullSourcePage(game: Game, pageId: string): SourcePage {
+  const key = `${game}/${pageId}`;
+  if (isSourceSelection(key)) return sourcePages[key];
+  const title = otherTitles[key] ?? challengeModes.find(mode => mode.game === game && mode.id === pageId)?.name ?? key;
+  return { game, pageId, title, iconFields: [] };
+}
 const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone",
   equipment: "zzz/equipment", boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
 
@@ -69,20 +85,22 @@ async function readJson(root: string, path: string): Promise<unknown> {
   return JSON.parse(await readFile(await candidateFile(root, path), "utf8"));
 }
 
-async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal) {
-  const mode = pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).mode : undefined;
+async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal, fullImages?: FullImageEvidence) {
+  const mode = fullImages ? challengeModes.find(mode => mode.game === game && mode.id === pageId) : pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).mode : undefined;
   const map = object(await readJson(root, "map.json"));
   const gameData = object(object(map.games)[game]);
   const pages = object(object(object(gameData.locales).zh).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
-    window?: ReturnType<typeof readChallengeFacts>["window"]; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[]; description?: string; maze?: ReturnType<typeof mazeSourceOutline> }>();
+    window?: ChallengeFacts["window"]; challenge?: ChallengeFacts["sections"]; effective?: string;
+    imageDigests?: ReadonlyMap<string, string>; parts?: string[]; effects?: string[]; variants?: unknown[]; phases?: unknown[]; groupFields?: string[]; description?: string; maze?: ReturnType<typeof mazeSourceOutline> }>();
   const achievementSources: { id: string; name: string; list: unknown }[] = [];
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
-    const { path } = object(record);
+    const { path, rarity: indexRarity } = object(record);
     if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("图鉴候选条目路径无效。");
-    const item = object(await readJson(root, path));
+    const raw = await readFile(await candidateFile(root, path), "utf8");
+    const item = object(JSON.parse(raw));
     const { hasDetail, images, name } = object(item.meta);
     const downloaded = new Set((Array.isArray(images) ? images : []).map(object)
       .flatMap(({ status, placeholder, fieldPath }) =>
@@ -91,7 +109,8 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
     if (pageId === "achievement/achievement") {
       achievementSources.push({ id, name: typeof name === "string" ? name : "", list: object(item.content).list });
     }
-    const window = mode ? readChallengeFacts(mode, object(item.content)).window : undefined;
+    const facts = mode ? readChallengeFacts(mode, object(item.content)) : undefined;
+    const window = facts?.window;
     const content = object(item.content);
     const detail = object(content.detail);
     const values = object(content.list);
@@ -115,9 +134,22 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
       groupFields = Object.keys(values);
     }
     const maze = isStarrailRotationPage(pageId) ? mazeSourceOutline(pageId, content.detail, typeof name === "string" ? name : "", id) : undefined;
-    if (isStarrailRotationPage(pageId) && !maze) throw new Error(`${starrailSourceRotation(pageId).mode.name} ${id} 关卡身份或结构无效。`);
-    assets.set(key, { name, window, maze, hasDetail: hasDetail === true, parts: setParts, effects, variants: variantIds, phases, groupFields, description,
-      icons: mode || pageId === "artifact" || pageId === "character" || zenlessMonster
+    if (!fullImages && isStarrailRotationPage(pageId) && !maze) throw new Error(`${starrailSourceRotation(pageId).mode.name} ${id} 关卡身份或结构无效。`);
+    const imageDigests = fullImages && await fullImages.read(game, pageId, key, images);
+    let effective: string | undefined;
+    if (fullImages) {
+      const evidence = evidenceObject(parseLegacyJsonEvidence(raw));
+      const metadata = evidenceObject(evidence.meta ?? null);
+      effective = legacyEffectiveEvidenceDigest({
+        name: isMonsterGroupPage(pageId) ? null : metadata.name ?? null, indexRarity: label(indexRarity),
+        rarity: metadata.rarity ?? null, materialNames: metadata.materialNames ?? null,
+        hasDetail: metadata.hasDetail ?? null, content: evidence.content ?? null,
+      });
+    }
+    assets.set(key, { name, window, maze, hasDetail: hasDetail === true && (!fullImages || usableDetail(content.detail)),
+      parts: setParts, effects, variants: variantIds, phases, groupFields, description, effective, imageDigests,
+      challenge: fullImages ? facts?.sections : undefined,
+      icons: imageDigests ? new Set(imageDigests.keys()) : mode || pageId === "artifact" || pageId === "character" || zenlessMonster
         ? downloaded : new Set(iconFields.filter((field) => downloaded.has(field))) });
   }
   const achievements = pageId === "achievement/achievement" ? readAchievementCategories(game, {
@@ -137,9 +169,16 @@ async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage
   return { assets, achievementIds, achievementGroups };
 }
 
+function usableDetail(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(usableDetail);
+  if (value !== null && typeof value === "object") return Object.values(object(value)).some(usableDetail);
+  return value !== null && value !== undefined && (typeof value !== "string" || value.trim() !== "");
+}
+
 function regressions({ game, title, pageId }: SourcePage, before: Awaited<ReturnType<typeof pageAssets>>,
-  after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean) {
-  const preserveRotation = pageId === "boss" || pageId === "shiyu" || isStarrailRotationPage(pageId);
+  after: Awaited<ReturnType<typeof pageAssets>>, preserveRecords: boolean, full = false) {
+  const preserveRotation = pageId === "boss" || pageId === "shiyu" || isStarrailRotationPage(pageId) ||
+    (full && challengeModes.some(mode => mode.game === game && mode.id === pageId));
   const issues: string[] = [];
   for (const id of before.achievementIds) {
     if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
@@ -186,12 +225,77 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       [...oldMaze[key]].some(value => !next.maze?.[key].has(value)))) {
       issues.push(`${title} ${id} 缺少已有楼层、战斗或敌人。`);
     }
+    if (old.challenge?.some(section => {
+      const matches = next.challenge?.filter(current => current.label === section.label) ?? [];
+      return !matches.some(current => current.count >= section.count &&
+        (pageId !== "tower" || section.items.every(item => current.items.includes(item))));
+    })) issues.push(`${title} ${id} 缺少已有挑战分区。`);
     if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
     for (const field of old.icons) {
       if (!next.icons.has(field)) issues.push(`${title} ${id} 缺少已下载图标 ${field}。`);
     }
   }
   return issues;
+}
+
+function sameImages(before: ReadonlyMap<string, string> | undefined, after: ReadonlyMap<string, string> | undefined) {
+  if (!before || !after) return before === after;
+  // The first valid image also serves as the record's generic illustration.
+  if (before.size !== after.size || before.values().next().value !== after.values().next().value) return false;
+  return [...before].every(([field, digest]) => after.get(field) === digest);
+}
+
+/** Compare materialized snapshots, after filling any source delta into the candidate. */
+export async function inspectFullAtlasCandidate(baselineData: string, candidateData: string,
+  scope: readonly AtlasCandidatePage[], signal?: AbortSignal,
+): Promise<{ readonly issues: readonly string[]; readonly unchanged: boolean }> {
+  const pageKey = ({ game, pageId }: AtlasCandidatePage) => `${game}/${pageId}`;
+  if (!scope.length || new Set(scope.map(pageKey)).size !== scope.length) {
+    throw new Error("全量图鉴候选须提供不重复的分类范围。");
+  }
+  const [beforeRoot, afterRoot] = await Promise.all([realpath(baselineData), realpath(candidateData)]);
+  const [before, after] = await Promise.all([
+    validateAtlasCandidate(beforeRoot, [], signal), validateAtlasCandidate(afterRoot, scope, signal),
+  ]);
+  if (!before.ok || !after.ok) return { unchanged: false, issues: [...before.issues, ...after.issues] };
+
+  const issues: string[] = [];
+  const beforePages = new Map(before.pages.map(page => [pageKey(page), page]));
+  const afterPages = new Map(after.pages.map(page => [pageKey(page), page]));
+  const beforeImages = inspectFullAtlasImages(beforeRoot, signal);
+  const afterImages = inspectFullAtlasImages(afterRoot, signal, issues);
+  let unchanged = beforePages.size === afterPages.size;
+  for (const [key, previous] of beforePages) {
+    const next = afterPages.get(key);
+    if (!next) {
+      issues.push(`缺少现用分类 ${key}。`);
+      continue;
+    }
+    if (previous.version !== next.version && !isNewerAtlasVersion(next.version, previous.version, previous.game)) {
+      issues.push(`${key} 的版本 ${next.version} 不能证明晚于现用 ${previous.version}。`);
+    }
+  }
+  for (const [key, next] of afterPages) {
+    const previous = beforePages.get(key);
+    const page = fullSourcePage(next.game, next.pageId);
+    const [old, current] = await Promise.all([
+      previous ? pageAssets(beforeRoot, page, signal, beforeImages) : undefined,
+      pageAssets(afterRoot, page, signal, afterImages),
+    ]);
+    if (old) issues.push(...regressions(page, old, current, true, true));
+    if (!old || previous?.version !== next.version || old.assets.size !== current.assets.size) unchanged = false;
+    if (unchanged && old) {
+      for (const [id, item] of old.assets) {
+        const updated = current.assets.get(id);
+        if (!updated || item.effective !== updated.effective || !sameImages(item.imageDigests, updated.imageDigests)) {
+          unchanged = false;
+          break;
+        }
+      }
+    }
+  }
+  if (await inspectFullAtlasArtwork(beforeRoot, afterRoot, issues, signal)) unchanged = false;
+  return { issues, unchanged: unchanged && issues.length === 0 };
 }
 
 export function atlasSourcePlan(selection: SourceSelection, listing: unknown,

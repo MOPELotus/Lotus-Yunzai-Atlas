@@ -48,7 +48,8 @@ export function atlasManifestVersion(manifest: unknown, game: Game, channel: Atl
     Array.isArray(listing.available) && listing.available.includes(selected)) return selected;
 }
 
-function newer(target: string, local: string, game: Game): boolean {
+export function isNewerAtlasVersion(target: string, local: string, game: Game): boolean {
+  if (!version(target) || (game !== "zzz" && target.includes("+"))) return false;
   if (!version(local) || (game !== "zzz" && local.includes("+"))) return false;
   const [targetCore = "", targetBuild] = target.split("+");
   const [localCore = "", localBuild] = local.split("+");
@@ -66,7 +67,7 @@ function planVersionedPage(page: AtlasPlanPage & { readonly localVersion?: strin
   if (local && !local.ok) return { ...page, kind: "versioned", action: "review", reason: "local-unverified" };
   if (!target) return { ...page, kind: "versioned", action: "review", reason: "manifest-unavailable" };
   if (page.localVersion === target) return { ...page, kind: "versioned", action: "current", targetVersion: target };
-  if (page.localVersion && !newer(target, page.localVersion, page.game)) {
+  if (page.localVersion && !isNewerAtlasVersion(target, page.localVersion, page.game)) {
     return { ...page, kind: "versioned", action: "review", reason: "unproven-upgrade", targetVersion: target };
   }
   return { ...page, kind: "versioned", action: "fetch", targetVersion: target };

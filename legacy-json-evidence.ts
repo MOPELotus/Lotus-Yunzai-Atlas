@@ -26,13 +26,17 @@ export function legacyEvidenceType(value: Json) {
 }
 
 export function serializeLegacyJsonEvidence(value: Json, sortKeys = false): string {
-  if (value instanceof SourceNumber) return value.text;
-  if (Array.isArray(value)) return `[${value.map((item) => serializeLegacyJsonEvidence(item, sortKeys)).join(",")}]`;
+  return serializeEvidence(value, sortKeys, false);
+}
+
+function serializeEvidence(value: Json, sortKeys: boolean, normalizeNumbers: boolean): string {
+  if (value instanceof SourceNumber) return normalizeNumbers ? decimal(value.text) : value.text;
+  if (Array.isArray(value)) return `[${value.map((item) => serializeEvidence(item, sortKeys, normalizeNumbers)).join(",")}]`;
   if (value !== null && typeof value === "object") {
     const entries = evidenceObject(value);
     const keys = Object.keys(entries);
     if (sortKeys) keys.sort();
-    return `{${keys.map((key) => `${JSON.stringify(key)}:${serializeLegacyJsonEvidence(entries[key]!, sortKeys)}`).join(",")}}`;
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${serializeEvidence(entries[key]!, sortKeys, normalizeNumbers)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -50,6 +54,11 @@ function decimal(value: string) {
   let end = digits.length;
   while (digits[end - 1] === "0") end--;
   return `${sign}${digits.slice(0, end)}e${BigInt(exponent) + BigInt(digits.length - end - fraction.length)}`;
+}
+
+/** Ignore JSON formatting while retaining every significant decimal digit. */
+export function legacyEffectiveEvidenceDigest(value: Json): string {
+  return createHash("sha256").update(serializeEvidence(value, true, true)).digest("hex");
 }
 
 export function compareLegacyJsonEvidence(old: Json, source: Json) {
