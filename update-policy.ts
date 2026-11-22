@@ -13,6 +13,7 @@ interface AtlasSchedulePolicy {
   readonly selections: readonly string[];
   readonly cron?: string;
   readonly issue?: string;
+  readonly initializeMissing?: true;
 }
 
 const defaults: Readonly<Record<AtlasScheduleKind, string>> = {
@@ -127,7 +128,8 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
     const cronKey = kind === "version" ? "check_cron" : "challenge_cron";
     const configuredCron = auto[cronKey];
     const rule = cron(configuredCron === undefined ? defaults[kind] : configuredCron);
-    return rule ? { selections: selected, cron: rule }
+    const initializeMissing = kind === "version" && (auto.run_on_missing_data === undefined || auto.run_on_missing_data === true);
+    return rule ? { selections: selected, cron: rule, ...(initializeMissing && { initializeMissing: true }) }
       : { selections: selected, issue: `图鉴 auto_update.${cronKey} 无效或无法等价转换。` };
   }
   return {

@@ -1,13 +1,14 @@
 import { mkdtemp, realpath, rm } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { assembleAtlasCandidate, copyAtlasCandidate } from "./assemble-candidate.ts";
 import { atlasApplyStagingPrefix, hasLegacyAtlasData, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
   type AtlasPublication } from "./publish-candidate.ts";
-import { findLegacyAtlasExport } from "./legacy-atlas-directory.ts";
+import { atlasRootIsEmpty, findLegacyAtlasExport } from "./legacy-atlas-directory.ts";
 import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import type { AtlasSourceFetch } from "./source-transport.ts";
+import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
 import type { AtlasCandidatePage } from "./validate-candidate.ts";
 
 function contains(parent: string, child: string): boolean {
@@ -23,12 +24,13 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
 async function publishInitialAtlas(root: string, source: string, pages: readonly Required<AtlasCandidatePage>[],
   counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal,
   extra?: { readonly source: string; readonly pages: readonly Required<AtlasCandidatePage>[] },
-  materialRequest?: AtlasSourceFetch): Promise<AtlasPublication> {
+  materialRequest?: AtlasSourceFetch, emptyOnly = false): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
     throw new Error("请提供已有的本地图鉴目标目录和原导出目录。");
   }
   const [directory, donor] = await Promise.all([realpath(root), realpath(source)]);
+  if (emptyOnly && directory !== resolve(root)) return { status: "invalid", issues: ["自动初始化仅可写实体受管目录。"] };
   if (contains(directory, donor) || contains(donor, directory)) throw new Error("图鉴目标和原导出必须是独立目录。");
   const current = await readAtlasSnapshotVersion(directory);
   if (current !== null) return { status: "stale", current };
@@ -45,7 +47,7 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
       await completeAtlasRoleMaterials(prepared.directory, pages, signal, materialRequest);
     }
     const expected = extra ? [...pages, ...extra.pages] : pages;
-    result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal, true);
+    result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal, emptyOnly ? "empty-only" : true);
     return result;
   } finally {
     if (result?.status !== "published") await rm(stage, { recursive: true, force: true });
@@ -53,9 +55,16 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
 }
 
 export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal,
-  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request }:
-  { readonly manifest?: typeof fetchAtlasManifest; readonly request?: AtlasSourceFetch } = {}): Promise<AtlasPublication> {
+  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion }: {
+    readonly manifest?: typeof fetchAtlasManifest;
+    readonly request?: AtlasSourceFetch;
+    readonly emptyOnly?: boolean;
+    readonly downloadVersion?: typeof DownloadAtlasVersion;
+  } = {}): Promise<AtlasPublication> {
   signal?.throwIfAborted();
+  if (emptyOnly && (!channel || !await atlasRootIsEmpty(root))) {
+    return { status: "invalid", issues: ["自动初始化要求选定版本渠道和空的图鉴受管目录。"] };
+  }
   const current = await readAtlasSnapshotVersion(root);
   if (current !== null) return { status: "stale", current };
   if (await hasLegacyAtlasData(root)) return { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
@@ -67,11 +76,15 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
     const zzz = atlasManifestVersion(listing, "zzz", channel);
     if (!gi || !hsr || !zzz) throw new Error("原站清单未列出三款游戏所选的图鉴版本。");
     const directory = await realpath(root);
-    return downloadAtlasVersion(workspace, directory, { gi, hsr, zzz }, async (donor, pages) => {
+    return (downloadVersion ?? downloadAtlasVersion)(workspace, directory, { gi, hsr, zzz }, async (donor, pages) => {
+      if (emptyOnly && (pages.length !== legacyAtlasSourcePages.length || legacyAtlasSourcePages.some(({ game, pageId }) =>
+          !pages.some(page => page.game === game && page.pageId === pageId)))) {
+        return { status: "invalid", issues: ["来源缺少首装要求的完整图鉴分类。"] };
+      }
       const stage = await mkdtemp(join(dirname(directory), ".atlas-first-gcg-"));
       try {
         const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi }], signal, request);
-        return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages });
+        return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages }, undefined, emptyOnly);
       } finally {
         await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       }

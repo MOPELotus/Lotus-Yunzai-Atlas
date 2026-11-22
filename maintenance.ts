@@ -1,4 +1,4 @@
-import { discoverRuntimeAtlasDataDirectory, findLegacyAtlasExport, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
+import { atlasRootIsEmpty, discoverRuntimeAtlasDataDirectory, findLegacyAtlasExport, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
@@ -83,6 +83,14 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
             if (error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset) throw error;
           });
           if (fallback?.legacy === true) return "当前图鉴只读使用旧版导出。请先运行本地初始化，再管理更新。";
+        }
+        if (scheduledKind === "version" && policy.version.initializeMissing && channel === configuredChannel &&
+            !dataOverride && await atlasRootIsEmpty(root)) {
+          await mkdir(root, { recursive: true, mode: 0o700 });
+          const result = await initializeAtlasFromPublic(root, workspace, signal, channel,
+            { manifest, request, emptyOnly: true, downloadVersion: options.downloadVersion });
+          return result.status === "published" ? `图鉴自动初始化完成，已发布第 ${result.version} 版。`
+            : `图鉴未自动初始化，${describeRefresh(result, "")}。`;
         }
         return "图鉴数据未初始化或无法验证，请先准备完整快照。";
       }

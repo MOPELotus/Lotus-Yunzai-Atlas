@@ -5,10 +5,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
 import { atlasResetTarget, atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasPublicationPointer,
   readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
+import { atlasRootIsEmpty } from "./legacy-atlas-directory.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
 type Version = number | null;
+type Initialization = boolean | "empty-only";
 export const atlasApplyStagingPrefix = ".atlas-apply-";
 
 export type AtlasPublication =
@@ -115,7 +117,7 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
  * The caller provides the full page list from its assembled candidate and stops writing before publication.
  */
 async function publish(root: string, expected: Version, expectedPages: AtlasCandidateValidation["pages"],
-  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize = false): Promise<AtlasPublication> {
+  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize: Initialization = false): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
   const directory = await realpath(root);
@@ -126,6 +128,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     const current = pointer === "reset" ? null : pointer;
     if (pointer === "reset" && !initialize) return { status: "stale", current };
     if (current !== expected) return { status: "stale", current };
+    if (initialize === "empty-only" && !await atlasRootIsEmpty(directory)) return occupiedAtlasData;
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
 
     const { data: candidate, version, promote } = await prepare(directory);
@@ -150,6 +153,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     }
 
     signal?.throwIfAborted();
+    if (initialize === "empty-only" && !await atlasRootIsEmpty(directory)) return occupiedAtlasData;
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
     await promote?.();
     await commitPointer(directory, atlasSnapshotTarget(version), signal);
@@ -159,6 +163,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
   }
 }
 
+const occupiedAtlasData = { status: "invalid", issues: ["图鉴受管目录已有数据，未自动初始化。"] } as const;
 const existingLegacyData = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] } as const;
 
 export async function hasLegacyAtlasData(root: string): Promise<boolean> {
@@ -182,7 +187,7 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
 
 /** Move an assembled, caller-owned private candidate into the version store under the publication lock. */
 export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
-  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize = false): Promise<AtlasPublication> {
+  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize: Initialization = false): Promise<AtlasPublication> {
   if (initialize && expected !== null) throw new Error("首版图鉴初始化要求没有现用指针。");
   return publish(root, expected, expectedPages, async (directory) => {
     const stagedRoot = dirname(prepared);

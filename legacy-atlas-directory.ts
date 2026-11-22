@@ -1,5 +1,5 @@
-import { lstat, realpath } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { lstat, readdir, realpath } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 
 const formerPluginPaths = ["Lotus-Plugin", "Lotus-ReFactor"] as const;
@@ -43,4 +43,28 @@ export async function discoverRuntimeAtlasDataDirectory(atlasRoot: string) {
   const source = await findLegacyAtlasExport(atlasRoot);
   if (source) return { root: join(source, "data"), version: null, legacy: true };
   return { ...await discoverAtlasDataDirectory(atlasRoot), legacy: false };
+}
+
+
+// A theme and the publication lock are independent of the Atlas data itself.
+export async function atlasRootIsEmpty(root: string): Promise<boolean> {
+  const directory = resolve(root);
+  for (let candidate = directory; ; candidate = dirname(candidate)) {
+    const info = await lstatIfPresent(candidate);
+    if (!info) continue;
+    if (!info.isDirectory() || await realpath(candidate) !== candidate) return false;
+    break;
+  }
+  if (await findLegacyAtlasExport(directory)) return false;
+  if (!await lstatIfPresent(directory)) return true;
+
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.name === "theme" && entry.isDirectory()) continue;
+    // BEGIN IMMEDIATE may create the rollback journal while the publication lock is held.
+    if ((entry.name === ".publication.sqlite" || entry.name === ".publication.sqlite-journal") && entry.isFile()) continue;
+    if (entry.name !== "snapshots" || !entry.isDirectory() || (await readdir(join(directory, entry.name))).length) {
+      return false;
+    }
+  }
+  return true;
 }
