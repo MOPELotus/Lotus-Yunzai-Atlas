@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { nativeImageRasterScale } from "@lotus-yunzai/skia";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 import type { AtlasImage } from "./traditional.ts";
 
@@ -22,8 +23,9 @@ export async function renderAtlasStatus(title: string, lead: string, rows: reado
     const directories = atlasThemeDirectories(import.meta.url, Bun.env.LOTUS_ATLAS_THEME_DIR);
     const themeDirectory = directories.find((directory) => existsSync(join(directory, "bg", "bg-hydro.webp"))) ?? directories[0];
     const { renderStatusCard } = await import("@lotus-yunzai/skia/status-card");
-    for (const scale of byteLimit === undefined ? [4] : [4, 2]) {
-      const { png } = await renderStatusCard(title, lead, rows, new Date(), { themeDirectory, scale });
+    const scale = nativeImageRasterScale();
+    for (const size of scale === 4 && byteLimit !== undefined ? [scale, 2] : [scale]) {
+      const { png } = await renderStatusCard(title, lead, rows, new Date(), { themeDirectory, scale: size });
       if (byteLimit === undefined || png.byteLength <= byteLimit) return { type: "image", file: png };
     }
   } catch { /* Keep the same result available when Skia cannot render the card. */ }

@@ -14,6 +14,7 @@ import { traditionalAtlasEvent, type AtlasDelivery, type AtlasImage, type AtlasR
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
+import { atlasStatus, atlasDataUnavailable as missing } from "./status.ts";
 import { readZzzAliasRegistry, zzzRoleName } from "./zzz-aliases.ts";
 
 export { findAchievementCategories, findAchievements } from "./achievements.ts";
@@ -25,7 +26,6 @@ const games = new Map<string, Game>([
 ]);
 const atlasRoot = fileURLToPath(new URL("../../data/atlas/", import.meta.url));
 const catalog = createAtlasRuntimeCatalog(atlasRoot, Bun.env.LOTUS_ATLAS_DATA_DIR);
-const missing = "图鉴数据不可用。请检查 data/atlas 快照或 LOTUS_ATLAS_DATA_DIR 设置。";
 
 function searchTerms(argument: string, fixedGame?: Game) {
   const words = argument.trim().split(/\s+/u);
@@ -682,21 +682,7 @@ const atlas = {
     "#绝区零下期防卫战图鉴": challengeCommand("绝区零 式舆防卫战 下期"),
     "#绝区零本期危局图鉴": challengeCommand("绝区零 危局强袭战 本期"),
     "#绝区零上期危局图鉴": challengeCommand("绝区零 危局强袭战 上期"),
-    async "#图鉴状态"(): Promise<string> {
-      try {
-        const result = await catalog.read();
-        const lines = result.pages.map(({ game, name, version, entries, sampled, achievementCategories }) => {
-          const count = achievementCategories
-            ? `${achievementCategories.length} 类 · ${achievementCategories.reduce((total, category) => total + category.entries.length, 0)} 项`
-            : `${entries.length} 个条目`;
-          return `${gameNames[game]} · ${name} · ${version} · ${count}${sampled ? "（样例）" : ""}`;
-        });
-        if (result.stale) lines.push("部分索引更新失败，已有数据的分类保留了上一次可用的版本。");
-        return lines.join("\n");
-      } catch (error) {
-        return error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset ? error.message : missing;
-      }
-    },
+    "#图鉴状态": (_argument: string, delivery?: AtlasDelivery) => atlasStatus(catalog, delivery),
     async "#角色图鉴"(argument: string): Promise<string> {
       const { game, query } = searchTerms(argument);
       if (!query) return "用法：#角色图鉴 [原神|星铁|绝区零] 名称或 ID";

@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { challengeModes, readChallengeFacts, type ChallengeMode } from "./challenges.ts";
 import { compareKey, effectText, galleryArtwork, label, object } from "./source-values.ts";
@@ -453,6 +453,12 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
   return {
     assetRoot(entry: AtlasEntry): string {
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
+    },
+    async statusSource() {
+      const root = snapshot?.root ?? await locate().then(({ root }) => root, () => configuredRoot);
+      const bases = basename(root) === "data" ? [root, dirname(root)] : [root];
+      const galleries = await Promise.all(bases.map(base => lstat(join(base, "gallery")).catch(() => undefined)));
+      return { root, galleryReady: galleries.some(info => info?.isDirectory()) };
     },
     read(): Promise<Catalog> {
       return reading ??= (checkingShortcuts ? checkingShortcuts.then(() => read(), () => read()) : read())
