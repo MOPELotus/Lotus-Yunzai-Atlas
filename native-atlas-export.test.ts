@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { downloadAtlasVersion } from "./download-legacy-atlas.ts";
+import { downloadAtlasVersion, redownloadAtlasVersion } from "./download-legacy-atlas.ts";
 import { copyAtlasSelectedPages } from "./assemble-candidate.ts";
 import type { AtlasSourceFetch } from "./source-transport.ts";
 
@@ -106,6 +106,78 @@ test("首次与同版增量保留索引及详情大整数的原表示，稳定�
     await download(join(firstSeed, "data"));
     expect(calls).toEqual([indexPath, detailPath]);
     expect(await Bun.file(join(firstSeed, recordPath)).text()).toContain(first);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("显式重取同版索引和明细，已验原图复用而常规缓存保持", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-native-atlas-redownload-"));
+  try {
+    const target = join(root, "target");
+    const work = join(root, "work");
+    const archive = join(root, "archive");
+    const cachedExport = join(work, "backend");
+    await mkdir(target);
+    const selection = [{ game: "gi", pageId: "weapon" }] as const;
+    const versions = { gi: "7.2" };
+    const index = "/gi/7.2/weapon.json";
+    const detail = "/gi/7.2/zh/weapon/11401.json";
+    const asset = "UI_EquipIcon_Sword_Zephyrus";
+    const original = `/assets/gi/${asset}.webp`;
+    const path = "data/items/简体中文/gi/weapon/11401.json";
+    const imagePath = `gallery/gi/${asset}.webp`;
+    const urls: string[] = [];
+    let description = "旧版明细";
+    let fail = false;
+    const request: AtlasSourceFetch = async (url, init) => {
+      const { origin, pathname } = new URL(url);
+      expect(origin).toBe("https://static.nanoka.cc");
+      expect(init).toMatchObject({ credentials: "omit", redirect: "error" });
+      urls.push(pathname);
+      if (pathname === index) return Response.json({ "11401": { zh: "西风剑", icon: asset } });
+      if (pathname === detail) {
+        return fail ? new Response(null, { status: 400 }) : Response.json({ name: "西风剑", icon: asset, desc: description });
+      }
+      if (pathname === original) return new Response(new Uint8Array(webp));
+      throw new Error(pathname);
+    };
+    const read = async (candidate: string) => {
+      expect(Buffer.from(await Bun.file(join(candidate, imagePath)).arrayBuffer())).toEqual(webp);
+      return (await Bun.file(join(candidate, path)).json()).content.detail.desc;
+    };
+    const ingest = (source: string, pages: Parameters<typeof copyAtlasSelectedPages>[2]) =>
+      copyAtlasSelectedPages(source, archive, pages);
+    const baseline = join(archive, "data");
+    const normal = (seed?: string) => downloadAtlasVersion(work, target, versions, read, undefined, request, selection, seed);
+    const refresh = (directory = work) => redownloadAtlasVersion(directory, target, versions, read, undefined, request, selection, baseline);
+    await downloadAtlasVersion(work, target, versions, ingest, undefined, request, selection);
+    expect(urls.splice(0)).toEqual([index, detail, original]);
+
+    description = "同索引下的新明细";
+    await copyAtlasSelectedPages(archive, cachedExport, [{ ...selection[0], version: versions.gi, recordCount: 1 }]);
+    expect(await normal(baseline)).toBe("旧版明细");
+    expect(urls.splice(0)).toEqual([index]);
+    expect(await refresh()).toBe(description);
+    expect(urls.splice(0)).toEqual([index, detail]);
+    expect(await refresh()).toBe(description);
+    expect(urls.splice(0)).toEqual([index, detail]);
+
+    fail = true;
+    await expect(refresh()).rejects.toThrow("HTTP 400");
+    expect(urls.splice(0)).toEqual([index, detail]);
+    fail = false;
+    await rm(cachedExport, { recursive: true });
+    expect(await normal()).toBe("旧版明细");
+    expect(urls.splice(0)).toEqual([index]);
+
+    const damaged = Buffer.from(webp).fill(0, 25, 27);
+    await Bun.write(join(archive, imagePath), damaged);
+    expect(await refresh(join(root, "work-without-art-cache"))).toBe(description);
+    expect(urls.splice(0)).toEqual([index, detail, original]);
+    expect(Buffer.from(await Bun.file(join(archive, imagePath)).arrayBuffer())).toEqual(damaged);
+    expect((await Bun.file(join(archive, path)).json()).content.detail.desc).toBe("旧版明细");
+    expect(await Bun.file(join(target, "current")).exists()).toBeFalse();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -19,6 +19,7 @@ interface NativeExportOptions {
   readonly cache: string;
   readonly indexes: readonly NativeAtlasIndex[];
   readonly sourceRoots: readonly string[];
+  readonly refreshDetails?: boolean;
   readonly request?: AtlasSourceFetch;
   readonly signal?: AbortSignal;
 }
@@ -132,7 +133,7 @@ type GameFolder = {
 };
 
 /** Stages original indexes, details and artwork from Nanoka using Bun only. */
-export async function nativeAtlasExport({ destination, cache, indexes, sourceRoots,
+export async function nativeAtlasExport({ destination, cache, indexes, sourceRoots, refreshDetails,
   request = fetch, signal }: NativeExportOptions) {
   if (!indexes.length || new Set(indexes.map(({ game, pageId }) => game + "/" + pageId)).size !== indexes.length) {
     throw new Error("选择已验证且互不重复的原图鉴分类。");
@@ -151,7 +152,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
     const records: Record<string, unknown> = Object.create(null);
     const input = [...rows];
     const indexHash = sha256(JSON.stringify(input));
-    const details: AtlasSourceFetch = async (url, init) => {
+    const details: AtlasSourceFetch = refreshDetails ? request : async (url, init) => {
       const bytes = await digestCache(join(cache, "details"), url + "#" + indexHash,
         () => readAtlasSourceBytes(url, "application/json", 8 * 1024 * 1024, true, init.signal ?? signal, request, { retry: true }),
         value => { try { return !!JSON.parse(value.toString("utf8")); } catch { return false; } });

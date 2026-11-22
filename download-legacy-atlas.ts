@@ -204,7 +204,7 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
 
 async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly AtlasSourceIndex[]>,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  publishedBaseline?: string, request?: AtlasSourceFetch): Promise<T> {
+  publishedBaseline?: string, request?: AtlasSourceFetch, refreshDetails = false): Promise<T> {
   signal?.throwIfAborted();
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
@@ -246,7 +246,8 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     stage = await mkdtemp(join(workspace, ".native-atlas-build-"));
     let remaining = indexes;
     const reusable = [];
-    for (const seed of sources) {
+    // Fresh exports use prior snapshots only as verified artwork donors.
+    for (const seed of refreshDetails ? [] : sources) {
       const data = join(seed, "data");
       const changed = await changedAtlasSourceIndexes(data, remaining, signal).catch((error: unknown) => {
         if (data === publishedBaseline) throw error;
@@ -261,7 +262,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     let source: string | undefined;
     if (remaining.length) {
       source = join(stage, "original");
-      await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal });
+      await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal, refreshDetails });
     }
     const recovery = nativeAtlasImageRecovery(cache, sources, request);
     for (const [index, donor] of reusable.entries()) {
@@ -308,6 +309,14 @@ export function downloadAtlasVersion<T>(path: string, target: string, versions: 
   request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string): Promise<T> {
   return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
     publishedBaseline, request);
+}
+
+/** Read fresh indexes and detail JSON. Prior snapshots and caches may only supply verified artwork. */
+export function redownloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
+  consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], imageSeedBaseline?: string): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
+    imageSeedBaseline, request, true);
 }
 
 /** Use the same checked source indexes for discovery and for the downloaded candidate. */
