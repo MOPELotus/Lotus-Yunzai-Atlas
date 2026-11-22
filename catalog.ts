@@ -136,11 +136,15 @@ function exactName(value: string): string {
   return value.trim().normalize("NFKC").toLowerCase();
 }
 
-function indexAliases(entries: Readonly<Record<string, readonly string[] | string>>) {
+function legacyAliasKey(value: string): string {
+  return exactName(value).replace(/[\s·・「」『』"'“”‘’【】\[\]()（）]/gu, "");
+}
+
+function indexAliases(entries: Readonly<Record<string, readonly string[] | string>>, normalize = exactName) {
   const aliases = new Map<string, Set<string>>();
   for (const [canonical, terms] of Object.entries(entries)) {
     for (const term of typeof terms === "string" ? terms.split(",") : terms) {
-      const key = exactName(term);
+      const key = normalize(term);
       if (!key) continue;
       const names = aliases.get(key) ?? new Set();
       names.add(compareKey(canonical));
@@ -156,7 +160,7 @@ const equipmentAliases = new Map(
 
 const legacyCharacterSetAliases = new Map(
   Object.entries(legacyCharacterSetAliasData).map(([game, kinds]) => [game as Game, new Map(
-    Object.entries(kinds).map(([kind, entries]) => [kind as Kind, indexAliases(entries)]),
+    Object.entries(kinds).map(([kind, entries]) => [kind as Kind, indexAliases(entries, legacyAliasKey)]),
   )]),
 );
 
@@ -164,12 +168,13 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
   const literal = exactName(query);
   const key = exact ? literal : compareKey(query);
   if (!key) return [];
+  const legacyKey = legacyAliasKey(literal);
   const matches = catalog.pages.flatMap((page) => {
     const kind = kinds.find((kind) => kind === page.kind);
     if (!kind || (game && page.game !== game)) return [];
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal) : undefined;
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
-    const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(literal);
+    const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(legacyKey);
     return page.entries.map((entry) => {
       const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key, literal);
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;

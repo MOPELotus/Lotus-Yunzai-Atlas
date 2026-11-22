@@ -38,6 +38,7 @@ test("旧版角色昵称与套装简称按游戏、类型查询并保留正式�
   const catalog = { pages, stale: false };
   expect(findTraditionalEntries(catalog, "芙芙", "gi", "bare").map(({ entry }) => entry)).toEqual([furina]);
   expect(findTraditionalEntries(catalog, "亲妈", "hsr", "bare").map(({ entry }) => entry)).toEqual([kafka]);
+  expect(findTraditionalEntries(catalog, "「亲·妈」", "hsr", "name").map(({ entry }) => entry)).toEqual([kafka]);
   expect(findTraditionalEntries(catalog, "冰套", "gi", "bare").map(({ entry }) => entry)).toEqual([blizzard]);
   expect(findTraditionalEntries(catalog, "冰套", "hsr", "bare").map(({ entry }) => entry)).toEqual([hunter]);
   expect(findTraditionalEntries(catalog, "芙芙", "hsr", "bare")).toEqual([]);
