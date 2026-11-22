@@ -23,6 +23,30 @@ test("原神装备旧称只匹配已核对的武器与圣遗物套装，标题�
   expect(findTraditionalEntries(catalog, "冰封", "gi", "name")).toEqual([]);
 });
 
+test("旧版角色昵称与套装简称按游戏、类型查询并保留正式名优先", () => {
+  const common = { version: "7.2", rarity: "", path: "items/example.json" };
+  const furina = { ...common, game: "gi", id: "10000089", name: "芙宁娜" } as const;
+  const kafka = { ...common, game: "hsr", id: "1005", name: "卡芙卡" } as const;
+  const blizzard = { ...common, game: "gi", id: "14001", name: "冰风迷途的勇士" } as const;
+  const hunter = { ...common, game: "hsr", id: "104", name: "密林卧雪的猎人" } as const;
+  const pages = [
+    { ...common, game: "gi", kind: "character", name: "角色", sampled: false, entries: [furina] },
+    { ...common, game: "hsr", kind: "character", name: "角色", sampled: false, entries: [kafka] },
+    { ...common, game: "gi", kind: "set", name: "圣遗物", sampled: false, entries: [blizzard] },
+    { ...common, game: "hsr", kind: "set", name: "遗器套装", sampled: false, entries: [hunter] },
+  ] as const;
+  const catalog = { pages, stale: false };
+  expect(findTraditionalEntries(catalog, "芙芙", "gi", "bare").map(({ entry }) => entry)).toEqual([furina]);
+  expect(findTraditionalEntries(catalog, "亲妈", "hsr", "bare").map(({ entry }) => entry)).toEqual([kafka]);
+  expect(findTraditionalEntries(catalog, "冰套", "gi", "bare").map(({ entry }) => entry)).toEqual([blizzard]);
+  expect(findTraditionalEntries(catalog, "冰套", "hsr", "bare").map(({ entry }) => entry)).toEqual([hunter]);
+  expect(findTraditionalEntries(catalog, "芙芙", "hsr", "bare")).toEqual([]);
+  expect(findTraditionalEntries(catalog, "冰套", "gi", "character")).toEqual([]);
+  const sameName = { ...furina, id: "100", name: "芙芙" };
+  const exact = { pages: [{ ...pages[0], entries: [furina, sameName] }], stale: false };
+  expect(findTraditionalEntries(exact, "芙芙", "gi", "bare").map(({ entry }) => entry)).toEqual([sameName]);
+});
+
 test("星见雅旧全名只指向绝区零的雅，保留原索引名与精确名称优先级", () => {
   const entry = { game: "zzz", id: "1091", name: "雅", version: "3.3", rarity: "S级", path: "items/1091.json" } as const;
   const page = { game: "zzz", kind: "character", name: "角色", version: "3.3", sampled: false, entries: [entry] } as const;

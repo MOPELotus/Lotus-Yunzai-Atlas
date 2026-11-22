@@ -18,6 +18,7 @@ import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import equipmentAliasData from "./equipment-aliases.json";
+import legacyCharacterSetAliasData from "./legacy-character-set-aliases.json";
 import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
@@ -135,18 +136,28 @@ function exactName(value: string): string {
   return value.trim().normalize("NFKC").toLowerCase();
 }
 
-const equipmentAliases: ReadonlyMap<Game, ReadonlyMap<string, ReadonlySet<string>>> = new Map(
-  Object.entries(equipmentAliasData).map(([game, entries]) => {
-    const aliases = new Map<string, Set<string>>();
-    for (const [canonical, terms] of Object.entries(entries)) {
-      for (const term of terms) {
-        const names = aliases.get(term) ?? new Set();
-        names.add(compareKey(canonical));
-        aliases.set(term, names);
-      }
+function indexAliases(entries: Readonly<Record<string, readonly string[] | string>>) {
+  const aliases = new Map<string, Set<string>>();
+  for (const [canonical, terms] of Object.entries(entries)) {
+    for (const term of typeof terms === "string" ? terms.split(",") : terms) {
+      const key = exactName(term);
+      if (!key) continue;
+      const names = aliases.get(key) ?? new Set();
+      names.add(compareKey(canonical));
+      aliases.set(key, names);
     }
-    return [game as Game, aliases];
-  }),
+  }
+  return aliases;
+}
+
+const equipmentAliases = new Map(
+  Object.entries(equipmentAliasData).map(([game, entries]) => [game as Game, indexAliases(entries)]),
+);
+
+const legacyCharacterSetAliases = new Map(
+  Object.entries(legacyCharacterSetAliasData).map(([game, kinds]) => [game as Game, new Map(
+    Object.entries(kinds).map(([kind, entries]) => [kind as Kind, indexAliases(entries)]),
+  )]),
 );
 
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
@@ -158,6 +169,7 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     if (!kind || (game && page.game !== game)) return [];
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal) : undefined;
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
+    const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(literal);
     return page.entries.map((entry) => {
       const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key, literal);
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
@@ -165,6 +177,7 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
       const alias = (aliasTarget?.id === entry.id && aliasTarget.name === entry.name) ||
         (trailblazer !== undefined && (literal === "开拓者" || exactName(trailblazer) === literal)) ||
         weaponNames?.has(compareKey(entry.name)) ||
+        legacyNames?.has(compareKey(entry.name)) ||
         (kind === "set" && page.game === "gi" && literal === "冰封迷途的勇士" &&
           entry.id === "14001" && entry.name === "冰风迷途的勇士");
       return { kind, entry, score: alias ? Math.max(direct, 2.5) : direct };
