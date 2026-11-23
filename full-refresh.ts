@@ -5,7 +5,7 @@ import { candidateFile, copyCandidateFile, hashCandidateFile } from "./candidate
 import { challengeArtworkDigests } from "./challenge-artwork.ts";
 import { redownloadAtlasVersion } from "./download-legacy-atlas.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
-import { atlasApplyStagingPrefix, publishPreparedAtlasCandidate, type AtlasPublication } from "./publish-candidate.ts";
+import { atlasApplyStagingPrefix, publishPreparedAtlasCandidate, type AtlasPreparation, type AtlasPublication } from "./publish-candidate.ts";
 import { inspectFullAtlasCandidate } from "./refresh-source.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
@@ -39,7 +39,8 @@ async function retainChallengeArtwork(base: string, candidate: string, signal?: 
 
 /** Reacquire all maintained pages without changing what queries can read until the candidate has passed review. */
 export async function refreshFullAtlasFromPublic(root: string, workspace: string, channel: AtlasVersionChannel,
-  readManifest: (signal?: AbortSignal) => Promise<unknown>, request?: AtlasSourceFetch, signal?: AbortSignal): Promise<FullRefreshResult> {
+  readManifest: (signal?: AbortSignal) => Promise<unknown>, request?: AtlasSourceFetch, signal?: AbortSignal,
+  preparation?: AtlasPreparation): Promise<FullRefreshResult> {
   signal?.throwIfAborted();
   const directory = await realpath(root);
   const active = await discoverAtlasDataDirectory(directory);
@@ -82,10 +83,11 @@ export async function refreshFullAtlasFromPublic(root: string, workspace: string
         return current?.root === active.root && current.version === active.version
           ? { status: "current", version: active.version } : { status: "stale", current: current?.version ?? null };
       }
-      result = await publishPreparedAtlasCandidate(directory, active.version, candidate.directory, candidate.validation.pages, signal);
+      result = await publishPreparedAtlasCandidate(directory, active.version, candidate.directory, candidate.validation.pages,
+        signal, false, preparation);
       return result;
     } finally {
-      if (result?.status !== "published") await rm(stage, { recursive: true, force: true });
+      if (result?.status !== "published" && result?.status !== "prepared") await rm(stage, { recursive: true, force: true });
     }
   }, signal, request, legacyAtlasSourcePages, active.root);
 }

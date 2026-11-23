@@ -60,6 +60,7 @@ export async function atlasRootIsEmpty(root: string): Promise<boolean> {
 
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.name === "theme" && entry.isDirectory()) continue;
+    if (entry.name === ".prepared" && entry.isDirectory()) continue;
     // BEGIN IMMEDIATE may create the rollback journal while the publication lock is held.
     if ((entry.name === ".publication.sqlite" || entry.name === ".publication.sqlite-journal") && entry.isFile()) continue;
     if (entry.name !== "snapshots" || !entry.isDirectory() || (await readdir(join(directory, entry.name))).length) {

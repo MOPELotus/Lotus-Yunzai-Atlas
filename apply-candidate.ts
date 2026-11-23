@@ -1,7 +1,8 @@
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { assembleAtlasCandidate } from "./assemble-candidate.ts";
-import { atlasApplyStagingPrefix, publishPreparedAtlasCandidate, type AtlasPublication } from "./publish-candidate.ts";
+import { atlasApplyStagingPrefix, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
+  type AtlasPreparation, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import type { AtlasCandidatePage } from "./validate-candidate.ts";
 
@@ -12,7 +13,8 @@ function contains(parent: string, directory: string): boolean {
 
 /** Apply a prepared local snapshot to the explicitly selected publication root. */
 export async function applyAtlasCandidate(root: string, source: string, scope: readonly AtlasCandidatePage[],
-  signal?: AbortSignal, expected?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>): Promise<AtlasPublication> {
+  signal?: AbortSignal, expected?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>,
+  preparation?: AtlasPreparation): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((value) => !value.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(value))) {
     throw new Error("请指定图鉴根目录和本地更新源目录。");
@@ -20,20 +22,22 @@ export async function applyAtlasCandidate(root: string, source: string, scope: r
   const [directory, donor] = await Promise.all([realpath(root), realpath(source)]);
   if (contains(directory, donor) || contains(donor, directory)) throw new Error("图鉴根与本地更新源须为独立目录。");
 
-  const baseline = await discoverAtlasDataDirectory(directory);
-  if (expected && (expected.version !== baseline.version || expected.root !== baseline.root)) {
-    return { status: "stale", current: baseline.version };
+  const baseline = preparation?.baseline ?? await discoverAtlasDataDirectory(directory);
+  const current = preparation?.baseline ? await readAtlasSnapshotVersion(directory) : baseline.version;
+  if (current !== baseline.version || expected && (expected.version !== baseline.version || expected.root !== baseline.root)) {
+    return { status: "stale", current };
   }
   // Keep the stage outside the legacy snapshot (which occupies the publication root).
   const staging = await mkdtemp(join(dirname(directory), atlasApplyStagingPrefix));
   let result: AtlasPublication | undefined;
   try {
     const candidate = await assembleAtlasCandidate(dirname(baseline.root), donor, join(staging, "candidate"), scope, signal);
-    result = await publishPreparedAtlasCandidate(directory, baseline.version, candidate.directory, candidate.validation.pages, signal);
+    result = await publishPreparedAtlasCandidate(directory, baseline.version, candidate.directory, candidate.validation.pages,
+      signal, false, preparation);
     return result;
   } finally {
     // A successful promotion already removed the empty stage before committing the pointer.
-    if (result?.status !== "published") await rm(staging, { recursive: true, force: true });
+    if (result?.status !== "published" && result?.status !== "prepared") await rm(staging, { recursive: true, force: true });
   }
 }
 

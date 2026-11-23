@@ -116,6 +116,34 @@ test("主人普通更新在定时停用时仍可按已选渠道首装，检查�
   expect(await readdir(join(root, "snapshots"))).toEqual(["1"]);
 }));
 
+test("关闭图鉴同步时定时和主人首装只保存候选，重新启用后按正常入口发布", () => fixture(async (directory) => {
+  const root = join(directory, "data/atlas");
+  const source = join(directory, "export");
+  const owner = { atlasMaintenance: true } as const;
+  await exportAll(source);
+  const job = (sync_after_update: boolean) => createAtlasMaintenance(root, {
+    updateConfig: { ...config, sync_after_update },
+    manifest: async () => manifest,
+    async downloadVersion(_work, _root, _versions, consume) { return consume(source, pageList); },
+    request: cards,
+  });
+  const staged = job(false);
+  const candidate = join(root, ".prepared");
+  expect(await staged.commands["#检查图鉴更新"]("", owner)).toContain("未初始化");
+  expect(await staged.atlasSchedule.version.run()).toContain("自动初始化候选已保存");
+  await expect(readlink(join(root, "current"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readlink(join(candidate, "current"))).toBe("snapshots/1/data");
+  expect((await validateAtlasCandidate(join(candidate, "current"))).pages).toHaveLength(30);
+
+  expect(await staged.commands["#更新图鉴"]("", owner)).toContain("尚未发布至现用目录");
+  await expect(readlink(join(root, "current"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readlink(join(candidate, "current"))).toBe("snapshots/2/data");
+  expect(await readdir(join(candidate, "snapshots"))).toEqual(["2"]);
+  expect(await job(true).commands["#更新图鉴"]("", owner)).toBe("图鉴初始化完成，已发布第 1 版。");
+  expect(await readlink(join(root, "current"))).toBe("snapshots/1/data");
+  expect((await validateAtlasCandidate(join(root, "current"))).ok).toBeTrue();
+}));
+
 test("主人全量更新对齐选定渠道，工作期间拒绝其他写操作且不能降级现用资料", () => fixture(async (directory) => {
   const root = join(directory, "data/atlas");
   const source = join(directory, "export");

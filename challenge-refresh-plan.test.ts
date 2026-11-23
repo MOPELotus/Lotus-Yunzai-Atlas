@@ -101,6 +101,25 @@ test("同版新轮换只核对受影响游戏依赖，并返回实际变化的�
   }
 });
 
+test("关闭同步时轮换定时保留当前期次，只把新期次写入候选", async () => {
+  const run = await fixture("latest");
+  try {
+    const tower = "/gi/7.2.52/tower.json";
+    run.byPath.set(tower, { ...run.byPath.get(tower) as object, "2": { zh: "新一期", begin: "2026-12-01", end: "2027-01-01" } });
+    const maintenance = createAtlasMaintenance(run.root, {
+      updateConfig: { version_channel: "latest", sync_after_update: false }, manifest: async () => listings, request: run.request,
+    });
+    expect(await maintenance.atlasSchedule.challenge.run()).toContain("已校验并保存，现用图鉴保持原版");
+    expect(await readlink(join(run.root, "current"))).toBe("snapshots/1/data");
+    const staged = await validateAtlasCandidate(join(run.root, ".prepared/current"));
+    expect(staged.ok).toBeTrue();
+    expect(staged.pages.find(({ game, pageId }) => game === "gi" && pageId === "tower")?.recordCount).toBe(2);
+    expect(run.current.pages.find(({ game, pageId }) => game === "gi" && pageId === "tower")?.recordCount).toBe(1);
+  } finally {
+    await rm(run.workspace, { recursive: true, force: true });
+  }
+});
+
 test("同版轮换缺页或移除已收录条目时保留现用快照", async () => {
   const run = await fixture("latest");
   try {

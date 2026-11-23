@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { createAtlasRuntimeCatalog, findCharacters, findEquipment } from "./catalog.ts";
-import { readAtlasSnapshotVersion } from "./publish-candidate.ts";
+import { readAtlasSnapshotVersion, type AtlasPreparation } from "./publish-candidate.ts";
 
 async function fixture(run: (workspace: string, root: string) => Promise<void>) {
   const workspace = await mkdtemp(join(tmpdir(), "lotus-atlas-apply-fixture-"));
@@ -86,4 +86,29 @@ test("同一预期的并发更新只发布一次，失败只清理自己准备�
   await expect(applyAtlasCandidate(root, "https://example.invalid/atlas", weapon)).rejects.toThrow("本地更新源");
   expect(await readAtlasSnapshotVersion(root)).toBe(2);
   expect((await readdir(workspace)).sort()).toEqual(["atlas", "first", "second"]);
+}));
+
+test("同轮不同分类累积到独立候选，活跃指针变化拒绝继续暂存", () => fixture(async (workspace, root) => {
+  const source = join(workspace, "source");
+  const roles = [{ game: "gi", pageId: "character" }] as const;
+  await snapshot(root, "1", ["weapon", "character"]);
+  await snapshot(source, "2", ["weapon", "character"]);
+  const preparation: AtlasPreparation = {};
+  const candidate = join(root, ".prepared");
+  expect(await applyAtlasCandidate(root, source, weapon, undefined, undefined, preparation)).toMatchObject({ status: "prepared", version: 1 });
+  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, preparation)).toMatchObject({ status: "prepared", version: 2 });
+  expect(await readAtlasSnapshotVersion(root)).toBeNull();
+  expect(await readlink(join(candidate, "current"))).toBe("snapshots/2/data");
+  expect(await readdir(join(candidate, "snapshots"))).toEqual(["2"]);
+  const live = createAtlasRuntimeCatalog(root);
+  const staged = createAtlasRuntimeCatalog(root, join(candidate, "current"));
+  expect(findEquipment(await live.read(), "weapon 1", "gi")).toHaveLength(1);
+  expect(findCharacters(await live.read(), "character 1", "gi")).toHaveLength(1);
+  expect(findEquipment(await staged.read(), "weapon 2", "gi")).toHaveLength(1);
+  expect(findCharacters(await staged.read(), "character 2", "gi")).toHaveLength(1);
+
+  expect(await applyAtlasCandidate(root, source, weapon)).toMatchObject({ status: "published", version: 1 });
+  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, preparation))
+    .toEqual({ status: "stale", current: 1 });
+  expect(await readlink(join(candidate, "current"))).toBe("snapshots/2/data");
 }));

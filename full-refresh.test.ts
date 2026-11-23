@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
-import { createAtlasMaintenance } from "./maintenance.ts";
+import { createAtlasMaintenance, type AtlasMaintenanceOptions } from "./maintenance.ts";
 import { resetAtlasSnapshot } from "./publish-candidate.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
@@ -36,8 +36,9 @@ test("主人全量命令重取同版详情、跳过无变化发布，并保留�
     let detail: string | undefined = "旧详情";
     let concurrentReset = false;
     const urls: string[] = [];
-    const job = createAtlasMaintenance(root, {
-      updateConfig: { version_channel: "latest", update_args: ["--pages", "gi=weapon"] },
+    const config = { version_channel: "latest", update_args: ["--pages", "gi=weapon"] };
+    const options: AtlasMaintenanceOptions = {
+      updateConfig: config,
       manifest: async () => ({ gi: release, hsr: release, zzz: release }),
       async request(input) {
         const url = new URL(input);
@@ -73,7 +74,8 @@ test("主人全量命令重取同版详情、跳过无变化发布，并保留�
         if (rotation && Object.hasOwn(rotations, rotation)) return Response.json(rotations[rotation as keyof typeof rotations]);
         return new Response(null, { status: 404 });
       },
-    });
+    };
+    const job = createAtlasMaintenance(root, options);
     const owner = { atlasMaintenance: true } as const;
     const update = () => job.commands["#全量更新图鉴"]("", owner);
     const pointer = () => readlink(join(root, "current"));
@@ -90,6 +92,15 @@ test("主人全量命令重取同版详情、跳过无变化发布，并保留�
     expect(urls.filter(url => indexPaths.has(url))).toHaveLength(29);
     expect(urls).toContain(`/gi/${version}/zh/weapon/1.json`);
     expect(urls).toContain(`/gi/${version}/zh/gcg/1105.json`);
+    const isolated = createAtlasMaintenance(root, { ...options, updateConfig: { ...config, sync_after_update: false } });
+    detail = "隔离候选的新详情";
+    expect(await isolated.commands["#全量更新图鉴"]("", owner)).toContain("已校验并保存，现用图鉴保持原版");
+    expect(await pointer()).toBe("snapshots/1/data");
+    expect((await Bun.file(weapon).json()).content.detail.desc).toBe("旧详情");
+    const prepared = join(root, ".prepared/current");
+    expect((await validateAtlasCandidate(prepared)).pages).toHaveLength(30);
+    expect((await Bun.file(join(prepared, "items/简体中文/gi/weapon/1.json")).json()).content.detail.desc)
+      .toBe("隔离候选的新详情");
     detail = "同版新详情";
     expect(await update()).toContain("发布至快照 2");
     expect(await pointer()).toBe("snapshots/2/data");

@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
-import { lstat, mkdir, readdir, readFile, realpath, rename, rmdir, stat, symlink, unlink } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, stat, symlink, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
 import { atlasResetTarget, atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasPublicationPointer,
-  readAtlasSnapshotPointer } from "./snapshot-pointer.ts";
+  readAtlasSnapshotPointer, type discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { atlasRootIsEmpty } from "./legacy-atlas-directory.ts";
 import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
@@ -14,14 +14,19 @@ type Initialization = boolean | "empty-only";
 export const atlasApplyStagingPrefix = ".atlas-apply-";
 
 export type AtlasPublication =
-  | { readonly status: "published"; readonly version: number; readonly directory: string }
+  | { readonly status: "published" | "prepared"; readonly version: number; readonly directory: string }
   | { readonly status: "stale"; readonly current: Version }
   | { readonly status: "invalid"; readonly issues: readonly string[] }
   | { readonly status: "busy" };
 
+export interface AtlasPreparation {
+  baseline?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>;
+}
+
 interface PreparedPublication {
   readonly data: string;
   readonly version: number;
+  readonly target?: string;
   readonly promote?: () => Promise<void>;
 }
 
@@ -117,7 +122,8 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
  * The caller provides the full page list from its assembled candidate and stops writing before publication.
  */
 async function publish(root: string, expected: Version, expectedPages: AtlasCandidateValidation["pages"],
-  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize: Initialization = false): Promise<AtlasPublication> {
+  prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize: Initialization = false,
+  preparation?: AtlasPreparation): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
   const directory = await realpath(root);
@@ -131,7 +137,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     if (initialize === "empty-only" && !await atlasRootIsEmpty(directory)) return occupiedAtlasData;
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
 
-    const { data: candidate, version, promote } = await prepare(directory);
+    const { data: candidate, version, promote, target = directory } = await prepare(directory);
     if (current !== null && version <= current) return { status: "stale", current };
     const candidateRoot = await realpath(candidate).catch(() => undefined);
     if (candidateRoot !== candidate || !(await lstat(candidate).catch(() => undefined))?.isDirectory()) {
@@ -156,10 +162,27 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     if (initialize === "empty-only" && !await atlasRootIsEmpty(directory)) return occupiedAtlasData;
     if (initialize && await hasLegacyAtlasData(directory)) return existingLegacyData;
     await promote?.();
-    await commitPointer(directory, atlasSnapshotTarget(version), signal);
-    return { status: "published", version, directory: join(directory, atlasSnapshotTarget(version)) };
+    const path = join(target, atlasSnapshotTarget(version));
+    await commitPointer(target, atlasSnapshotTarget(version), signal);
+    if (preparation) {
+      // The private candidate advances without modifying the generation of the live branch.
+      preparation.baseline = { version: current, root: path };
+      await prunePrepared(target, version).catch(() => console.warn("[atlas] 未能清理旧图鉴候选。"));
+      return { status: "prepared", version, directory: path };
+    }
+    return { status: "published", version, directory: path };
   } finally {
     database.close();
+  }
+}
+
+async function prunePrepared(root: string, keep: number) {
+  const snapshots = join(root, "snapshots");
+  for (const entry of await readdir(snapshots, { withFileTypes: true })) {
+    const version = Number(entry.name);
+    if (entry.isDirectory() && isAtlasSnapshotVersion(version) && String(version) === entry.name && version < keep) {
+      await rm(join(snapshots, entry.name), { recursive: true, force: true });
+    }
   }
 }
 
@@ -187,13 +210,23 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
 
 /** Move an assembled, caller-owned private candidate into the version store under the publication lock. */
 export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
-  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize: Initialization = false): Promise<AtlasPublication> {
+  expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize: Initialization = false,
+  preparation?: AtlasPreparation): Promise<AtlasPublication> {
   if (initialize && expected !== null) throw new Error("首版图鉴初始化要求没有现用指针。");
   return publish(root, expected, expectedPages, async (directory) => {
     const stagedRoot = dirname(prepared);
     if (dirname(stagedRoot) !== dirname(directory) || !basename(stagedRoot).startsWith(atlasApplyStagingPrefix) ||
         basename(prepared) !== "candidate") throw new Error("图鉴发布只接收相邻私有暂存中的合成候选。");
-    const snapshots = join(directory, "snapshots");
+    const target = preparation ? join(directory, ".prepared") : directory;
+    if (preparation) {
+      await mkdir(target, { mode: 0o700 }).catch((error) => {
+        if (errorCode(error) !== "EEXIST") throw error;
+      });
+      if (await realpath(target) !== target || !(await lstat(target)).isDirectory()) {
+        throw new Error("图鉴候选库须为发布根内的实体目录。");
+      }
+    }
+    const snapshots = join(target, "snapshots");
     await mkdir(snapshots, { mode: 0o700 }).catch((error) => {
       if (errorCode(error) !== "EEXIST") throw error;
     });
@@ -210,9 +243,9 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
     }
     const version = highest + 1;
     if (!isAtlasSnapshotVersion(version)) throw new Error("图鉴发布版本已用尽。");
-    const destination = dirname(join(directory, atlasSnapshotTarget(version)));
+    const destination = dirname(join(target, atlasSnapshotTarget(version)));
     return {
-      data: join(prepared, "data"), version,
+      data: join(prepared, "data"), version, target,
       promote: async () => {
         // Reserve the name without replacing any pre-existing snapshot, even an empty directory.
         await mkdir(destination, { mode: 0o700 });
@@ -220,5 +253,5 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
         await rmdir(stagedRoot);
       },
     };
-  }, signal, initialize);
+  }, signal, initialize, preparation);
 }

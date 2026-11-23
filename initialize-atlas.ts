@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { assembleAtlasCandidate, copyAtlasCandidate } from "./assemble-candidate.ts";
 import { atlasApplyStagingPrefix, hasLegacyAtlasData, publishPreparedAtlasCandidate, readAtlasSnapshotVersion,
-  type AtlasPublication } from "./publish-candidate.ts";
+  type AtlasPreparation, type AtlasPublication } from "./publish-candidate.ts";
 import { atlasRootIsEmpty, findLegacyAtlasExport } from "./legacy-atlas-directory.ts";
 import { legacyAtlasCounts, legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
@@ -17,14 +17,14 @@ function contains(parent: string, child: string): boolean {
 }
 
 /** Initialize once from an operator-supplied local export. Existing data and published snapshots are never replaced. */
-export async function initializeAtlas(root: string, source: string, signal?: AbortSignal): Promise<AtlasPublication> {
-  return publishInitialAtlas(root, source, legacyAtlasSourcePages, legacyAtlasCounts, signal);
+export async function initializeAtlas(root: string, source: string, signal?: AbortSignal, preparation?: AtlasPreparation): Promise<AtlasPublication> {
+  return publishInitialAtlas(root, source, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, undefined, false, preparation);
 }
 
 async function publishInitialAtlas(root: string, source: string, pages: readonly Required<AtlasCandidatePage>[],
   counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal,
   extra?: { readonly source: string; readonly pages: readonly Required<AtlasCandidatePage>[] },
-  materialRequest?: AtlasSourceFetch, emptyOnly = false): Promise<AtlasPublication> {
+  materialRequest?: AtlasSourceFetch, emptyOnly = false, preparation?: AtlasPreparation): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
     throw new Error("请提供已有的本地图鉴目标目录和原导出目录。");
@@ -47,19 +47,21 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
       await completeAtlasRoleMaterials(prepared.directory, pages, signal, materialRequest);
     }
     const expected = extra ? [...pages, ...extra.pages] : pages;
-    result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal, emptyOnly ? "empty-only" : true);
+    result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal,
+      emptyOnly ? "empty-only" : true, preparation);
     return result;
   } finally {
-    if (result?.status !== "published") await rm(stage, { recursive: true, force: true });
+    if (result?.status !== "published" && result?.status !== "prepared") await rm(stage, { recursive: true, force: true });
   }
 }
 
 export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal,
-  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion }: {
+  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion, preparation }: {
     readonly manifest?: typeof fetchAtlasManifest;
     readonly request?: AtlasSourceFetch;
     readonly emptyOnly?: boolean;
     readonly downloadVersion?: typeof DownloadAtlasVersion;
+    readonly preparation?: AtlasPreparation;
   } = {}): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (emptyOnly && (!channel || !await atlasRootIsEmpty(root))) {
@@ -84,14 +86,16 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
       const stage = await mkdtemp(join(dirname(directory), ".atlas-first-gcg-"));
       try {
         const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi }], signal, request);
-        return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages }, undefined, emptyOnly);
+        return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages },
+          undefined, emptyOnly, preparation);
       } finally {
         await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       }
     }, signal, request);
   }
   return downloadLegacyAtlas(workspace, root,
-    donor => publishInitialAtlas(root, donor, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, request ?? fetch), signal);
+    donor => publishInitialAtlas(root, donor, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, request ?? fetch,
+      false, preparation), signal);
 }
 
 if (import.meta.main) {
