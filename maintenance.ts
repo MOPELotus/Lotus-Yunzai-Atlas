@@ -157,25 +157,31 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         const { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } = await import("./role-material-source.ts");
         const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal, includeArtwork);
         if (pending.length && kind === "check") {
-          lines.push(`${pending.length} 个角色分类待补齐同版材料名称${includeArtwork ? "与图标" : ""}。`);
+          lines.push(`${pending.length} 个角色分类待补齐同版材料名称${includeArtwork ? "或图标" : ""}。`);
         } else if (pending.length) {
           const stage = await mkdtemp(join(dirname(root), ".atlas-material-update-"));
           try {
             const { copyAtlasSelectedPages } = await import("./assemble-candidate.ts");
             const prepared = await copyAtlasSelectedPages(dirname(baseline), join(stage, "source"), pending, signal);
             const updated = await completeAtlasRoleMaterials(prepared.directory, pending, signal, request, includeArtwork);
-            if (pending.length > updated.length) {
-              lines.push(`${pending.length - updated.length} 个角色分类仍缺同版材料名称${includeArtwork ? "或原图" : ""}。`);
-            }
+            let remaining = pending.length;
+            let remainingInCandidate = false;
             if (updated.length) {
+              const stillMissing = await pendingAtlasRoleMaterials(join(prepared.directory, "data"), pending, signal, includeArtwork);
               const result = await applyAtlasCandidate(root, prepared.directory, updated, signal, active, publication);
-              lines.push(result.status === "published" ? `${updated.length} 个角色分类已补齐同版材料名称${includeArtwork ? "与可用原图" : ""}。`
+              lines.push(result.status === "published" ? `已发布 ${updated.length} 个角色分类的同版材料补充。`
                 : `同版角色材料：${describeRefresh(result, "")}。`);
               const next = acceptedBaseline(result, publication);
               if (next) {
                 active = next;
                 baseline = next.root;
+                remaining = stillMissing.length;
+                remainingInCandidate = result.status === "prepared";
               } else if (result.status === "busy" || result.status === "stale") return lines.join("\n");
+            }
+            if (remaining) {
+              const subject = remainingInCandidate ? "候选中" : "";
+              lines.push(`${subject}${remaining} 个角色分类仍缺同版材料名称${includeArtwork ? "或原图" : ""}。`);
             }
           } catch (error) {
             signal?.throwIfAborted();

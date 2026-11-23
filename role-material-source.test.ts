@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readlink, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Game } from "./catalog.ts";
 import { createAtlasCatalog } from "./catalog.ts";
+import { createAtlasMaintenance } from "./maintenance.ts";
 import { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } from "./role-material-source.ts";
 import type { AtlasSourceFetch } from "./source-transport.ts";
 
@@ -111,5 +112,61 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
     }
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("同版材料只补到名称时发布实际差异并提示仍缺原图", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "atlas-material-maintenance-"));
+  try {
+    const root = join(directory, "atlas");
+    const data = join(root, "snapshots/1/data");
+    const current = join(root, "current");
+    const version = "3.4.5+20699967";
+    const path = "items/role.json";
+    const name = "角色";
+    const initial = { meta: { gameId: "zzz", pageId: "character", version, locale: "zh",
+      recordId: "1", name, hasDetail: true, images: [] }, content: { list: { name },
+      detail: { level: [{ materials: { "101": 5 } }] } } };
+    await Bun.write(join(data, path), JSON.stringify(initial));
+    await Bun.write(join(data, "map.json"), JSON.stringify({ games: { zzz: { locales: { zh: { pages: {
+      character: { id: "character", version, sampled: false, recordCount: 1, totalRecordCount: 1,
+        records: { "1": { id: "1", name, path, hasDetail: true } } },
+    } } } } } }));
+    await symlink("snapshots/1/data", current);
+    let iconAvailable = false;
+    const maintenance = createAtlasMaintenance(root, {
+      updateConfig: { version_channel: "latest", update_args: ["--game", "zzz", "--pages", "zzz=character"] },
+      manifest: async () => ({ zzz: { latest: version, live: version, available: [version] } }),
+      async request(url) {
+        if (new URL(url).pathname === `/zzz/${version}/zh/item_all.json`) {
+          return Response.json({ "101": { id: 101, name: "材料名称", icon_path: "IconMaterial.png" } });
+        }
+        if (new URL(url).pathname === "/assets/zzz/IconMaterial.webp") {
+          return iconAvailable ? new Response(webp) : new Response(null, { status: 404 });
+        }
+        throw new Error(`意外请求 ${url}`);
+      },
+    });
+    const owner = { atlasMaintenance: true } as const;
+    const update = () => maintenance.commands["#更新图鉴"]("", owner);
+    const partial = await update();
+    expect(partial).toContain("已发布 1 个角色分类的同版材料补充");
+    expect(partial).toContain("1 个角色分类仍缺同版材料名称或原图");
+    expect(await readlink(current)).toBe("snapshots/2/data");
+    expect((await Bun.file(join(current, path)).json()).meta.materialNames).toEqual({ "101": "材料名称" });
+    expect(await Bun.file(join(data, path)).json()).toEqual(initial);
+    expect(await maintenance.commands["#检查图鉴更新"]("", owner)).toContain("待补齐同版材料名称或图标");
+    expect(await update()).toContain("1 个角色分类仍缺同版材料名称或原图");
+    expect(await readlink(current)).toBe("snapshots/2/data");
+    iconAvailable = true;
+    const complete = await update();
+    expect(complete).toContain("已发布 1 个角色分类的同版材料补充");
+    expect(complete).not.toContain("仍缺同版材料");
+    expect(await readlink(current)).toBe("snapshots/3/data");
+    const candidate = await Bun.file(join(current, path)).json();
+    expect(candidate.meta.images).toMatchObject([{ localPath: "gallery/zzz/materials/IconMaterial.webp" }]);
+    expect(await Bun.file(join(root, "snapshots/3/gallery/zzz/materials/IconMaterial.webp")).bytes()).toEqual(new Uint8Array(webp));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
