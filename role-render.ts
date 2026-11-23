@@ -605,12 +605,12 @@ function roleSectionStyle(role: RoleDetails, wrap: ReturnType<typeof makeLayout>
   };
 }
 
-function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknown>, parent?: RoleSkillCard) {
+function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknown>, source?: { name: string; rowPrefix: string }) {
   const levels = card.sectionLevels ?? card.levels ?? [];
   if (!talents || !card.sectionParameters?.length) return levels;
-  const sources = Object.values(talents).map(object).filter(({ name }) => label(name) === (parent ?? card).name);
+  const sources = Object.values(talents).map(object).filter(({ name }) => label(name) === (source?.name ?? card.name));
   if (sources.length !== 1) return levels;
-  const prefix = parent && card.name.replace(/^献予/u, "") + "•";
+  const prefix = source?.rowPrefix;
   const oldRows = Object.values(object(sources[0]!.tables)).map(object).filter(({ name }) =>
     prefix ? label(name).startsWith(prefix) : !card.linkedEffects?.length || !/^「[^」]+」之诗•/u.test(label(name)));
   const labels = new Map<string, string>();
@@ -648,7 +648,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
-    section ? miaoSectionArtwork(role, options.qFace !== false, section === "skills" && !!role.sectionSkills) : undefined,
+    section ? miaoSectionArtwork(role, options.qFace !== false,
+      skillGroups.some(({ cards }) => cards.some(card => card.memospriteIcon))) : undefined,
     section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
     themeFonts ??= loadThemeFonts(),
   ]);
@@ -683,10 +684,20 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       const originalIcon = card.memospriteIcon ? sectionArt?.memosprite?.[card.memospriteIcon] : undefined;
       const main = [heading(card.name, originalIcon ?? image(card.artwork)), ...(description ? [text(description)] : []),
         ...card.details.map(details), ...layout.levelBlocks(levels)];
+      if (section && card.sectionVariants?.length) {
+        if (card.sectionVariantTitle) main.push(heading(card.sectionVariantTitle, undefined, true));
+        for (const variant of card.sectionVariants) {
+          const body = variant.sectionDescription ?? variant.description;
+          const source = card.sectionVariantTitle ? { name: card.sectionVariantTitle, rowPrefix: variant.name + "·" } : undefined;
+          main.push(heading(variant.name, undefined, true), ...(body ? [text(body)] : []),
+            ...variant.details.map(details), ...layout.levelBlocks(sectionSkillLevels(variant, sectionArt?.talents, source)));
+        }
+      }
       const effects = (section ? card.linkedEffects ?? [] : []).map(effect => {
         const body = effect.sectionDescription ?? effect.description;
+        const source = { name: card.name, rowPrefix: effect.name.replace(/^献予/u, "") + "•" };
         return [heading(effect.name, undefined, true), ...(body ? [text(body)] : []),
-          ...layout.levelBlocks(sectionSkillLevels(effect, sectionArt?.talents, card))];
+          ...layout.levelBlocks(sectionSkillLevels(effect, sectionArt?.talents, source))];
       });
       return [main, ...effects];
     }),

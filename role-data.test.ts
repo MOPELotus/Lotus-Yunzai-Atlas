@@ -401,10 +401,52 @@ test("星铁旧忆灵分项恢复昔涟主动后被动的顺序，仅专用技�
   expect(memoCards[2]?.memospriteIcon).toBe("mt");
   expect(memoCards[3]).toMatchObject({ sectionDescription: "解除控制。", sectionLevels: [] });
   expect(normalizeRoleDetails({ ...entry("hsr"), id: "1005" }, {
-    detail: { skills: [{ name: "夜间喧嚣不止" }] },
-  }, "五星")?.sectionSkills).toBeUndefined();
+    detail: { skills: [{ name: "夜间喧嚣不止", type: "Normal" }] },
+  }, "五星")?.sectionSkills?.map(({ title }) => title)).toEqual(["技能"]);
   const march = normalizeRoleDetails({ ...entry("hsr"), id: "1413" }, {
     detail: { memosprite: { skills: { "1141307": memo("迷梦，流失，如露", "忆灵技") } } },
   }, "五星");
   expect(march?.sectionSkills?.[0]?.cards[0]?.name).toBe("迷梦，流失，如露");
+});
+
+test("星铁专用技能按同一行迹升级点并拢实际战斗形态，仅收有类别的能力", () => {
+  const skill = (id: number, name: string, type: string | null, type_name = "") => ({ id, name, type, type_name, desc: name });
+  const detail = {
+    skills: {
+      "121301": skill(121301, "泽芝", "Normal", "普攻"), "121302": skill(121302, "龙力自在", "BPSkill", "战技"),
+      "121303": skill(121303, "苍龙傲睨，劫水濯世", "Ultra", "终结技"), "121304": skill(121304, "亢心", null, "天赋"),
+      "121308": skill(121308, "瞬华", "Normal", "普攻"), "121309": skill(121309, "取消", "BPSkill", "战技"),
+      "121310": skill(121310, "天矢阴", "Normal", "普攻"), "121312": skill(121312, "盘拏耀跃", "Normal", "普攻"),
+      "121319": skill(121319, "攻击", "MazeNormal"), "121320": skill(121320, "不明功能", null),
+    },
+    skill_trees: {
+      point01: { "1": { point_type: 2, level_up_skill_id: [121301, 121308, 121310, 121312] } },
+      point02: { "1": { point_type: 2, level_up_skill_id: [121302] } },
+      point03: { "1": { point_type: 2, level_up_skill_id: [121303, 121304] } },
+      stray: { "1": { point_type: 2, level_up_skill_id: [121303, 121319, 121320] } },
+    },
+  };
+  const rail = normalizeRoleDetails({ ...entry("hsr"), id: "1213" }, { detail }, "五星");
+  const source = rail?.skills[0]?.cards;
+  const section = rail?.sectionSkills?.[0]?.cards;
+  expect(source).toHaveLength(10);
+  expect(source?.every(card => !card.sectionVariants)).toBe(true);
+  expect(section?.map(({ name }) => name)).toEqual(["泽芝", "龙力自在", "苍龙傲睨，劫水濯世", "亢心"]);
+  expect(section?.[0]?.sectionVariantTitle).toBe("强化普攻");
+  expect(section?.[0]?.sectionVariants?.map(({ name }) => name)).toEqual(["瞬华", "天矢阴", "盘拏耀跃"]);
+  expect(section?.[1]?.sectionVariants?.map(({ name }) => name)).toEqual(["取消"]);
+  expect(section?.[2]?.sectionVariants).toBeUndefined();
+});
+
+test("星铁强化技能保留公式里的非百分比小数系数", () => {
+  const row = (level: number, param_list: number[]) => ({ level, param_list });
+  const role = normalizeRoleDetails({ ...entry("hsr"), id: "1310" }, { detail: { skills: {
+    "131002": { id: 131002, name: "指令-天火轰击", type_name: "战技" },
+    "131009": { id: 131009, name: "火萤Ⅳ型-死星过载", type_name: "战技",
+      desc: "(#2[f1]×击破特攻+#1[f1]%)攻击力，相邻比例#3[f1]。",
+      level: [row(6, [1.5, 0.2, 0.1]), row(8, [1.75, 0.2, 0.1]), row(12, [2.1, 0.2, 0.1])] },
+  }, skill_trees: { point02: { "1": { point_type: 2, level_up_skill_id: [131002, 131009] } } } } }, "五星");
+  const enhanced = role?.sectionSkills?.[0]?.cards[0]?.sectionVariants?.[0];
+  expect(enhanced?.sectionDescription).toBe("(0.2×击破特攻+175.0% (Lv8))攻击力，相邻比例0.1。");
+  expect(enhanced?.sectionLevels?.[1]?.details).toEqual([{ label: "正文第 1 项", text: "175.0%" }]);
 });

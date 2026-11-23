@@ -26,6 +26,8 @@ export interface RoleSkillCard {
   readonly omitFromSection?: boolean;
   readonly memospriteIcon?: "me" | "mt";
   readonly linkedEffects?: readonly RoleSkillCard[];
+  readonly sectionVariants?: readonly RoleSkillCard[];
+  readonly sectionVariantTitle?: string;
 }
 
 export interface RoleSkillGroup {
@@ -220,7 +222,11 @@ function starRailSectionSkill(template: unknown, source: readonly RecordValue[],
     const key = Number(index) - 1;
     const scalar = number(target.params[key]);
     if (scalar === undefined) return { sectionLevels: [] };
-    const print = (value: number) => percent ? (value * 100).toFixed(format === "f2" ? 2 : 1) + "%" : wholeStat.format(value);
+    const precision = format === "i" ? 0 : Number(format?.slice(1) ?? 0);
+    const print = (value: number) => {
+      if (percent) return (value * 100).toFixed(Math.max(1, precision)) + "%";
+      return format === "i" ? wholeStat.format(value) : value.toFixed(precision);
+    };
     const variable = levels.some(({ params }) => number(params[key]) !== scalar);
     display.set(token, `${print(scalar)}${variable ? ` (Lv${target.level})` : ""}`);
     if (!variable) continue;
@@ -250,7 +256,7 @@ function starRailSkillCard(skill: RecordValue, artwork?: string): RoleSkillCard 
   });
   const type = text(skill.type_name);
   const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
-  const omitFromSection = !type && (integer(skill.id) ?? 0) % 100 === 6;
+  const omitFromSection = label(skill.type) === "MazeNormal" || (!type && (integer(skill.id) ?? 0) % 100 === 6);
   return { name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
     details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection,
     ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork };
@@ -300,14 +306,66 @@ function starRailMemospriteCards(id: string, detail: RecordValue, artwork: Artwo
   });
 }
 
+type StarRailActiveCard = { id: number | undefined; kind: string; card: RoleSkillCard };
+
+const starRailSkillTypes: Readonly<Record<string, string>> = {
+  Normal: "普攻", BPSkill: "战技", Ultra: "终结技", Talent: "天赋", Maze: "秘技", Assist: "助战技",
+};
+
+function starRailSkillKind(skill: RecordValue) {
+  const type = label(skill.type);
+  if (type === "MazeNormal") return "";
+  const name = label(skill.type_name);
+  if (name) return name === "普通攻击" ? "普攻" : name;
+  return Object.hasOwn(starRailSkillTypes, type) ? starRailSkillTypes[type]! : "";
+}
+
+function starRailSectionCards(id: string, skills: readonly StarRailActiveCard[], trees: readonly [string, RecordValue][]) {
+  const active = skills.filter(({ kind }) => kind);
+  const byId = new Map(active.flatMap(skill => skill.id === undefined ? [] : [[skill.id, skill] as const]));
+  const parents = new Map<number, RoleSkillCard[]>();
+  const booked = new Set<number>();
+  const group = (base: number, ids: readonly number[]) => {
+    const family = [base, ...ids];
+    if (family.some(value => booked.has(value))) return;
+    const main = byId.get(base);
+    if (!main || !ids.length) return;
+    const variants = ids.flatMap(value => {
+      const entry = byId.get(value);
+      return entry?.kind === main.kind ? [entry.card] : [];
+    });
+    if (variants.length !== ids.length) return;
+    parents.set(base, variants);
+    for (const value of family) booked.add(value);
+  };
+  for (const [, tree] of trees) {
+    const point = values(tree).find(row => row.point_type === 2 && Array.isArray(row.level_up_skill_id));
+    const ids = point?.level_up_skill_id;
+    if (!Array.isArray(ids)) continue;
+    const [base, ...variants] = [...new Set(ids.flatMap(value => integer(value) ?? []))];
+    if (base !== undefined) group(base, variants);
+  }
+  // The archived character's e2 is the cancel action of his enhancement skill, without a level-up tree entry.
+  if (id === "1213" && byId.get(121309)?.card.name === "取消") group(121302, [121309]);
+  const covered = new Set([...booked].filter(value => !parents.has(value)));
+  return active.flatMap(({ id: sourceId, card }) => {
+    if (sourceId === undefined) return [card];
+    if (covered.has(sourceId)) return [];
+    const sectionVariants = parents.get(sourceId);
+    return sectionVariants ? [{ ...card, sectionVariants,
+      sectionVariantTitle: id === "1213" && sourceId === 121301 ? "强化普攻" : undefined,
+    }] : [card];
+  });
+}
+
 function starRailSkills(id: string, detail: RecordValue, artwork: Artwork) {
   const groups = rows(detail.skill_trees);
-  const skills = rows(detail.skills).flatMap(([key, skill]) => {
+  const activeCards = rows(detail.skills).flatMap(([key, skill]) => {
     const source = groups.flatMap(([point, group]) => rows(group).flatMap(([key, row]) =>
       Array.isArray(row.level_up_skill_id) && row.level_up_skill_id.includes(skill.id)
         ? [`detail.skill_trees.${point}.${key}.icon`] : []));
     const card = starRailSkillCard(skill, artwork(`detail.skills.${key}.icon`, ...source));
-    return card ? [card] : [];
+    return card ? [{ id: integer(skill.id) ?? integer(key), kind: starRailSkillKind(skill), card }] : [];
   });
   const traces = groups.flatMap(([point, group]) => {
     const data = rows(group).filter(([, row]) => row.point_type === 1 || row.point_type === 3);
@@ -330,12 +388,12 @@ function starRailSkills(id: string, detail: RecordValue, artwork: Artwork) {
     return [{ name, description: levels[0]?.description, details: levels[0]?.details ?? [], levels, sectionLevels: [],
       omitFromSection: first[1].point_type === 1, artwork: artwork(`detail.skill_trees.${point}.${first[0]}.icon`) }];
   });
-  const active = skillGroup("技能", skills);
+  const active = skillGroup("技能", activeCards.map(({ card }) => card));
   const passive = skillGroup("行迹", traces);
   const memosprite = starRailMemospriteCards(id, detail, artwork);
   return {
     skills: [...active, ...passive],
-    sectionSkills: memosprite.length ? [...active, ...skillGroup("忆灵技能", memosprite), ...passive] : undefined,
+    sectionSkills: [...skillGroup("技能", starRailSectionCards(id, activeCards, groups)), ...skillGroup("忆灵技能", memosprite), ...passive],
   };
 }
 
