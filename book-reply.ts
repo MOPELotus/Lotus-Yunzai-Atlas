@@ -5,7 +5,7 @@ import type { AtlasDelivery, AtlasReply } from "./traditional.ts";
 type BookPage = { readonly section: string; readonly png: Uint8Array };
 
 export async function atlasBookReply(name: string, render: (scale: 4 | 2 | 1) => Promise<readonly BookPage[]>,
-  delivery?: AtlasDelivery, singleAsForward = false): Promise<AtlasReply | undefined> {
+  delivery?: AtlasDelivery, singleAsForward = false, titleSuffix = "完整图鉴"): Promise<AtlasReply | undefined> {
   const budget = delivery?.inlineImageByteLimit;
   const scale = nativeImageRasterScale();
   let pages = await render(scale);
@@ -19,7 +19,7 @@ export async function atlasBookReply(name: string, render: (scale: 4 | 2 | 1) =>
   if (!batches?.length) throw new RangeError("图鉴单页超过当前聊天的图片大小上限。");
 
   const sections = [...new Set(pages.map(({ section }) => section))].join(" → ");
-  const title = `${name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
+  const title = `${name}${titleSuffix}\n${sections}\n共 ${pages.length} 页`;
   const image = ({ png }: BookPage) => ({ type: "image" as const, file: png });
   if (batches.length === 1) return { type: "forward", nodes: [title, ...pages.map(image)] };
   return { type: "forward-image-batches", batches: batches.map((group, index) => [

@@ -12,7 +12,7 @@ import { findAchievementCategories, findAchievements, type AchievementCategory }
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
 import { invalidChallengeDate, parseExplicitAtlasChallenge, traditionalAtlasEvent,
-  type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
+  type AtlasDelivery, type AtlasImage, type AtlasReply, type RoleSection } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
@@ -127,16 +127,22 @@ async function bangbooQuery(catalog: AtlasCatalog, argument: string, limit: numb
   }
 }
 
-async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery): Promise<AtlasReply> {
+async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery,
+  section?: RoleSection): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
-  if (!role) return characterLine(catalog, entry, true);
+  const part = entry.game === "zzz" ? undefined : section;
+  const title = part === "skills" ? (entry.game === "gi" ? "天赋" : "行迹") :
+    part === "ranks" ? (entry.game === "gi" ? "命座" : "星魂") : undefined;
+  const noData = () => title ? `${role?.overview.name ?? entry.name}暂无${title}资料。` : characterLine(catalog, entry, true);
+  if (!role) return noData();
   try {
     const { renderRoleBook } = await import("./role-render.ts");
     const galleryName = characterGalleryName(entry, roster, role.overview.name);
     return await atlasBookReply(role.overview.name, scale => renderRoleBook(role, {
       scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName,
-    }), delivery, true) ?? characterLine(catalog, entry, true);
+    }, part), delivery, !part, title) ?? noData();
   } catch {
+    if (title) return `${role.overview.name}的${title}图片暂不可用。`;
     return `${await characterLine(catalog, entry, true)}\n图鉴图片暂不可用。`;
   }
 }
@@ -288,7 +294,8 @@ async function lookupNotice(query: string, message: string, game: Game | undefin
 
 async function traditionalQuery(
   catalog: AtlasCatalog,
-  query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" | "legacy-character" = "search", delivery?: AtlasDelivery,
+  query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" | "legacy-character" = "search",
+  delivery?: AtlasDelivery, section?: RoleSection,
 ): Promise<AtlasReply | undefined> {
   const explicit = mode === "search" || mode === "shortcut" || mode === "character";
   try {
@@ -338,7 +345,7 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
-      return characterBook(catalog, entry, roster, delivery);
+      return characterBook(catalog, entry, roster, delivery, section);
     }
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(catalog, first.entry, delivery);
@@ -608,8 +615,8 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
 }
 
 function createTraditionalQueries(catalog: AtlasCatalog, limit: number) {
-  return traditionalAtlasEvent((argument, kind, game, delivery) => {
-    if (kind !== "glued") return traditionalQuery(catalog, argument, limit, game, kind, delivery);
+  return traditionalAtlasEvent((argument, kind, game, delivery, section) => {
+    if (kind !== "glued") return traditionalQuery(catalog, argument, limit, game, kind, delivery, section);
     return explicitAtlasQuery(catalog, argument, limit, delivery);
   }, (mode, period, at, delivery) => challengeQuery(catalog, `${gameNames[mode.game]} ${mode.name} ${period}`, at, delivery));
 }

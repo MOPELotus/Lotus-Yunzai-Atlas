@@ -23,6 +23,7 @@ import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
 import type { ZzzChallengeRoom } from "./zzz-challenge-data.ts";
 import { isAtlasGalleryPath, label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
+import type { RoleSection } from "./traditional.ts";
 
 export interface RoleRenderOptions {
   readonly mode?: "auto" | "gpu" | "cpu";
@@ -450,7 +451,12 @@ export async function renderLookupNotice(query: string, message: string, game: G
   return page!;
 }
 
-export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
+export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}, section?: RoleSection) {
+  const skillGroups = section === "ranks" ? [] : role.skills.filter(({ cards }) => cards.length);
+  const ranks = section === "skills" ? [] : role.ranks;
+  const materials = section ? [] : role.materials.filter(({ items }) => items.length);
+  if (section && !skillGroups.length && !ranks.length) return [];
+
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
   const element = role.game === "gi" ? role.overview.element : undefined;
@@ -458,8 +464,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const [images, background, texture, galleryPortrait, originalPortrait] = await Promise.all([
     galleryImages(role.game, [role.overview.icon, role.overview.iconFallback, role.overview.artwork,
       ...(role.overview.portraitFallbacks ?? []),
-      ...role.skills.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...role.ranks.map(({ artwork }) => artwork),
-      ...role.materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
+      ...skillGroups.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...ranks.map(({ artwork }) => artwork),
+      ...materials.flatMap(({ items }) => items.map(({ artwork }) => artwork))], options.assetRoot),
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
@@ -487,18 +493,18 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     overview.push(statRow(stats.slice(start, start + 3)));
   }
 
-  const pages: Page[] = [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
-  const skills = role.skills.filter(({ cards }) => cards.length).flatMap(({ title, cards }) => [
+  const pages: Page[] = section ? [] : [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
+  const skills = skillGroups.flatMap(({ title, cards }) => [
     [heading(title, undefined, true)],
     ...cards.map((card) => [heading(card.name, image(card.artwork)), ...(card.description ? [text(card.description)] : []),
       ...card.details.map(details), ...layout.levelBlocks(card.levels ?? [])]),
   ]);
   if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
-  if (role.ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: role.ranks.map((rank) => [
+  if (ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: ranks.map((rank) => [
     heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)),
     ...(rank.description ? [text(rank.description)] : []), ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });
-  const materials = role.materials.filter(({ items }) => items.length);
+  if (section && overview.length) pages[0]?.panels.unshift(overview);
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
     ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),

@@ -100,7 +100,10 @@ function validRoleQuery(query: string | undefined, prefix: string | undefined): 
     !reservedBare.test(query) && !/^(?:我的|个人|今日|今天|每日|明天|明日|周[1-7一二三四五六日](?:素材|材料)?$)/u.test(query);
 }
 
-export function parseRoleShortcut(message: string): { game?: Game; query: string } | undefined {
+export type RoleSection = "skills" | "ranks";
+type RoleShortcut = { game?: Game; query: string; section?: RoleSection };
+
+export function parseRoleShortcut(message: string): RoleShortcut | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
   const result = roleDetail.exec(input.slice(prefix?.length ?? 0));
@@ -108,12 +111,17 @@ export function parseRoleShortcut(message: string): { game?: Game; query: string
   const suffix = result?.[2];
   if (!validRoleQuery(query, prefix)) return;
   const game = prefix ? prefixes[prefix] : undefined;
-  if (suffix === "天赋") return game ? { game, query } : { query };
+  if (suffix === "天赋") {
+    const section = game === "zzz" ? undefined : "skills";
+    return { ...(game && { game }), query, ...(section && { section }) };
+  }
   const suffixGame = suffix === "命座" ? "gi" : suffix === "星魂" ? "hsr" : "zzz";
-  if (!game || game === suffixGame) return { game: suffixGame, query };
+  if (!game || game === suffixGame) {
+    return suffixGame === "zzz" ? { game: suffixGame, query } : { game: suffixGame, query, section: "ranks" };
+  }
 }
 
-export function parseLegacyRoleShortcut(message: string): { game?: Game; query: string } | undefined {
+export function parseLegacyRoleShortcut(message: string): RoleShortcut | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
   const match = prefix ? legacyRoleDetail.exec(input.slice(prefix.length)) : legacyRoleDetail.exec(input) ?? bareRoleBook.exec(input);
@@ -122,7 +130,9 @@ export function parseLegacyRoleShortcut(message: string): { game?: Game; query: 
   const game = prefix ? prefixes[prefix] : undefined;
   const part = match?.[2];
   const suffixGame = part === "命之座" ? "gi" : part === "行迹" ? "hsr" : undefined;
-  if (!suffixGame || !game || game === suffixGame) return { game: suffixGame ?? game, query };
+  if (suffixGame && game && game !== suffixGame) return;
+  const section = part === "命之座" ? "ranks" : part === "技能" || part === "行迹" ? "skills" : undefined;
+  return { game: suffixGame ?? game, query, ...(section && { section }) };
 }
 
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
@@ -164,7 +174,7 @@ async function send(event: ShortcutEvent, reply: AtlasReply | undefined): Promis
 }
 
 export function traditionalAtlasEvent(
-  findReply: (query: string, kind: Lookup, game?: Game, delivery?: AtlasDelivery) => Promise<AtlasReply | undefined>,
+  findReply: (query: string, kind: Lookup, game?: Game, delivery?: AtlasDelivery, section?: RoleSection) => Promise<AtlasReply | undefined>,
   findChallengeReply: (mode: ChallengeMode, period: ChallengePeriod, at?: number, delivery?: AtlasDelivery) => Promise<AtlasReply>,
 ) {
   return {
@@ -178,10 +188,10 @@ export function traditionalAtlasEvent(
         const query = parseGluedLookup(event.msg);
         if (query) return send(event, await findReply(query, "glued", undefined, delivery));
         const role = parseRoleShortcut(event.msg);
-        if (role) return send(event, await findReply(role.query, "character", role.game, delivery));
+        if (role) return send(event, await findReply(role.query, "character", role.game, delivery, role.section));
         const legacyRole = parseLegacyRoleShortcut(event.msg);
         if (legacyRole) {
-          const reply = await findReply(legacyRole.query, "legacy-character", legacyRole.game, delivery);
+          const reply = await findReply(legacyRole.query, "legacy-character", legacyRole.game, delivery, legacyRole.section);
           if (reply !== undefined) return send(event, reply);
         }
         const challenge = parseChallengeShortcut(event.msg);

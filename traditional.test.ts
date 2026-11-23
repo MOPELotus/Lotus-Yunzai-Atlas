@@ -144,10 +144,12 @@ test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", ()
     ["hsr", "卡芙卡", ["卡芙卡星魂", "*卡芙卡星魂", "#星穹铁道卡芙卡星魂图鉴"]],
     ["zzz", "艾莲·乔", ["艾莲·乔影画", "艾莲·乔影画图鉴", "％艾莲·乔影画", "#绝区零艾莲·乔影画图鉴"]],
   ] as const) {
-    for (const command of commands) expect(parseRoleShortcut(command)).toEqual({ game, query });
+    for (const command of commands) expect(parseRoleShortcut(command)).toEqual({
+      game, query, ...(game !== "zzz" && { section: "ranks" }),
+    });
   }
-  expect(parseRoleShortcut("芙宁娜天赋")).toEqual({ query: "芙宁娜" });
-  expect(parseRoleShortcut("#芙宁娜天赋")).toEqual({ game: "gi", query: "芙宁娜" });
+  expect(parseRoleShortcut("芙宁娜天赋")).toEqual({ query: "芙宁娜", section: "skills" });
+  expect(parseRoleShortcut("#芙宁娜天赋")).toEqual({ game: "gi", query: "芙宁娜", section: "skills" });
   expect(parseRoleShortcut("%雅影画")).toEqual({ game: "zzz", query: "雅" });
   for (const command of ["#角色天赋", "角色天赋", "芙宁娜攻略命座", "*卡芙卡影画", "#绝区零艾莲星魂", "芙宁娜图鉴", "雅影画",
     "*我的卡芙卡星魂", "#今日天赋", "#周一素材天赋"]) {
@@ -158,20 +160,21 @@ test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", ()
 test("旧角色资料词只取精确角色，现有装备和其他命令可继续匹配", async () => {
   const calls: unknown[][] = [];
   const replies: unknown[] = [];
-  const route = traditionalAtlasEvent(async (query, kind, game) => {
-    calls.push([query, kind, game]);
+  const route = traditionalAtlasEvent(async (query, kind, game, _delivery, section) => {
+    calls.push([query, kind, game, section]);
     if (kind === "legacy-character" && ["芙芙", "卡芙卡"].includes(query)) return "角色图册";
     if (kind === "shortcut" && query === "图书资料") return "其他图鉴";
   }, async () => "挑战");
   const commands = [
-    ["#芙芙资料", "芙芙", "gi"], ["芙芙技能", "芙芙", undefined], ["#芙芙命之座", "芙芙", "gi"],
-    ["*卡芙卡行迹", "卡芙卡", "hsr"], ["卡芙卡图鉴", "卡芙卡", undefined],
+    ["#芙芙资料", "芙芙", "gi", undefined], ["芙芙技能", "芙芙", undefined, "skills"],
+    ["#芙芙命之座", "芙芙", "gi", "ranks"], ["*卡芙卡行迹", "卡芙卡", "hsr", "skills"],
+    ["卡芙卡图鉴", "卡芙卡", undefined, undefined],
   ] as const;
   const run = (msg: string) => route.rule.run({ msg, reply: (value) => replies.push(value) });
-  for (const [msg, query, game] of commands) {
+  for (const [msg, query, game, section] of commands) {
     expect(route.rule.pattern.test(msg)).toBe(true);
     expect(await run(msg)).toBe(true);
-    expect(calls.at(-1)).toEqual([query, "legacy-character", game]);
+    expect(calls.at(-1)).toEqual([query, "legacy-character", game, section]);
   }
   for (const msg of ["#角色资料", "#今日技能", "#我的资料", "#原神卡芙卡行迹", "*芙芙命之座"]) {
     expect(parseLegacyRoleShortcut(msg)).toBeUndefined();

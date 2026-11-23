@@ -66,3 +66,13 @@ test("低配图鉴用原有的一倍页分批，每页只渲染一次", async ()
     setImageRenderPreset("standard");
   }
 });
+
+test("专用分项一页直接发图，多页的转发标题保留分项名", async () => {
+  expect(await atlasBookReply("冰空", async () => pages([5]), undefined, false, "命座")).toEqual({
+    type: "image", file: new Uint8Array(5).fill(1),
+  });
+  const rendered = pages([5, 3]).map((page, index) => ({ ...page, section: `命座（${index + 1}/2）` }));
+  const result = await atlasBookReply("冰空", async () => rendered, undefined, false, "命座");
+  expect(result && typeof result === "object" && result.type === "forward" && result.nodes[0])
+    .toBe("冰空命座\n命座（1/2） → 命座（2/2）\n共 2 页");
+});
