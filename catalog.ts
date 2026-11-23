@@ -245,6 +245,19 @@ export function findMonsters(catalog: Catalog, query: string, game?: Game): Atla
   return findEntries(catalog, "monster", query, game);
 }
 
+const detailOrder = { character: 0, equipment: 1, challenge: 2, set: 3 } as const;
+type DetailKind = keyof typeof detailOrder;
+const displayTextField = /^(?:name|title|text|effect|story|background|(?:[a-z]+_)?desc(?:ription)?|brief|content)$/iu;
+
+function detailMatches(value: unknown, query: string, field = "", depth = 0): boolean {
+  if (typeof value === "string") {
+    return displayTextField.test(field) && compareKey(value.replace(/<[^>]*>/gu, "").replace(/\\n/gu, "")).includes(query);
+  }
+  if (depth >= 12 || !value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, text]) =>
+    detailMatches(text, query, /^\d+$/u.test(key) ? field : key, depth + 1));
+}
+
 const weaponTypes = new Map([
   ["WEAPON_SWORD_ONE_HAND", "单手剑"], ["WEAPON_CLAYMORE", "双手剑"],
   ["WEAPON_CATALYST", "法器"], ["WEAPON_BOW", "弓"], ["WEAPON_POLE", "长柄武器"],
@@ -417,6 +430,28 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     return (await readItem(entry, pageId))?.content ?? {};
   }
 
+  async function findInDetails(catalog: Catalog, query: string, game: Game | undefined, roleOnly: boolean, limit: number) {
+    const key = compareKey(query);
+    if ([...key].length < 3 || !/\p{L}/u.test(key)) return [];
+    const candidates = catalog.pages.flatMap(page => {
+      if ((game && page.game !== game) || (roleOnly && page.kind !== "character") ||
+          !(page.kind in detailOrder) || (page.kind === "challenge" && page.challengeMode?.id !== "leyline")) return [];
+      const kind = page.kind as DetailKind;
+      const pageId = kind === "challenge" ? "leyline" : pageFor(page.game, kind)?.id;
+      return pageId ? page.entries.map(entry => ({ kind, entry, pageId, score: 0 })) : [];
+    }).sort((left, right) => detailOrder[left.kind] - detailOrder[right.kind] ||
+      left.entry.name.localeCompare(right.entry.name, "zh-Hans-CN"));
+    const matches: typeof candidates = [];
+    for (let offset = 0; offset < candidates.length && matches.length <= limit; offset += 12) {
+      const batch = await Promise.all(candidates.slice(offset, offset + 12).map(async (candidate) => {
+        const item = await readItem(candidate.entry, candidate.pageId);
+        if (item && (detailMatches(item.content.detail, key) || detailMatches(item.content.list, key))) return candidate;
+      }));
+      for (const match of batch) if (match) matches.push(match);
+    }
+    return matches.slice(0, limit + 1);
+  }
+
   async function monsterDetails(entry: AtlasEntry): Promise<MonsterDetails | undefined> {
     const item = await readItem(entry, "monster");
     const detail = object(item?.content.detail);
@@ -477,6 +512,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
     locale,
+    findInDetails,
     async statusSource() {
       const root = snapshot?.root ?? await locate().then(({ root }) => root, () => configuredRoot);
       const bases = basename(root) === "data" ? [root, dirname(root)] : [root];

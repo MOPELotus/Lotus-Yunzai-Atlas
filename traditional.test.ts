@@ -170,6 +170,13 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
         content: { list: { set: { two: { name: { zh: name } } } } },
       }));
     }
+    for (const [id, description] of [["100", "西风骑士团的制式长剑。"], ["101", "协助西风骑士团。"], ["11505", "西风骑士团末段。"]]) {
+      await writeFile(join(root, `items/${id}.json`), JSON.stringify({
+        meta: { gameId: "gi", pageId: "weapon", recordId: id === "11505" ? "11401" : id, version: "1",
+          sourceUrl: "只在元数据中的检索词" },
+        content: { detail: { desc: description, icon: "仅图标标识字段的检索词" } },
+      }));
+    }
     await writeFile(join(root, "map.json"), JSON.stringify({
       games: {
         gi: { locales: { zh: { pages: {
@@ -184,7 +191,8 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
         zzz: { locales: { zh: { pages: { bangboo: page({ id: "400", name: "企鹅布" }) } } } },
       },
     }));
-    const snapshot = await createAtlasCatalog(root).read();
+    const catalog = createAtlasCatalog(root);
+    const snapshot = await catalog.read();
     const hits = (query: string, game?: Game, mode?: TraditionalLookup) =>
       findTraditionalEntries(snapshot, query, game, mode).map(({ entry, kind }) => [entry.game, kind, entry.id]);
     expect(hits("西风剑")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"], ["hsr", "equipment", "300"]]);
@@ -221,6 +229,13 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("西风剑", undefined, "character")).toEqual([]);
     expect(hits("西风剑", "gi", "character")).toEqual([]);
     expect(hits("西风剑客", undefined, "character")).toEqual([["gi", "character", "10"]]);
+    expect((await catalog.findInDetails(snapshot, "制式长剑", "gi", false, 8)).map(({ entry }) => entry.id)).toEqual(["100"]);
+    expect((await catalog.findInDetails(snapshot, "西风骑士团", "gi", false, 1)).map(({ entry }) => entry.id)).toEqual(["100", "101"]);
+    for (const query of ["西风骑士团末段", "只在元数据中的检索词", "仅图标标识字段的检索词", "西风", "101"]) {
+      expect(await catalog.findInDetails(snapshot, query, "gi", false, 8)).toEqual([]);
+    }
+    expect(await catalog.findInDetails(snapshot, "西风骑士团", "gi", true, 8)).toEqual([]);
+    expect(await catalog.findInDetails(snapshot, "西风骑士团", "hsr", false, 8)).toEqual([]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

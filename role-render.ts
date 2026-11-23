@@ -883,7 +883,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const low = nativeImageRasterScale() === 1;
   const pageScale = low ? 1 : scale;
-  const game = gameId ? gameNames[gameId] : "Nanoka Atlas";
+  const game = gameId ? gameNames[gameId] : "全部游戏";
   const head = Math.max(header, 118 + title.length * 39);
   const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
     const { heights, height } = measurePage(head, panels, trailingGap !== false);

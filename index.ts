@@ -317,8 +317,12 @@ async function traditionalQuery(
         return (await challengeDetails(catalog, entry, arbitrationMode, false)).join("\n");
       }
     }
+    if (!matches.length && explicit) {
+      const roleOnly = mode === "character";
+      if (roleOnly && findTraditionalEntries(result, query, game, "name").length) return;
+      matches = await catalog.findInDetails(result, query, game, roleOnly, limit);
+    }
     if (!matches.length) {
-      if (mode === "character" && findTraditionalEntries(result, query, game, "name").length) return;
       if (!explicit) return;
       const message = mode === "character" ? "未找到匹配的角色资料。" :
         "未找到匹配的图鉴资料。请补充游戏名或更完整的名称。";
