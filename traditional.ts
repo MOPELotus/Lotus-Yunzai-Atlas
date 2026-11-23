@@ -11,6 +11,7 @@ const bareName = /^[#*%％][^\r\n]{2,128}$/u;
 const gamePrefix = /^(?:#崩坏星穹铁道|#星穹铁道|#绝区零|#绝区|#星铁|#崩铁|#原神|[#*%％])/u;
 const reserved = /攻略|练度统计|(?:命座|星魂|影画|天赋)$/u;
 const reservedBare = /^(?:扫码登录|米哈游登录|锅巴登录|登录|刷新cookie|绑定设备|体力|全部体力|多体力|更新抽卡记录|刷新抽卡记录|全部记录|角色记录|武器记录|常驻记录|新手记录|抽卡记录|更新面板|帮助|菜单|签到|注册自动签到|远程|spawn|上传|下载|测试|最强|极限)|(?:面板|面版)(?:\d{1,3})?$|(?:面板|面版).*?[换变改]|(?:排名|排行|排行榜)$/iu;
+const genericShortcut = /^(?:原神|星铁|崩铁|星穹铁道|绝区零|角色|武器|圣遗物|光锥|遗器|遗器套装|音擎|驱动盘|邦布|敌人|物品|材料|卡牌|七圣召唤)$/u;
 const operations = /^#?(?:图鉴(?:状态|帮助|更新|检查更新|全量更新|重置)|(?:更新|检查更新|全量更新|重置|清空)图鉴)$/u;
 const glued = /^#?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
@@ -59,7 +60,8 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   const prefix = gamePrefix.exec(input)?.[0];
   if (!prefix) return;
   const query = input.slice(prefix.length, -"图鉴".length).trim();
-  if (!query || reserved.test(query) || /^[0-9]$/u.test(query.normalize("NFKC"))) return;
+  const key = query.normalize("NFKC").replace(/\s+/gu, "");
+  if (!query || reserved.test(query) || reservedBare.test(key) || genericShortcut.test(key) || /^[0-9]$/u.test(key)) return;
   const game = prefixes[prefix];
   if (game) return { game, query };
 }
@@ -71,7 +73,7 @@ export function parseBareNameShortcut(message: string): { game: Game; query: str
   if (!prefix) return;
   const game = prefixes[prefix];
   const query = input.slice(prefix.length).trim();
-  if (!game || query.length < 2 || reserved.test(query) || reservedBare.test(query) ||
+  if (!game || query.length < 2 || reserved.test(query) || reservedBare.test(query) || genericShortcut.test(query) ||
       /^[0-9]+$/u.test(query.normalize("NFKC"))) return;
   if (shortcutChallengeMode(game, query.replace(/^(?:本期|当期|上期|往期|最新)/u, ""))) return;
   return { game, query };

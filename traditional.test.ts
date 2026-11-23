@@ -17,7 +17,8 @@ test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项�
     for (const command of commands) expect(parseEquipmentShortcut(command)).toEqual({ game, query });
   }
   for (const command of ["#图鉴", "#星铁图鉴", "#西风剑攻略图鉴", "#芙宁娜练度统计图鉴", "#芙宁娜命座图鉴",
-    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#1图鉴", "#１图鉴"]) {
+    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#1图鉴", "#１图鉴",
+    "#材料图鉴", "*遗器套装图鉴", "%音擎图鉴", "#武 器图鉴", "#最强西风剑图鉴", "#更新面板图鉴"]) {
     expect(parseEquipmentShortcut(command)).toBeUndefined();
   }
 });
@@ -30,7 +31,7 @@ test("裸装备捷径沿用各游戏前缀，带图鉴和角色分项仍归原�
   ] as const) {
     for (const command of commands) expect(parseBareNameShortcut(command)).toEqual({ game, query });
   }
-  for (const command of ["西风剑", "#西风剑图鉴", "#更新图鉴", "#123", "#星铁１２３", "*卡芙卡星魂", "%深海访客攻略"]) {
+  for (const command of ["西风剑", "#西风剑图鉴", "#更新图鉴", "#123", "#星铁１２３", "*卡芙卡星魂", "%深海访客攻略", "%邦布"]) {
     expect(parseBareNameShortcut(command)).toBeUndefined();
   }
 });
