@@ -1,10 +1,10 @@
+import { atlasLocales, defaultAtlasLocale } from "./locale.ts";
 import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { candidateJson } from "./validate-candidate.ts";
 import { atlasSourceOrigin } from "./source-transport.ts";
 import { object } from "./source-values.ts";
 
-const localeDirectory = "items/简体中文";
 const gameFolders = new Map([["gi", "原神"], ["hsr", "星铁"], ["zzz", "绝区零"]]);
 const maxEntries = 20_000;
 const safeId = /^[a-z0-9_][a-z0-9_.+-]{0,127}$/iu;
@@ -41,7 +41,8 @@ function invalid() {
 }
 
 // The fixed old exporter used 语言/游戏/分类/稀有度/展示名.json. The native exporter uses game/page/id.json.
-export async function rebuildLegacyAtlasIndex(root: string): Promise<Buffer> {
+export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = defaultAtlasLocale): Promise<Buffer> {
+  const localeDirectory = `items/${atlasLocales[requestedLocale].folder}`;
   const games = new Map<string, Map<string, Page>>();
   let entries = 0;
 
@@ -67,13 +68,13 @@ export async function rebuildLegacyAtlasIndex(root: string): Promise<Buffer> {
     const { gameId, gameFolder, locale, localeFolder, pageId, pageFolder, recordId, name, rarity, version, sourceUrl, sourcePath, hasDetail } = object(meta);
     const { list, detail } = object(content);
     if (typeof gameId !== "string" || gameFolders.get(gameId) !== gameFolder || typeof gameFolder !== "string" ||
-        locale !== "zh" || localeFolder !== "简体中文" || !validName(pageFolder) || !validName(rarity) || !validName(name) ||
+        locale !== requestedLocale || localeFolder !== atlasLocales[requestedLocale].folder || !validName(pageFolder) || !validName(rarity) || !validName(name) ||
         typeof recordId !== "string" || !safeId.test(recordId) || typeof version !== "string" || !safeId.test(version) ||
         typeof pageId !== "string" || !safePage.test(pageId) || typeof sourcePath !== "string" ||
         !sourcePath.startsWith(`${version}/`) || !/^[a-z0-9_.+-]+(?:\/[a-z0-9_-]+)*\/[a-z0-9_-]+\.json$/iu.test(sourcePath) ||
         sourceUrl !== `${atlasSourceOrigin}/${gameId}/${sourcePath}` || !isRecord(list) || typeof hasDetail !== "boolean" ||
         (hasDetail ? !isRecord(detail) && !Array.isArray(detail) : detail !== null)) throw invalid();
-    if (sourcePath.slice(version.length + 1, -".json".length).replace(/^zh\//u, "") !== pageId) throw invalid();
+    if (sourcePath.slice(version.length + 1, -".json".length).replace(new RegExp(`^${requestedLocale}/`, "u"), "") !== pageId) throw invalid();
     const folder = parts.join("/");
     const originalFolder = [gameFolder, pageFolder, rarity].map(sanitizeFolder).join("/");
     const originalName = sanitizeFolder(name);
@@ -95,7 +96,7 @@ export async function rebuildLegacyAtlasIndex(root: string): Promise<Buffer> {
     const indexedPages = [...pages].map(([id, { records, version, sourceUrl }]) => [id, {
       version, sourceUrl, recordCount: records.size, records: Object.fromEntries(records),
     }] as const);
-    return [game, { locales: { zh: { pages: Object.fromEntries(indexedPages) } } }] as const;
+    return [game, { locales: { [requestedLocale]: { pages: Object.fromEntries(indexedPages) } } }] as const;
   });
   return Buffer.from(JSON.stringify({ games: Object.fromEntries(indexedGames) }));
 }

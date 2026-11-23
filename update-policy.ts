@@ -1,3 +1,4 @@
+import { defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { object } from "./source-values.ts";
 
@@ -64,10 +65,10 @@ function cron(value: unknown): string | undefined {
 
 const localeIds = new Map([
   ["zh", "zh"], ["cn", "zh"], ["zh-cn", "zh"], ["zh-hans", "zh"], ["zh_hans", "zh"],
-  ["en", "en"], ["ja", "ja"], ["jp", "ja"], ["ko", "ko"], ["kr", "ko"],
+  ["cht", "cht"], ["en", "en"], ["ja", "ja"], ["jp", "ja"], ["ko", "ko"], ["kr", "ko"],
 ]);
 
-function configuredScope(value: unknown, selections: readonly string[]): readonly string[] | undefined {
+function configuredScope(value: unknown, selections: readonly string[], locale: AtlasLocale): readonly string[] | undefined {
   if (value === undefined) return selections;
   if (!Array.isArray(value) || !value.every((argument): argument is string => typeof argument === "string")) return;
   const args: readonly string[] = value[0] === "src/scrape.mjs" ? value.slice(1) : value;
@@ -107,7 +108,7 @@ function configuredScope(value: unknown, selections: readonly string[]): readonl
       }
     }
   }
-  if (locales.size && !locales.has("zh")) return [];
+  if (locales.size && !locales.has(locale)) return [];
   return selections.filter((selection) => (!games.size || games.has(selection.split("/")[0]!)) &&
     (!pages.size || pages.has(selection)));
 }
@@ -127,7 +128,7 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
     (auto.enable !== undefined && typeof auto.enable !== "boolean");
   function policy(kind: AtlasScheduleKind, selections: readonly string[]): AtlasSchedulePolicy {
     const argsKey = kind === "version" ? "update_args" : "challenge_args";
-    const selected = configuredScope(atlas[argsKey], selections);
+    const selected = configuredScope(atlas[argsKey], selections, parseAtlasLocale(atlas.locale) ?? defaultAtlasLocale);
     if (!selected) return { selections: [], issue: `图鉴 ${argsKey} 含不支持的选项或无效分类范围。` };
     if (value !== undefined && !configured) return { selections: selected, issue: "图鉴配置须为对象。" };
     if (invalidAuto) return { selections: selected, issue: "图鉴 auto_update 配置无效。" };

@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, atlasLocales, defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -6,14 +7,17 @@ import { object } from "./source-values.ts";
 
 export interface AtlasCandidatePage {
   readonly game: Game;
+  readonly locale?: AtlasLocale;
   readonly pageId: string;
   readonly version?: string;
   readonly recordCount?: number;
 }
 
+export type ValidatedAtlasCandidatePage = Required<Omit<AtlasCandidatePage, "locale">> & Pick<AtlasCandidatePage, "locale">;
+
 export interface AtlasCandidateValidation {
   readonly ok: boolean;
-  readonly pages: readonly Required<AtlasCandidatePage>[];
+  readonly pages: readonly ValidatedAtlasCandidatePage[];
   readonly issueCount: number;
   readonly issues: readonly string[];
 }
@@ -59,10 +63,10 @@ export async function candidateJson(directory: string, relative: string): Promis
   }
 }
 
-function matchesItem(value: unknown, game: Game, pageId: string, version: string, entry: Record<string, unknown>): boolean {
+function matchesItem(value: unknown, game: Game, pageId: string, version: string, locale: AtlasLocale, entry: Record<string, unknown>): boolean {
   const { meta, content } = object(value);
   return record(meta) && record(content) && meta.gameId === game && meta.pageId === pageId &&
-    meta.locale === "zh" && meta.recordId === entry.id && meta.name === entry.name && meta.version === version &&
+    parseAtlasLocale(meta.locale) === locale && meta.recordId === entry.id && meta.name === entry.name && meta.version === version &&
     meta.hasDetail === entry.hasDetail && record(content.list) &&
     (entry.hasDetail ? record(content.detail) || Array.isArray(content.detail) : content.detail === null);
 }
@@ -71,7 +75,7 @@ function matchesItem(value: unknown, game: Game, pageId: string, version: string
 export async function validateAtlasCandidate(directory: string, requiredPages: readonly AtlasCandidatePage[] = [],
   signal?: AbortSignal): Promise<AtlasCandidateValidation> {
   signal?.throwIfAborted();
-  const pages: Required<AtlasCandidatePage>[] = [];
+  const pages: ValidatedAtlasCandidatePage[] = [];
   const issues: string[] = [];
   let issueCount = 0;
   function issue(message: string) {
@@ -91,41 +95,43 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
   const registered = object(map.games);
   const usedPaths = new Set<string>();
   for (const game of games) {
-    const locale = object(object(object(registered[game]).locales).zh);
-    for (const [pageId, value] of Object.entries(object(locale.pages))) {
-      signal?.throwIfAborted();
-      const where = `${game}/${pageId}`;
-      const { id, version, records, recordCount, totalRecordCount, sampled } = object(value);
-      const entries = Object.entries(object(records));
-      if (!identity(pageId) || id !== pageId || !identity(version) || sampled !== false ||
-          !entries.length || recordCount !== entries.length || totalRecordCount !== entries.length) {
-        issue(`${controls.test(pageId) ? game : where} 的版本、采样标记或条目计数无效。`);
-        continue;
-      }
-      const before = issueCount;
-      for (const [key, value] of entries) {
+    for (const locale of Object.keys(atlasLocales) as AtlasLocale[]) {
+      for (const [pageId, value] of Object.entries(object(atlasLocaleBlock(registered[game], locale).pages))) {
         signal?.throwIfAborted();
-        const entry = object(value);
-        if (!identity(key) || entry.id !== key || !identity(entry.name) || typeof entry.hasDetail !== "boolean" ||
-            !itemPath(entry.path) || usedPaths.has(entry.path)) {
-          issue(`${where} 存在无效条目标识或重复文件路径。`);
+        const where = locale === defaultAtlasLocale ? `${game}/${pageId}` : `${game}/${locale}/${pageId}`;
+        const { id, version, records, recordCount, totalRecordCount, sampled } = object(value);
+        const entries = Object.entries(object(records));
+        if (!identity(pageId) || id !== pageId || !identity(version) || sampled !== false ||
+            !entries.length || recordCount !== entries.length || totalRecordCount !== entries.length) {
+          issue(`${controls.test(pageId) ? game : where} 的版本、采样标记或条目计数无效。`);
           continue;
         }
-        usedPaths.add(entry.path);
-        try {
-          const item = await candidateJson(root, entry.path);
-          if (!matchesItem(item, game, pageId, version, entry)) issue(`${where}/${key} 的身份、版本或详情结构不一致。`);
-        } catch {
-          issue(`${where}/${key} 的条目文件缺失、不可读或不是实体 JSON 文件。`);
+        const before = issueCount;
+        for (const [key, value] of entries) {
+          signal?.throwIfAborted();
+          const entry = object(value);
+          if (!identity(key) || entry.id !== key || !identity(entry.name) || typeof entry.hasDetail !== "boolean" ||
+              !itemPath(entry.path) || usedPaths.has(entry.path)) {
+            issue(`${where} 存在无效条目标识或重复文件路径。`);
+            continue;
+          }
+          usedPaths.add(entry.path);
+          try {
+            const item = await candidateJson(root, entry.path);
+            if (!matchesItem(item, game, pageId, version, locale, entry)) issue(`${where}/${key} 的身份、版本或详情结构不一致。`);
+          } catch {
+            issue(`${where}/${key} 的条目文件缺失、不可读或不是实体 JSON 文件。`);
+          }
         }
+        if (issueCount === before) pages.push({ game, pageId, version, recordCount, ...(locale !== defaultAtlasLocale && { locale }) });
       }
-      if (issueCount === before) pages.push({ game, pageId, version, recordCount });
     }
   }
   signal?.throwIfAborted();
-  if (!pages.length) issue("候选没有通过校验的简体中文分类。");
+  if (!pages.length) issue("候选没有通过校验的图鉴分类。");
   for (const expected of requiredPages) {
-    const page = pages.find(({ game, pageId }) => game === expected.game && pageId === expected.pageId);
+    const page = pages.find(({ game, pageId, locale }) => game === expected.game && pageId === expected.pageId &&
+      (locale ?? defaultAtlasLocale) === (expected.locale ?? defaultAtlasLocale));
     if (!page || (expected.version !== undefined && page.version !== expected.version) ||
         (expected.recordCount !== undefined && page.recordCount !== expected.recordCount)) {
       issue(`${expected.game}/${expected.pageId} 缺失、版本或条目计数与候选要求不符。`);

@@ -1,3 +1,5 @@
+import { defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
+import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { assembleAtlasCandidate, copyAtlasCandidate } from "./assemble-candidate.ts";
@@ -21,9 +23,9 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
   return publishInitialAtlas(root, source, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, undefined, false, publication);
 }
 
-async function publishInitialAtlas(root: string, source: string, pages: readonly Required<AtlasCandidatePage>[],
+async function publishInitialAtlas(root: string, source: string, pages: readonly ValidatedAtlasCandidatePage[],
   counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal,
-  extra?: { readonly source: string; readonly pages: readonly Required<AtlasCandidatePage>[] },
+  extra?: { readonly source: string; readonly pages: readonly ValidatedAtlasCandidatePage[] },
   materialRequest?: AtlasSourceFetch, emptyOnly = false, publication?: AtlasPublicationOptions): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
@@ -56,12 +58,13 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
 }
 
 export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal,
-  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion, publication }: {
+  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion, publication, locale = defaultAtlasLocale }: {
     readonly manifest?: typeof fetchAtlasManifest;
     readonly request?: AtlasSourceFetch;
     readonly emptyOnly?: boolean;
     readonly downloadVersion?: typeof DownloadAtlasVersion;
     readonly publication?: AtlasPublicationOptions;
+    readonly locale?: AtlasLocale;
   } = {}): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (emptyOnly && (!channel || !await atlasRootIsEmpty(root))) {
@@ -85,14 +88,15 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
       }
       const stage = await mkdtemp(join(dirname(directory), ".atlas-first-gcg-"));
       try {
-        const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi }], signal, request);
+        const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi, ...(locale !== defaultAtlasLocale && { locale }) }], signal, request);
         return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages },
           undefined, emptyOnly, publication);
       } finally {
         await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       }
-    }, signal, request);
+    }, signal, request, undefined, undefined, locale);
   }
+  if (locale !== defaultAtlasLocale) throw new Error("本地图鉴初始化须选择来源版本。");
   return downloadLegacyAtlas(workspace, root,
     donor => publishInitialAtlas(root, donor, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, request ?? fetch,
       false, publication), signal);
@@ -101,10 +105,12 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
 if (import.meta.main) {
   const [root, mode, workspace, ...extra] = Bun.argv.slice(2);
   const publicData = mode === "--public";
-  const [flag, channel] = extra;
-  const chosenChannel = publicData && extra.length === 2 && flag === "--channel" && (channel === "live" || channel === "latest");
+  const [flag, channel, languageFlag, language] = extra;
+  const locale = languageFlag === "--locale" ? parseAtlasLocale(language) : undefined;
+  const chosenChannel = publicData && flag === "--channel" && (channel === "live" || channel === "latest") &&
+    (extra.length === 2 || (extra.length === 4 && locale !== undefined));
   if (!root || (extra.length && !chosenChannel) || (publicData ? !workspace : workspace !== undefined)) {
-    console.error("用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录 [--channel live|latest]]");
+    console.error("用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录 [--channel live|latest [--locale zh|en|ja|ko]]]");
     process.exitCode = 2;
   } else {
     const controller = new AbortController();
@@ -114,7 +120,7 @@ if (import.meta.main) {
     try {
       let result: AtlasPublication;
       if (publicData) {
-        result = await initializeAtlasFromPublic(root, workspace!, controller.signal, chosenChannel ? channel as AtlasVersionChannel : undefined);
+        result = await initializeAtlasFromPublic(root, workspace!, controller.signal, chosenChannel ? channel as AtlasVersionChannel : undefined, { locale });
       } else {
         const donor = mode ?? await findLegacyAtlasExport(root);
         if (!donor) throw new Error("未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。");

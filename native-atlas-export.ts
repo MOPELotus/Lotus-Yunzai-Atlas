@@ -1,3 +1,4 @@
+import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -102,22 +103,23 @@ async function imageSeeds(roots: readonly string[], signal?: AbortSignal) {
     const data = join(root, "data");
     const map = object(await Bun.file(await candidateFile(data, "map.json")).json());
     for (const game of Object.values(object(map.games))) {
-      const pages = object(object(object(object(game).locales).zh).pages);
-      for (const page of Object.values(pages)) {
-        for (const record of Object.values(object(object(page).records))) {
-          signal?.throwIfAborted();
-          const path = object(record).path;
-          if (typeof path !== "string" || !path.startsWith("items/")) continue;
-          const file = await candidateFile(data, path);
-          const { images } = object(object(await Bun.file(file).json()).meta);
-          for (const row of Array.isArray(images) ? images : []) {
-            const { status, remoteUrl, localPath, sha256 } = object(row);
-            if (status !== "downloaded" || typeof remoteUrl !== "string" || typeof localPath !== "string" ||
-                typeof sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(sha256)) continue;
-            const entries = found.get(remoteUrl) ?? [];
-            if (!entries.some(entry => entry.root === root && entry.path === localPath && entry.sha256 === sha256)) {
-              entries.push({ root, path: localPath, sha256 });
-              found.set(remoteUrl, entries);
+      for (const locale of Object.values(object(object(game).locales))) {
+        for (const page of Object.values(object(object(locale).pages))) {
+          for (const record of Object.values(object(object(page).records))) {
+            signal?.throwIfAborted();
+            const path = object(record).path;
+            if (typeof path !== "string" || !path.startsWith("items/")) continue;
+            const file = await candidateFile(data, path);
+            const { images } = object(object(await Bun.file(file).json()).meta);
+            for (const row of Array.isArray(images) ? images : []) {
+              const { status, remoteUrl, localPath, sha256 } = object(row);
+              if (status !== "downloaded" || typeof remoteUrl !== "string" || typeof localPath !== "string" ||
+                  typeof sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(sha256)) continue;
+              const entries = found.get(remoteUrl) ?? [];
+              if (!entries.some(entry => entry.root === root && entry.path === localPath && entry.sha256 === sha256)) {
+                entries.push({ root, path: localPath, sha256 });
+                found.set(remoteUrl, entries);
+              }
             }
           }
         }
@@ -129,24 +131,27 @@ async function imageSeeds(roots: readonly string[], signal?: AbortSignal) {
 
 type GameFolder = {
   game: { id: string; name: string; folder: string; versions: readonly string[]; requestedVersion: string | null };
-  locales: { zh: { id: string; label: string; folder: string; pages: Record<string, unknown> } };
+  locales: Partial<Record<AtlasLocale, { id: AtlasLocale; label: string; folder: string; pages: Record<string, unknown> }>>;
 };
 
 /** Stages original indexes, details and artwork from Nanoka using Bun only. */
 export async function nativeAtlasExport({ destination, cache, indexes, sourceRoots, refreshDetails,
   request = fetch, signal }: NativeExportOptions) {
-  if (!indexes.length || new Set(indexes.map(({ game, pageId }) => game + "/" + pageId)).size !== indexes.length) {
+  if (!indexes.length || new Set(indexes.map(({ game, pageId, locale = defaultAtlasLocale }) => `${game}/${locale}/${pageId}`)).size !== indexes.length) {
     throw new Error("选择已验证且互不重复的原图鉴分类。");
   }
   await mkdir(destination, { mode: 0o700 });
   const data = join(destination, "data");
   await mkdir(data, { mode: 0o700 });
   const games: Record<string, GameFolder> = {};
+  const locales = new Set<AtlasLocale>();
   const assets = new Map<string, Promise<ReturnType<typeof nativeAtlasAssetMetadata> | undefined>>();
   const seeds = await imageSeeds(sourceRoots, signal);
   for (const page of indexes) {
     signal?.throwIfAborted();
-    const { game, pageId, version, rows } = page;
+    const { game, pageId, version, rows, locale = defaultAtlasLocale } = page;
+    const language = atlasLocales[locale];
+    locales.add(locale);
     if (rows.size !== page.recordCount) throw new Error("图鉴来源索引条目与所选版本不符。");
     const origin = nativeAtlasPageOrigin(page);
     const records: Record<string, unknown> = Object.create(null);
@@ -183,13 +188,13 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
       }
       return pending;
     }
-    const base = join(data, "items", "简体中文", game, pageId);
+    const base = join(data, "items", language.folder, game, pageId);
     await mkdir(base, { recursive: true });
     for (let offset = 0; offset < input.length; offset += 6) {
       const group = await Promise.allSettled(input.slice(offset, offset + 6).map(async ([id, list]) => {
         if (!recordId.test(id)) throw new Error("图鉴来源编号无效。");
         const record = await readNativeAtlasRecord(page, id, JSON.parse(list), image, signal, details);
-        const path = `items/简体中文/${game}/${pageId}/${id}.json`;
+        const path = `items/${language.folder}/${game}/${pageId}/${id}.json`;
         const exact = { meta: parseLegacyJsonEvidence(JSON.stringify(record.meta)), content: {
           list: parseLegacyJsonEvidence(list), detail: parseLegacyJsonEvidence(record.detailSource),
         } };
@@ -208,14 +213,15 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
     const identity = nativeAtlasGameNames[game];
     const target = games[game] ??= {
       game: { id: game, name: identity.game, folder: identity.folder, versions: [version], requestedVersion: version },
-      locales: { zh: { id: "zh", label: "Chinese", folder: "简体中文", pages: {} } },
+      locales: {},
     };
     if (target.game.requestedVersion !== version) throw new Error("同一游戏的下载版本须一致。");
-    target.locales.zh.pages[pageId] = { id: pageId, ...origin, version,
+    const localized = target.locales[locale] ??= { id: locale, ...language, pages: {} };
+    localized.pages[pageId] = { id: pageId, ...origin, version,
       recordCount: rows.size, totalRecordCount: rows.size, sampled: false, records };
   }
   await atomic(join(destination, "gallery", "_placeholder", "unknown.svg"), atlasSourcePlaceholder);
-  await Bun.write(join(data, "map.json"), JSON.stringify({ meta: { source: "https://nanoka.cc/", locales: ["zh"] }, games }) + "\n");
+  await Bun.write(join(data, "map.json"), JSON.stringify({ meta: { source: "https://nanoka.cc/", locales: [...locales] }, games }) + "\n");
   const validation = await validateAtlasCandidate(data, indexes, signal);
   if (!validation.ok) throw new Error(`原图鉴候选未通过校验。${validation.issues[0] ?? ""}`);
   return validation;

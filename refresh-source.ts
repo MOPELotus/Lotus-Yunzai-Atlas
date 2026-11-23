@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isMonsterGroupPage, monsterGroupKey } from "./monster-group-data.ts";
@@ -45,7 +46,7 @@ const sourcePages = {
   "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
 } as const;
 export type SourceSelection = keyof typeof sourcePages;
-type SourcePage = { readonly game: Game; readonly pageId: string; readonly title: string; readonly iconFields: readonly string[] };
+type SourcePage = { readonly game: Game; readonly locale?: AtlasLocale; readonly pageId: string; readonly title: string; readonly iconFields: readonly string[] };
 type FullImageEvidence = ReturnType<typeof inspectFullAtlasImages>;
 type ChallengeFacts = ReturnType<typeof readChallengeFacts>;
 
@@ -53,11 +54,11 @@ const otherTitles: Readonly<Partial<Record<string, string>>> = {
   "gi/character": "原神角色", "gi/monster": "原神敌人", "hsr/character": "星铁角色",
 };
 
-function fullSourcePage(game: Game, pageId: string): SourcePage {
+function fullSourcePage(game: Game, pageId: string, locale?: AtlasLocale): SourcePage {
   const key = `${game}/${pageId}`;
-  if (isSourceSelection(key)) return sourcePages[key];
+  if (isSourceSelection(key)) return { ...sourcePages[key], locale };
   const title = otherTitles[key] ?? challengeModes.find(mode => mode.game === game && mode.id === pageId)?.name ?? key;
-  return { game, pageId, title, iconFields: [] };
+  return { game, pageId, title, iconFields: [], locale };
 }
 const defaultSelections = { bangboo: "zzz/bangboo", weapon: "zzz/weapon", lightcone: "hsr/lightcone",
   equipment: "zzz/equipment", boss: "zzz/boss", shiyu: "zzz/shiyu" } as const;
@@ -86,11 +87,11 @@ async function readJson(root: string, path: string): Promise<unknown> {
   return JSON.parse(await readFile(await candidateFile(root, path), "utf8"));
 }
 
-async function pageAssets(root: string, { game, pageId, iconFields }: SourcePage, signal?: AbortSignal, fullImages?: FullImageEvidence) {
+async function pageAssets(root: string, { game, pageId, iconFields, locale = defaultAtlasLocale }: SourcePage, signal?: AbortSignal, fullImages?: FullImageEvidence) {
   const mode = fullImages ? challengeModes.find(mode => mode.game === game && mode.id === pageId) : pageId === "boss" ? deadlyAssaultMode : pageId === "shiyu" ? shiyuMode : isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).mode : undefined;
   const map = object(await readJson(root, "map.json"));
   const gameData = object(object(map.games)[game]);
-  const pages = object(object(object(gameData.locales).zh).pages);
+  const pages = object(atlasLocaleBlock(gameData, locale).pages);
   const records = object(object(pages[pageId]).records);
   const assets = new Map<string, { name: unknown; hasDetail: boolean; icons: ReadonlySet<string>;
     window?: ChallengeFacts["window"]; challenge?: ChallengeFacts["sections"]; effective?: string;
@@ -250,8 +251,7 @@ function sameImages(before: ReadonlyMap<string, string> | undefined, after: Read
 export async function inspectFullAtlasCandidate(baselineData: string, candidateData: string,
   scope: readonly AtlasCandidatePage[], signal?: AbortSignal,
 ): Promise<{ readonly issues: readonly string[]; readonly unchanged: boolean }> {
-  const pageKey = ({ game, pageId }: AtlasCandidatePage) => `${game}/${pageId}`;
-  if (!scope.length || new Set(scope.map(pageKey)).size !== scope.length) {
+  if (!scope.length || new Set(scope.map(atlasPageKey)).size !== scope.length) {
     throw new Error("全量图鉴候选须提供不重复的分类范围。");
   }
   const [beforeRoot, afterRoot] = await Promise.all([realpath(baselineData), realpath(candidateData)]);
@@ -261,8 +261,8 @@ export async function inspectFullAtlasCandidate(baselineData: string, candidateD
   if (!before.ok || !after.ok) return { unchanged: false, issues: [...before.issues, ...after.issues] };
 
   const issues: string[] = [];
-  const beforePages = new Map(before.pages.map(page => [pageKey(page), page]));
-  const afterPages = new Map(after.pages.map(page => [pageKey(page), page]));
+  const beforePages = new Map(before.pages.map(page => [atlasPageKey(page), page]));
+  const afterPages = new Map(after.pages.map(page => [atlasPageKey(page), page]));
   const beforeImages = inspectFullAtlasImages(beforeRoot, signal);
   const afterImages = inspectFullAtlasImages(afterRoot, signal, issues);
   let unchanged = beforePages.size === afterPages.size;
@@ -278,7 +278,7 @@ export async function inspectFullAtlasCandidate(baselineData: string, candidateD
   }
   for (const [key, next] of afterPages) {
     const previous = beforePages.get(key);
-    const page = fullSourcePage(next.game, next.pageId);
+    const page = fullSourcePage(next.game, next.pageId, next.locale);
     const [old, current] = await Promise.all([
       previous ? pageAssets(beforeRoot, page, signal, beforeImages) : undefined,
       pageAssets(afterRoot, page, signal, afterImages),
@@ -302,7 +302,7 @@ export async function inspectFullAtlasCandidate(baselineData: string, candidateD
 export function atlasSourcePlan(selection: SourceSelection, listing: unknown,
   local: Awaited<ReturnType<typeof validateAtlasCandidate>>, channel?: AtlasVersionChannel) {
   const { game, pageId } = sourcePages[selection];
-  if (selection !== "gi/gcg" && !local.pages.some((page) => page.game === game && page.pageId === pageId)) {
+  if (selection !== "gi/gcg" && !local.pages.some((page) => page.game === game && page.pageId === pageId && !page.locale)) {
     local = { ...local, ok: false };
   }
   if (isStarrailRotationPage(pageId)) return planPublishedChallengeRefresh(listing, local, { game: "hsr", pageId }, channel);
@@ -351,8 +351,8 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
     if (current !== baseline.version) return { status: "stale", current };
     const after = await pageAssets(join(source.directory, "data"), page, signal);
     const issues = regressions(page, before, after, options.preserveRecords === true);
-    if (selection === "hsr/monster" && local.pages.some(({ game, pageId, version }) =>
-      game === "hsr" && pageId === "monstervalue" && version === entry.targetVersion)) {
+    if (selection === "hsr/monster" && local.pages.some(({ game, pageId, version, locale }) =>
+      !locale && game === "hsr" && pageId === "monstervalue" && version === entry.targetVersion)) {
       const values = await pageAssets(baseline.root, sourcePages["hsr/monstervalue"], signal);
       for (const [id, record] of values.assets) {
         const monster = after.assets.get(id);
@@ -371,8 +371,8 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
       const knownByPage = new Map<SourceSelection, Set<string>>();
       for (const { selections, field } of links) {
         if (field === "waveEliteGroups" && page.pageId !== "maze_peak") continue;
-        if (!selections.every((selection) => local.pages.some(({ game, pageId, version }) =>
-          game === "hsr" && pageId === sourcePages[selection].pageId && version === entry.targetVersion))) continue;
+        if (!selections.every((selection) => local.pages.some(({ game, pageId, version, locale }) =>
+          !locale && game === "hsr" && pageId === sourcePages[selection].pageId && version === entry.targetVersion))) continue;
         const permitted: Set<string>[] = [];
         for (const selection of selections) {
           let known = knownByPage.get(selection);

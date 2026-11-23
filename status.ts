@@ -1,3 +1,4 @@
+import { atlasLocales } from "./locale.ts";
 import { gameNames, type createAtlasCatalog } from "./catalog.ts";
 import { renderAtlasStatus } from "./help.ts";
 import { LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
@@ -6,7 +7,7 @@ import type { AtlasDelivery } from "./traditional.ts";
 
 export const atlasDataUnavailable = "图鉴数据不可用。请检查 data/atlas 快照或 LOTUS_ATLAS_DATA_DIR 设置。";
 
-export async function atlasStatus(catalog: Pick<ReturnType<typeof createAtlasCatalog>, "read" | "statusSource">, delivery?: AtlasDelivery) {
+export async function atlasStatus(catalog: Pick<ReturnType<typeof createAtlasCatalog>, "read" | "statusSource" | "locale">, delivery?: AtlasDelivery) {
   let failure: string | undefined;
   const result = await catalog.read().catch(error => {
     failure = error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset ? error.message : atlasDataUnavailable;
@@ -18,7 +19,7 @@ export async function atlasStatus(catalog: Pick<ReturnType<typeof createAtlasCat
     `条目：${result ? `${pages.reduce((total, page) => total + page.entries.length, 0)} 个` : "缺失"}`,
     `分类：${result ? `${pages.length} 个` : "缺失"}`,
     `图库：${galleryReady ? "已找到" : "缺失"}`,
-    "语言：简体中文",
+    `语言：${atlasLocales[catalog.locale].folder}`,
   ];
   for (const { game, name, version, entries, sampled, achievementCategories } of pages) {
     const count = achievementCategories

@@ -1,3 +1,4 @@
+import { defaultAtlasLocale } from "./locale.ts";
 import { changedAtlasSourceIndexes, readSelectedExporterIndexes,
   type AtlasExportPageSelection, type AtlasExportVersions } from "./download-legacy-atlas.ts";
 import type { AtlasSourceFetch } from "./source-transport.ts";
@@ -6,9 +7,9 @@ import type { AtlasCandidatePage } from "./validate-candidate.ts";
 
 export async function planAtlasChallengeRefresh(baseline: string, current: readonly AtlasCandidatePage[],
   scope: readonly AtlasExportPageSelection[], versions: AtlasExportVersions,
-  signal?: AbortSignal, request?: AtlasSourceFetch) {
+  signal?: AbortSignal, request?: AtlasSourceFetch, locale = defaultAtlasLocale) {
   const versionChanges = scope.filter(({ game, pageId }) =>
-    !current.some(page => page.game === game && page.pageId === pageId && page.version === versions[game]));
+    !current.some(page => page.game === game && page.pageId === pageId && page.version === versions[game] && (page.locale ?? defaultAtlasLocale) === locale));
   const isRotation = ({ pageId }: AtlasExportPageSelection) => atlasRotationPages.has(pageId);
   const rotationGames = new Set(scope.filter(isRotation).map(({ game }) => game));
   const versionChanged = new Set(versionChanges.map(({ game, pageId }) => `${game}/${pageId}`));
@@ -16,7 +17,7 @@ export async function planAtlasChallengeRefresh(baseline: string, current: reado
     !versionChanged.has(`${page.game}/${page.pageId}`));
   async function readChanges(pages: readonly AtlasExportPageSelection[]) {
     if (!pages.length) return [];
-    const indexes = await readSelectedExporterIndexes(versions, signal, request, pages);
+    const indexes = await readSelectedExporterIndexes(versions, signal, request, pages, locale);
     return changedAtlasSourceIndexes(baseline, indexes, signal);
   }
   const rotationChanges = await readChanges(probe);

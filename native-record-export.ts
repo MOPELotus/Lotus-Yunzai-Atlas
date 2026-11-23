@@ -1,3 +1,4 @@
+import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import type { Game } from "./catalog.ts";
 import { legacyAtlasSourcePages, legacyIndexedOnlyPages } from "./legacy-source-profile.ts";
@@ -5,7 +6,7 @@ import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "
 import { object } from "./source-values.ts";
 import { nativeAtlasImageReferences } from "./native-image-references.ts";
 
-export type NativeAtlasPage = { readonly game: Game; readonly pageId: string; readonly version: string };
+export type NativeAtlasPage = { readonly game: Game; readonly pageId: string; readonly version: string; readonly locale?: AtlasLocale };
 type OriginImage = {
   readonly remoteUrl: string;
   readonly localPath: string;
@@ -36,11 +37,11 @@ const recordId = /^[a-zA-Z0-9_-]{1,80}$/u;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const hues = { orange: 5, gold: 5, purple: 4, blue: 3, green: 2, gray: 1, grey: 1 };
 
-export function nativeAtlasPageOrigin({ game, pageId, version }: NativeAtlasPage) {
+export function nativeAtlasPageOrigin({ game, pageId, version, locale = defaultAtlasLocale }: NativeAtlasPage) {
   const profile = legacyAtlasSourcePages.find(row => row.game === game && row.pageId === pageId);
   if (!profile || !pathVersion.test(version) || (game !== "zzz" && version.includes("+"))) throw new Error("无效的原图鉴分类或版本。");
-  const path = version + "/" + profile.indexPath.split("/").slice(3).join("/");
-  const sourceLocale = pageId === "achievement/achievement" ? "zh" : null;
+  const sourceLocale = pageId === "achievement/achievement" ? locale : null;
+  const path = `${version}/${sourceLocale ? sourceLocale + "/" : ""}${pageId}.json`;
   const localeMode = sourceLocale ? "path" : "embedded";
   const title = pageId.split("/").map(part => part.replace(/[_-]+/gu, " ")
     .replace(/\b\w/gu, character => character.toUpperCase())).join(" / ");
@@ -59,7 +60,7 @@ function detailPath(game: Game, pageId: string) {
 
 function recordName(value: unknown, locale: string) {
   const record = object(value);
-  for (const part of [record[locale], object(record.name)[locale], record.name, record.item_name, record.en, record.codename, record.id]) {
+  for (const part of [record[locale], object(record[locale]).name, object(record.name)[locale], record.name, record.item_name, record.en, record.codename, record.id]) {
     if (typeof part === "string" && part.trim()) {
       const clean = part.replace(/\{RUBY_B#[^}]*\}/gu, "").replaceAll("{RUBY_E#}", "").replace(/<[^>]+>/gu, "").trim();
       if (clean) return clean;
@@ -85,10 +86,10 @@ function rarity(list: unknown, detail: unknown) {
 export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, list: unknown,
   readImage: ReadOriginImage, signal: AbortSignal | undefined, request: AtlasSourceFetch) {
   if (!recordId.test(id)) throw new Error("无效的原图鉴条目编号。");
-  const { game, pageId, version } = page;
+  const { game, pageId, version, locale = defaultAtlasLocale } = page;
   const { folder, title: _, ...origin } = nativeAtlasPageOrigin(page);
   const detailUrl = legacyIndexedOnlyPages.has(game + "/" + pageId) ? undefined
-    : `${atlasSourceOrigin}/${game}/${version}/zh/${detailPath(game, pageId)}/${id}.json`;
+    : `${atlasSourceOrigin}/${game}/${version}/${locale}/${detailPath(game, pageId)}/${id}.json`;
   const bytes = detailUrl && await readAtlasSourceBytes(detailUrl, "application/json", 8 * 1024 * 1024, true, signal, request, { retry: true });
   const detailSource = bytes ? utf8.decode(bytes) : "null";
   const detail: unknown = JSON.parse(detailSource);
@@ -108,10 +109,10 @@ export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, l
       placeholderReason: "remote_missing", remoteUrl: null, localPath: "gallery/_placeholder/unknown.svg",
       sha256: null, contentType: "image/svg+xml", bytes: null });
   }
-  const name = recordName(list, "zh") ?? recordName(detail, "zh") ?? recordName(list, "en") ?? recordName(detail, "en") ?? id;
+  const name = recordName(list, locale) ?? recordName(detail, locale) ?? recordName(list, "en") ?? recordName(detail, "en") ?? id;
   const { game: gameName, folder: gameFolder } = nativeAtlasGameNames[game];
   const hasDetail = detail !== null;
-  return { meta: { gameId: game, gameName, gameFolder, locale: "zh", localeFolder: "简体中文", localeLabel: "Chinese",
+  return { meta: { gameId: game, gameName, gameFolder, locale, localeFolder: atlasLocales[locale].folder, localeLabel: atlasLocales[locale].label,
     pageId, pageFolder: folder, ...origin, detailSourceUrl: hasDetail ? detailUrl : null, hasDetail,
     version, recordId: id, name, rarity: rarity(list, detail), images },
     content: { list, detail }, detailSource };

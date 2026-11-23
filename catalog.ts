@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -260,17 +261,18 @@ function zzzRarity(rank: unknown): string {
   }
 }
 
-function artifactName(list: Record<string, unknown>): string {
+function artifactName(list: Record<string, unknown>, locale: AtlasLocale): string {
   const names = new Set(Object.values(object(list.set)).map((affix) =>
-    label(object(object(affix).name).zh)).filter(Boolean));
+    label(object(object(affix).name)[locale])).filter(Boolean));
   return names.size === 1 ? [...names][0] ?? "" : "";
 }
 
-export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string) {
-  return override ? createAtlasCatalog(override) : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot, true);
+export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string, locale = defaultAtlasLocale) {
+  return override ? createAtlasCatalog(override, undefined, false, locale)
+    : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot, true, locale);
 }
 
-export function createAtlasCatalog(directory: string, publicationRoot?: string, legacyFallback = false) {
+export function createAtlasCatalog(directory: string, publicationRoot?: string, legacyFallback = false, locale = defaultAtlasLocale) {
   const configuredRoot = resolve(directory);
   const publishedRoot = publicationRoot && resolve(publicationRoot);
   const entryRoots = new WeakMap<AtlasEntry, string>();
@@ -280,7 +282,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
   let checkingShortcuts: Promise<Catalog> | undefined;
 
   async function locate() {
-    if (publishedRoot && legacyFallback) return discoverRuntimeAtlasDataDirectory(publishedRoot);
+    if (publishedRoot && legacyFallback) return discoverRuntimeAtlasDataDirectory(publishedRoot, locale);
     const located = publishedRoot ? await discoverAtlasDataDirectory(publishedRoot)
       : { root: await realpath(configuredRoot), version: null };
     return { ...located, legacy: false };
@@ -308,7 +310,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
           version === snapshot.version && legacy === snapshot.legacy && mapIdentity === snapshot.mapIdentity) {
         return { pages: snapshot.pages, stale: false, ...(snapshot.rebuilt && { rebuilt: true }) };
       }
-      const map = info ? await readFile(mapPath) : await rebuildLegacyAtlasIndex(root);
+      const map = info ? await readFile(mapPath) : await rebuildLegacyAtlasIndex(root, locale);
       if (!info) rebuiltAt = Date.now();
       if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version ||
           legacy !== snapshot.legacy || (!info) !== (snapshot.rebuilt === true) || !map.equals(snapshot.map)) {
@@ -319,8 +321,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
         let stale = false;
         for (const game of Object.keys(gameNames) as Game[]) {
           const gameBlock = object(object(source.games)[game]);
-          const locale = object(object(gameBlock.locales).zh);
-          const rawPages = object(locale.pages);
+          const rawPages = object(atlasLocaleBlock(gameBlock, locale).pages);
           const standardPages = kinds.flatMap((kind) => {
             const page = pageFor(game, kind);
             return page ? [{ ...page, kind, challengeMode: undefined }] : [];
@@ -339,7 +340,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
               if (kind === "set" && game === "gi") {
                 const entries: AtlasEntry[] = [];
                 for (const entry of page.entries) {
-                  const name = artifactName(object((await readContent(entry, pageId)).list));
+                  const name = artifactName(object((await readContent(entry, pageId)).list), locale);
                   if (!name) throw new Error("圣遗物套装名称缺失或不一致。");
                   const artifact = { ...entry, name };
                   entryRoots.set(artifact, root);
@@ -396,7 +397,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       const item = object(JSON.parse(await readFile(file, "utf8")));
       const meta = object(item.meta);
       if (meta.gameId !== entry.game || meta.pageId !== pageId || meta.recordId !== entry.id ||
-          meta.version !== entry.version) return;
+          meta.version !== entry.version || (meta.locale !== undefined && parseAtlasLocale(meta.locale) !== locale)) return;
       return { content: object(item.content), meta };
     } catch {
       return undefined;
@@ -466,6 +467,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     assetRoot(entry: AtlasEntry): string {
       return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
+    locale,
     async statusSource() {
       const root = snapshot?.root ?? await locate().then(({ root }) => root, () => configuredRoot);
       const bases = basename(root) === "data" ? [root, dirname(root)] : [root];

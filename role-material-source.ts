@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -15,9 +16,9 @@ const maxTableBytes = 16 * 1024 * 1024;
 const maxIconBytes = 8 * 1024 * 1024;
 const iconFile = /(?:^|\/)([A-Za-z0-9_-]+)(?:\.(?:png|webp))?$/iu;
 
-function characterPage(value: unknown, game: Game) {
+function characterPage(value: unknown, game: Game, locale: AtlasLocale) {
   const gameData = object(object(object(value).games)[game]);
-  const localized = object(object(gameData.locales).zh);
+  const localized = atlasLocaleBlock(gameData, locale);
   return object(object(localized.pages).character);
 }
 
@@ -91,9 +92,9 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
   const map = await Bun.file(await candidateFile(data, "map.json")).json();
   const pending: T[] = [];
   for (const page of pages) {
-    const { game, pageId, version } = page;
+    const { game, pageId, version, locale = defaultAtlasLocale } = page;
     if (pageId !== "character" || !version) continue;
-    const source = characterPage(map, game);
+    const source = characterPage(map, game, locale);
     if (source.version !== version) continue;
     for (const [recordId, record] of Object.entries(object(source.records))) {
       signal?.throwIfAborted();
@@ -115,10 +116,10 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
   const pending = await pendingAtlasRoleMaterials(data, scope, signal, includeArtwork);
   if (!pending.length) return [];
   const updated: AtlasCandidatePage[] = [];
-  for (const { game, version } of pending) {
+  for (const { game, version, locale = defaultAtlasLocale } of pending) {
     try {
-      if (await completeGameMaterials(root, data, map, game, version, request, signal, includeArtwork)) {
-        updated.push({ game, pageId: "character", version });
+      if (await completeGameMaterials(root, data, map, game, version, locale, request, signal, includeArtwork)) {
+        updated.push({ game, pageId: "character", version, ...(locale !== defaultAtlasLocale && { locale }) });
       }
     } catch (error) {
       signal?.throwIfAborted();
@@ -128,10 +129,10 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
   return updated;
 }
 
-async function completeGameMaterials(root: string, data: string, map: unknown, game: Game, version: string | undefined,
+async function completeGameMaterials(root: string, data: string, map: unknown, game: Game, version: string | undefined, locale: AtlasLocale,
   request: AtlasSourceFetch, signal: AbortSignal | undefined, includeArtwork: boolean) {
   if (!version || !materialVersion.test(version)) throw new Error("图鉴材料版本无效。");
-  const rolePage = characterPage(map, game);
+  const rolePage = characterPage(map, game, locale);
   const roles = [];
   const ids = new Set<string>();
   for (const [recordId, row] of Object.entries(object(rolePage.records))) {
@@ -142,7 +143,7 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
     roles.push(role);
   }
   if (!ids.size) return false;
-  const url = `${atlasSourceOrigin}/${game}/${version}/zh/item_all.json`;
+  const url = `${atlasSourceOrigin}/${game}/${version}/${locale}/item_all.json`;
   const table = object(JSON.parse((await readAtlasSourceBytes(url, "application/json", maxTableBytes, false, signal, request,
     { retry: true }))!.toString("utf8")));
   if (!Object.keys(table).length) throw new Error("图鉴同版物品表为空。");

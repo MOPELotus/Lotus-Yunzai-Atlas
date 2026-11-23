@@ -1,3 +1,5 @@
+import { atlasLocaleBlock, atlasLocales, atlasPageKey, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
+import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { candidateFile, candidateGallery, copyCandidateFile, type CandidateImageRecovery } from "./candidate-gallery.ts";
@@ -6,7 +8,7 @@ import { object } from "./source-values.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
 type ObjectValue = Record<string, unknown>;
-type Page = Required<AtlasCandidatePage>;
+type Page = ValidatedAtlasCandidatePage;
 type Root = { readonly directory: string; readonly map: ObjectValue; readonly validated: readonly Page[] };
 type SelectedPage = { readonly source: Root; readonly page: Page; readonly payload: ObjectValue };
 
@@ -25,20 +27,12 @@ function overlaps(first: string, second: string): boolean {
   return inside(first, second) || inside(second, first);
 }
 
-function pageKey({ game, pageId }: AtlasCandidatePage): string {
-  return `${game}/${pageId}`;
-}
-
 function gameData(root: Root, game: Game): ObjectValue {
   return object(object(root.map.games)[game]);
 }
 
-function zh(root: Root, game: Game): ObjectValue {
-  return object(object(gameData(root, game).locales).zh);
-}
-
 function selectPage(source: Root, page: Page): SelectedPage {
-  return { source, page, payload: object(object(zh(source, page.game).pages)[page.pageId]) };
+  return { source, page, payload: object(object(atlasLocaleBlock(gameData(source, page.game), page.locale ?? defaultAtlasLocale).pages)[page.pageId]) };
 }
 
 async function readRoot(directory: string, required: readonly AtlasCandidatePage[], signal?: AbortSignal): Promise<Root> {
@@ -47,11 +41,8 @@ async function readRoot(directory: string, required: readonly AtlasCandidatePage
   const validation = await validateAtlasCandidate(data, required, signal);
   if (!validation.ok) throw new Error(`源快照未通过校验。${validation.issues[0] ?? ""}`);
   const map = object(JSON.parse(await readFile(join(data, "map.json"), "utf8")));
-  for (const [key, value] of Object.entries(object(map.games))) {
-    if (!(key === "gi" || key === "hsr" || key === "zzz") ||
-        Object.keys(object(object(value).locales)).some((locale) => locale !== "zh")) {
-      throw new Error("合成只接受三款已核对游戏的简体中文快照。");
-    }
+  for (const key of Object.keys(object(map.games))) {
+    if (!(key === "gi" || key === "hsr" || key === "zzz")) throw new Error("合成只接受三款已核对游戏的快照。");
   }
   return { directory, map, validated: validation.pages };
 }
@@ -60,8 +51,8 @@ function describePages(baseline: Root, replacement: Root, scope: readonly AtlasC
   const chosen = new Map<string, SelectedPage>();
   for (const source of [baseline, replacement]) {
     for (const page of source.validated) {
-      if (source === replacement && !scope.some((request) => pageKey(request) === pageKey(page))) continue;
-      chosen.set(pageKey(page), selectPage(source, page));
+      if (source === replacement && !scope.some((request) => atlasPageKey(request) === atlasPageKey(page))) continue;
+      chosen.set(atlasPageKey(page), selectPage(source, page));
     }
   }
   return [...chosen.values()];
@@ -71,32 +62,34 @@ function composeMap(baseline: Root, replacement: Root, pages: readonly SelectedP
   const games: Record<string, unknown> = {};
   const selected = new Map<Game, string[]>();
   const requestedVersions: Record<string, string> = {};
+  const availableLocales = new Set<AtlasLocale>();
   for (const part of scope) selected.set(part.game, [...selected.get(part.game) ?? [], part.pageId]);
   for (const game of ["gi", "hsr", "zzz"] as const) {
     const actual = pages.filter((item) => item.page.game === game);
     if (!actual.length) continue;
-    if (!selected.has(game)) {
-      games[game] = gameData(baseline, game);
-      continue;
-    }
     const base = gameData(baseline, game);
     const current = gameData(replacement, game);
     const versions = [...new Set(actual.map(({ page }) => page.version))];
     const version = versions.length === 1 ? versions[0]! : null;
     if (version) requestedVersions[game] = version;
+    const locales = Object.fromEntries((Object.keys(atlasLocales) as AtlasLocale[]).flatMap(locale => {
+      const localized = actual.filter(({ page }) => (page.locale ?? defaultAtlasLocale) === locale);
+      if (!localized.length) return [];
+      availableLocales.add(locale);
+      return [[locale, { ...atlasLocaleBlock(base, locale), ...atlasLocaleBlock(current, locale),
+        pages: Object.fromEntries(localized.map(({ page, payload }) => [page.pageId, payload])) }]];
+    }));
     games[game] = {
       ...base,
       game: { ...object(base.game), ...object(current.game), versions, requestedVersion: version },
-      locales: { zh: { ...zh(baseline, game), ...zh(replacement, game),
-        pages: Object.fromEntries(actual.map(({ page, payload }) => [page.pageId, payload])) } },
+      locales,
     };
   }
   const source = object(baseline.map.meta).source;
-  return { meta: { source, mode: "merged", locales: ["zh"], selectedPages: Object.fromEntries(selected), requestedVersions }, games };
+  return { meta: { source, mode: "merged", locales: [...availableLocales], selectedPages: Object.fromEntries(selected), requestedVersions }, games };
 }
 
-async function copyPages(pages: readonly SelectedPage[], target: string, signal?: AbortSignal, recovery?: CandidateImageRecovery) {
-  const gallery = candidateGallery(target, recovery);
+async function copyPages(pages: readonly SelectedPage[], gallery: ReturnType<typeof candidateGallery>, target: string, signal?: AbortSignal) {
   let detailCount = 0;
   for (const { source, page, payload } of pages) {
     for (const record of Object.values(object(payload.records))) {
@@ -133,24 +126,31 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
   const target = join(parent, basename(resolved));
   if (overlaps(base, target)) throw new Error("图鉴源和候选目录必须独立。");
   const root = await readRoot(base, scope, signal);
-  const keys = new Set(scope.map(pageKey));
-  if ((!subset && root.validated.length !== scope.length) || keys.size !== scope.length || !keys.size) {
+  const keys = new Set(scope.map(atlasPageKey));
+  if ((!subset && counts && root.validated.filter(page => !page.locale).length !== scope.filter(page => !page.locale).length) ||
+      keys.size !== scope.length || !keys.size) {
     throw new Error("原图鉴导出的分类与已核定首版不同。");
   }
-  const pages = root.validated.filter(page => keys.has(pageKey(page))).map(page => selectPage(root, page));
+  const pages = root.validated.filter(page => !subset || keys.has(atlasPageKey(page))).map(page => selectPage(root, page));
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
-    const { imageCount, detailCount } = await copyPages(pages, target, signal, recovery);
-    if (counts && (imageCount !== counts.imageCount || detailCount !== counts.detailCount)) {
-      throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
+    const gallery = candidateGallery(target, recovery);
+    if (counts) {
+      const { imageCount, detailCount } = await copyPages(pages.filter(({ page }) => !page.locale), gallery, target, signal);
+      if (imageCount !== counts.imageCount || detailCount !== counts.detailCount) {
+        throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
+      }
+      await copyPages(pages.filter(({ page }) => page.locale), gallery, target, signal);
+    } else {
+      await copyPages(pages, gallery, target, signal);
     }
     const data = join(target, "data");
     const map = subset ? composeMap(root, root, pages, scope) : root.map;
     await writeFile(join(data, "map.json"), JSON.stringify(map) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(data, scope, signal);
     if (!validation.ok) throw new Error(`首版图鉴未通过校验。${validation.issues[0] ?? ""}`);
-    return { directory: target, validation, imageCount };
+    return { directory: target, validation, imageCount: gallery.count };
   } catch (error) {
     await rm(target, { recursive: true, force: true });
     throw error;
@@ -161,7 +161,7 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
 export async function assembleAtlasCandidate(baseline: string, replacement: string, destination: string,
   scope: readonly AtlasCandidatePage[], signal?: AbortSignal, recovery?: CandidateImageRecovery): Promise<AtlasAssembledCandidate> {
   signal?.throwIfAborted();
-  if (!scope.length || new Set(scope.map(pageKey)).size !== scope.length) throw new Error("请选择一个或多个不重复的候选分类。");
+  if (!scope.length || new Set(scope.map(atlasPageKey)).size !== scope.length) throw new Error("请选择一个或多个不重复的候选分类。");
   const resolved = resolve(destination);
   const [base, donor, parent] = await Promise.all([realpath(baseline), realpath(replacement), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
@@ -173,7 +173,7 @@ export async function assembleAtlasCandidate(baseline: string, replacement: stri
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   try {
-    const { imageCount } = await copyPages(pages, target, signal, recovery);
+    const { imageCount } = await copyPages(pages, candidateGallery(target, recovery), target, signal);
     const dataDirectory = join(target, "data");
     await writeFile(join(dataDirectory, "map.json"), JSON.stringify(composeMap(existing, updates, pages, scope)) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(dataDirectory, pages.map(({ page }) => page), signal);

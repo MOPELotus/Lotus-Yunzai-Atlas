@@ -1,3 +1,4 @@
+import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
@@ -18,13 +19,18 @@ export class LegacyAtlasSourceConflict extends Error {
   }
 }
 
-export async function findLegacyAtlasExport(atlasRoot: string, includeUnindexed = false): Promise<string | undefined> {
+export async function findLegacyAtlasExport(atlasRoot: string, includeUnindexed = false, locale?: AtlasLocale): Promise<string | undefined> {
   const plugins = resolve(atlasRoot, "../../plugins");
   const sources = new Set<string>();
   for (const name of formerPluginPaths) {
     const exportRoot = join(plugins, name, "data", "atlas");
     const index = await lstatIfPresent(join(exportRoot, "data", "map.json"));
-    if (!index && (!includeUnindexed || !(await lstatIfPresent(join(exportRoot, "data", "items", "简体中文")))?.isDirectory())) continue;
+    if (!index) {
+      if (!includeUnindexed) continue;
+      const languages = locale ? [atlasLocales[locale]] : Object.values(atlasLocales);
+      const directories = await Promise.all(languages.map(({ folder }) => lstatIfPresent(join(exportRoot, "data", "items", folder))));
+      if (!directories.some(info => info?.isDirectory())) continue;
+    }
     if (index && !index.isFile()) throw new Error("旧图鉴 map.json 须为实体文件。");
     const directory = await realpath(exportRoot);
     const data = join(directory, "data");
@@ -35,12 +41,12 @@ export async function findLegacyAtlasExport(atlasRoot: string, includeUnindexed 
   return sources.values().next().value;
 }
 
-export async function discoverRuntimeAtlasDataDirectory(atlasRoot: string) {
+export async function discoverRuntimeAtlasDataDirectory(atlasRoot: string, locale = defaultAtlasLocale) {
   // An existing primary marker owns the selection, even when it cannot be read.
   if (await lstatIfPresent(join(atlasRoot, "current")) || await lstatIfPresent(join(atlasRoot, "data"))) {
     return { ...await discoverAtlasDataDirectory(atlasRoot), legacy: false };
   }
-  const source = await findLegacyAtlasExport(atlasRoot, true);
+  const source = await findLegacyAtlasExport(atlasRoot, true, locale);
   if (source) return { root: join(source, "data"), version: null, legacy: true };
   return { ...await discoverAtlasDataDirectory(atlasRoot), legacy: false };
 }

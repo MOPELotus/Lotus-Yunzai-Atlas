@@ -1,3 +1,4 @@
+import { defaultAtlasLocale } from "./locale.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { assembleAtlasCandidate } from "./assemble-candidate.ts";
@@ -40,7 +41,7 @@ async function retainChallengeArtwork(base: string, candidate: string, signal?: 
 /** Reacquire all maintained pages without changing what queries can read until the candidate has passed review. */
 export async function refreshFullAtlasFromPublic(root: string, workspace: string, channel: AtlasVersionChannel,
   readManifest: (signal?: AbortSignal) => Promise<unknown>, request?: AtlasSourceFetch, signal?: AbortSignal,
-  publication?: AtlasPublicationOptions): Promise<FullRefreshResult> {
+  publication?: AtlasPublicationOptions, locale = defaultAtlasLocale): Promise<FullRefreshResult> {
   signal?.throwIfAborted();
   const directory = await realpath(root);
   const active = await discoverAtlasDataDirectory(directory);
@@ -54,11 +55,11 @@ export async function refreshFullAtlasFromPublic(root: string, workspace: string
   const zzz = atlasManifestVersion(listing, "zzz", channel);
   if (!gi || !hsr || !zzz) return { status: "review", reason: "manifest" };
   const versions = { gi, hsr, zzz };
-  const sourceScope = legacyAtlasSourcePages.map(({ game, pageId }) => ({ game, pageId, version: versions[game] }));
-  const cardsPage = { game: "gi", pageId: "gcg", version: gi } as const;
+  const sourceScope = legacyAtlasSourcePages.map(({ game, pageId }) => ({ game, pageId, version: versions[game], ...(locale !== defaultAtlasLocale && { locale }) }));
+  const cardsPage = { game: "gi", pageId: "gcg", version: gi, ...(locale !== defaultAtlasLocale && { locale }) } as const;
   const scope = [...sourceScope, cardsPage];
   if (scope.some(({ game, pageId, version }) => {
-    const previous = local.pages.find(page => page.game === game && page.pageId === pageId);
+    const previous = local.pages.find(page => page.game === game && page.pageId === pageId && (page.locale ?? defaultAtlasLocale) === locale);
     return previous && previous.version !== version && !isNewerAtlasVersion(version, previous.version, game);
   })) return { status: "review", reason: "older" };
 
@@ -89,5 +90,5 @@ export async function refreshFullAtlasFromPublic(root: string, workspace: string
     } finally {
       if (result?.status !== "published" && result?.status !== "prepared") await rm(stage, { recursive: true, force: true });
     }
-  }, signal, request, legacyAtlasSourcePages, active.root);
+  }, signal, request, sourceScope, active.root, locale);
 }

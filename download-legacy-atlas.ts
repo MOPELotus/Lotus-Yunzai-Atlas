@@ -1,3 +1,6 @@
+import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
+import { nativeAtlasPageOrigin } from "./native-record-export.ts";
+import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { Database } from "bun:sqlite";
 import { lstat, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -7,7 +10,7 @@ import { assembleAtlasCandidate, copyAtlasSelectedPages } from "./assemble-candi
 import { nativeAtlasExport, nativeAtlasImageRecovery } from "./native-atlas-export.ts";
 import { evidenceObject, parseLegacyJsonEvidence, serializeLegacyJsonEvidence } from "./legacy-json-evidence.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
-import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
+import { readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
 import { object } from "./source-values.ts";
 import { type AtlasCandidatePage, validateAtlasCandidate } from "./validate-candidate.ts";
 
@@ -16,11 +19,11 @@ const maxExportIndexBytes = 16 * 1024 * 1024;
 
 export type AtlasExportVersions = Readonly<Partial<Record<Game, string>>>;
 export type AtlasExportPageSelection = Readonly<Pick<AtlasCandidatePage, "game" | "pageId">>;
-type ExportPage = Required<AtlasCandidatePage>;
+type ExportPage = ValidatedAtlasCandidatePage;
 export type AtlasSourceIndex = ExportPage & { readonly rows: ReadonlyMap<string, string> };
 type ExportScope = ExportPage & { readonly rows?: AtlasSourceIndex["rows"] };
 
-function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly AtlasExportPageSelection[]) {
+function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly AtlasExportPageSelection[], locale = defaultAtlasLocale) {
   let profiles = legacyAtlasSourcePages;
   if (scope !== undefined) {
     const keys = new Set(scope.map(({ game, pageId }) => `${game}/${pageId}`));
@@ -29,29 +32,30 @@ function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly A
       throw new Error("请选择已识别且不重复的图鉴分类。");
     }
   }
-  return profiles.map(({ game, pageId, indexPath, indexShape }) => {
+  return profiles.map(({ game, pageId, indexShape }) => {
     const version = versions[game];
     if (typeof version !== "string" || !atlasVersion.test(version) || (game !== "zzz" && version.includes("+"))) {
       throw new Error(`请选择图鉴原站提供的 ${game} 版本。`);
     }
-    return { game, pageId, version, indexShape, indexPath: `/${game}/${version}/${indexPath.split("/").slice(3).join("/")}` };
+    return { game, pageId, version, locale, indexShape, indexUrl: nativeAtlasPageOrigin({ game, pageId, version, locale }).sourceUrl };
   });
 }
 
 export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
-  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[]): Promise<readonly AtlasSourceIndex[]> {
-  const selected = selectedExporterPages(versions, scope);
+  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[], locale = defaultAtlasLocale): Promise<readonly AtlasSourceIndex[]> {
+  if (locale === "cht") throw new Error("原站导出不提供繁體中文，请使用自备图鉴目录。");
+  const selected = selectedExporterPages(versions, scope, locale);
   const indexes: AtlasSourceIndex[] = [];
   for (let start = 0; start < selected.length; start += 4) {
-    const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexPath, indexShape }) => {
-      const bytes = await readAtlasSourceBytes(`${atlasSourceOrigin}${indexPath}`, "application/json",
+    const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexUrl, indexShape }) => {
+      const bytes = await readAtlasSourceBytes(indexUrl, "application/json",
         maxExportIndexBytes, false, signal, request, { retry: true });
       const value = parseLegacyJsonEvidence(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       const listing = indexShape === "array" && Array.isArray(value) ? value : evidenceObject(value);
       const entries = Object.entries(listing);
       if ((indexShape === "array" && !Array.isArray(listing)) || !entries.length ||
           entries.some(([, row]) => row !== evidenceObject(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
-      return { game, pageId, version, recordCount: entries.length,
+      return { game, pageId, version, ...(locale !== defaultAtlasLocale && { locale }), recordCount: entries.length,
         rows: new Map(entries.map(([id, row]) => [id, serializeLegacyJsonEvidence(row)])) };
     }));
     indexes.push(...batch);
@@ -104,11 +108,11 @@ async function verifyExporterOutput(directory: string, signal?: AbortSignal) {
   }
 }
 
-async function matchesExportIndex(directory: string, map: Record<string, unknown>, { game, pageId, rows }: ExportScope,
+async function matchesExportIndex(directory: string, map: Record<string, unknown>, { game, pageId, rows, locale = defaultAtlasLocale }: ExportScope,
   signal?: AbortSignal): Promise<boolean> {
   if (!rows) return true;
   const gameData = object(object(map.games)[game]);
-  const localized = object(object(gameData.locales).zh);
+  const localized = atlasLocaleBlock(gameData, locale);
   const records = object(object(object(localized.pages)[pageId]).records);
   for (const [id, row] of rows) {
     signal?.throwIfAborted();
@@ -126,15 +130,14 @@ export async function changedAtlasSourceIndexes(directory: string, indexes: read
   const map = object(await Bun.file(await candidateFile(directory, "map.json")).json());
   const changed: AtlasSourceIndex[] = [];
   for (const index of indexes) {
-    const { game, pageId, version, rows, recordCount } = index;
+    const { game, pageId, version, rows, recordCount, locale = defaultAtlasLocale } = index;
     signal?.throwIfAborted();
     const gameData = object(object(map.games)[game]);
-    const locale = object(object(gameData.locales).zh);
-    const page = object(object(locale.pages)[pageId]);
+    const page = object(object(atlasLocaleBlock(gameData, locale).pages)[pageId]);
     if (page.version === version) {
       const missing = Object.keys(object(page.records)).find(id => !rows.has(id));
       if (missing) throw new Error(`${game}/${pageId} 同版索引缺少现用条目 ${missing}。`);
-      if (page.recordCount === recordCount && await matchesExportIndex(directory, map, { game, pageId, version, recordCount, rows }, signal)) {
+      if (page.recordCount === recordCount && await matchesExportIndex(directory, map, { game, pageId, version, recordCount, rows, locale }, signal)) {
         continue;
       }
     }
@@ -153,11 +156,12 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
   const corruptImages = new Set<string>();
   if (!Array.isArray(references)) return { completed, corruptImages, exactScope: false };
   const { pages, ok } = await validateAtlasCandidate(data, [], signal);
-  const profiles = new Map(scope.map((page) => [`${page.game}/${page.pageId}`, page]));
+  const profiles = new Map(scope.map((page) => [atlasPageKey(page), page]));
   const map = scope.some(({ rows }) => rows) ? object(await Bun.file(join(data, "map.json")).json().catch(() => undefined)) : {};
   const images = new Map<string, { file: string; sha256: string } | null>();
-  for (const { game, pageId, version, recordCount } of pages) {
-    const key = `${game}/${pageId}`;
+  for (const page of pages) {
+    const { version, recordCount } = page;
+    const key = atlasPageKey(page);
     const expected = profiles.get(key);
     if (expected?.version === version && expected.recordCount === recordCount &&
         await matchesExportIndex(data, map, expected, signal)) completed.add(key);
@@ -167,8 +171,9 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
   for (const row of references) {
     signal?.throwIfAborted();
     const image = object(row);
-    const { gameId, pageId, status, retryable, placeholderReason } = image;
-    const key = `${gameId}/${pageId}`;
+    const { gameId, pageId, locale, status, retryable, placeholderReason } = image;
+    if (typeof gameId !== "string" || typeof pageId !== "string") continue;
+    const key = atlasPageKey({ game: gameId, pageId, locale: parseAtlasLocale(locale) });
     const profile = profiles.get(key);
     if (!profile) continue;
     const acceptedPlaceholder = status === "placeholder" && retryable === false &&
@@ -223,7 +228,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       throw error;
     }
     const indexes = await selected();
-    const pages = indexes.map(({ game, pageId, version, recordCount }) => ({ game, pageId, version, recordCount }));
+    const pages = indexes.map(({ rows: _rows, ...page }) => page);
     const legacy = join(workspace, "backend");
     const sources = [];
     if (publishedBaseline && (await validateAtlasCandidate(publishedBaseline, [], signal)).ok) {
@@ -272,10 +277,10 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       source = combined.directory;
     }
     if (!source) throw new Error("未选中图鉴下载分类。");
-    const roles = indexes.find(({ game, pageId }) => game === "gi" && pageId === "character");
-    if (roles) {
+    const roles = indexes.filter(({ game, pageId }) => game === "gi" && pageId === "character");
+    if (roles.length) {
       const { completeGenshinPortraits } = await import("./genshin-original-portraits.ts");
-      await completeGenshinPortraits(source, roles.version, signal, request);
+      for (const { version, locale } of roles) await completeGenshinPortraits(source, version, signal, request, locale);
     }
     if (indexes.some(({ pageId }) => pageId === "character")) {
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
@@ -306,16 +311,16 @@ export function downloadLegacyAtlas<T>(path: string, target: string, consume: (s
 /** Run all supported pages at the versions already selected from the original website manifest. */
 export function downloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string, locale = defaultAtlasLocale): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale), consume, signal,
     publishedBaseline, request);
 }
 
 /** Read fresh indexes and detail JSON. Prior snapshots and caches may only supply verified artwork. */
 export function redownloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], imageSeedBaseline?: string): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope), consume, signal,
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], imageSeedBaseline?: string, locale = defaultAtlasLocale): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale), consume, signal,
     imageSeedBaseline, request, true);
 }
 

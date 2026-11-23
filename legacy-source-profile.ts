@@ -1,5 +1,5 @@
+import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import type { Game } from "./catalog.ts";
-import type { AtlasCandidatePage } from "./validate-candidate.ts";
 
 // These are the audited legacy indexes, distinct from the current formal releases.
 const profiles = {
@@ -40,7 +40,7 @@ const profiles = {
   ] },
 } as const;
 
-export interface LegacyAtlasSourcePage extends Required<AtlasCandidatePage> {
+export interface LegacyAtlasSourcePage extends ValidatedAtlasCandidatePage {
   readonly indexPath: string;
   readonly indexShape: "object" | "array";
   readonly indexSha256: string;

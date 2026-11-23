@@ -1,3 +1,4 @@
+import { defaultAtlasLocale } from "./locale.ts";
 import type { Game } from "./catalog.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes } from "./source-transport.ts";
 import type { StarrailRotationPage } from "./maze-source-data.ts";
@@ -89,7 +90,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
   for (const page of trackedPages) {
     const { game, pageId, kind } = page;
     if (scope && !scope.some((item) => item.game === game && item.pageId === pageId)) continue;
-    const existing = local?.pages.find((item) => item.game === game && item.pageId === pageId);
+    const existing = local?.pages.find((item) => item.game === game && item.pageId === pageId && (item.locale ?? defaultAtlasLocale) === defaultAtlasLocale);
     const current = { game, pageId, ...(existing ? { localVersion: existing.version } : {}) };
     if (kind === "challenge") {
       entries.push({ ...current, kind, action: "audit-rotation" });
@@ -108,7 +109,8 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
 export function planPublishedChallengeRefresh(manifest: unknown, local: AtlasCandidateValidation,
   scope: { game: "zzz"; pageId: "boss" | "shiyu" } | { game: "hsr"; pageId: StarrailRotationPage },
   channel: AtlasVersionChannel = "live"): AtlasUpdatePlan {
-  const existing = local.pages.find(({ game, pageId }) => game === scope.game && pageId === scope.pageId);
+  const existing = local.pages.find(({ game, pageId, locale = defaultAtlasLocale }) =>
+    game === scope.game && pageId === scope.pageId && locale === defaultAtlasLocale);
   if (!existing) return buildPlan([{ ...scope, kind: "versioned", action: "review", reason: "local-unverified" }]);
   return buildPlan([planVersionedPage({ ...scope, localVersion: existing.version }, local, atlasManifestVersion(manifest, scope.game, channel))]);
 }

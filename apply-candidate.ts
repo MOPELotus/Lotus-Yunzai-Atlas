@@ -1,3 +1,4 @@
+import { parseAtlasLocale } from "./locale.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { assembleAtlasCandidate } from "./assemble-candidate.ts";
@@ -43,11 +44,12 @@ export async function applyAtlasCandidate(root: string, source: string, scope: r
 }
 
 function parseScope(value: string): AtlasCandidatePage | undefined {
-  const match = /^(gi|hsr|zzz)\/([a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*)(?:=([^\s=]+))?$/iu.exec(value);
+  const match = /^(gi|hsr|zzz)\/(?:(zh|cht|en|ja|ko)\/)?([a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*)(?:=([^\s=]+))?$/iu.exec(value);
   if (!match || match[0] !== value) return;
-  const [, game, pageId, version] = match;
+  const [, game, language, pageId, version] = match;
   if ((game === "gi" || game === "hsr" || game === "zzz") && pageId) {
-    return { game, pageId, ...(version ? { version } : {}) };
+    const locale = parseAtlasLocale(language);
+    return { game, pageId, ...(version && { version }), ...(locale && { locale }) };
   }
 }
 
@@ -55,7 +57,7 @@ if (import.meta.main) {
   const [root, source, ...selections] = Bun.argv.slice(2);
   const scope = selections.map(parseScope);
   if (!root || !source || !scope.length || !scope.every((page): page is AtlasCandidatePage => page !== undefined)) {
-    console.error("用法：bun apply-candidate.ts <图鉴根目录> <本地更新源目录> <gi/weapon[=版本]> [其他游戏/分类...]");
+    console.error("用法：bun apply-candidate.ts <图鉴根目录> <本地更新源目录> <gi/[en/]weapon[=版本]> [其他游戏/分类...]");
     process.exitCode = 2;
   } else {
     try {

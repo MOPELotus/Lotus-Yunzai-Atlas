@@ -1,3 +1,4 @@
+import { atlasPageKey } from "./locale.ts";
 import { Database } from "bun:sqlite";
 import { lstat, mkdir, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -141,7 +142,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     }
     const validation = await validateAtlasCandidate(candidate, expectedPages, signal);
     if (!validation.ok) return { status: "invalid", issues: validation.issues };
-    const expectedKeys = new Set(expectedPages.map(({ game, pageId }) => `${game}/${pageId}`));
+    const expectedKeys = new Set(expectedPages.map(atlasPageKey));
     if (expectedKeys.size !== expectedPages.length || validation.pages.length !== expectedKeys.size) {
       return { status: "invalid", issues: ["发布候选与预期完整分类清单不一致。"] };
     }

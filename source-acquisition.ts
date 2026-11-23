@@ -1,3 +1,5 @@
+import { defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
+import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { createHash } from "node:crypto";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -13,7 +15,6 @@ import { matchesZzzMonsterDetail, zzzMonsterImages, zzzMonsterIndexIcon } from "
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 
 import { atlasSourceOrigin, isAtlasSourceWebp, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
-const locale = "zh";
 const versions = /^(0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
 const bangbooImages = "UI/Sprite/A1DynamicLoad/BangbooModGarage/UnPacker/BangbooRole";
 const weaponImages = "Assets/NapResources/UI/Sprite/A1DynamicLoad/ItemIconWeapon/UnPacker";
@@ -87,7 +88,7 @@ function sourcePage(value: string): value is SourcePage {
 
 export interface AtlasAcquiredSource {
   readonly directory: string;
-  readonly pages: readonly Required<AtlasCandidatePage>[];
+  readonly pages: readonly ValidatedAtlasCandidatePage[];
   readonly imageCount: number;
   readonly missingImageCount: number;
 }
@@ -140,7 +141,7 @@ function monsterStatsIndexRow(value: Record<string, unknown>): boolean {
   });
 }
 
-function sourceIndex(category: SourcePage, value: unknown) {
+function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) {
   const { folder, maxRecords, pageId } = pages[category];
   if (isMonsterGroupPage(pageId)) {
     if (!Array.isArray(value) || !value.length || value.length > maxRecords) {
@@ -171,6 +172,7 @@ function sourceIndex(category: SourcePage, value: unknown) {
   return entries.map(([id, value]) => {
     const list = object(value);
     const { zh, rank, icon, type } = list;
+    const localizedName = category === "gi/gcg" ? list[locale] : zh;
     if (category === "gi/achievement/achievement" || category === "hsr/achievement/achievement") {
       const name = label(list.name);
       if (!/^(0|[1-9]\d{0,9})$/u.test(id) || !name ||
@@ -207,8 +209,8 @@ function sourceIndex(category: SourcePage, value: unknown) {
       }
       return { id, list, name, rarity: "未分类", iconName: icon };
     }
-    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof zh !== "string" || !zh.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
-    const name = zh.trim();
+    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof localizedName !== "string" || !localizedName.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
+    const name = localizedName.trim();
     if (category === "gi/gcg") {
       const iconName = genshinCardIndexIcon(icon);
       if (!iconName || (type !== "Character" && type !== "Action")) throw new Error(`七圣召唤来源索引条目结构无效（${id}）。`);
@@ -484,7 +486,8 @@ export async function acquireAtlasSource(destination: string, requirements: read
       !versions.test(scope.version) || (category !== "zzz/bangboo" && scope.version.includes("+"))) {
     throw new Error("请选择支持抓取的分类及对应版本。");
   }
-  const { version } = scope;
+  const { version, locale = defaultAtlasLocale } = scope;
+  if (locale !== defaultAtlasLocale && category !== "gi/gcg") throw new Error("此分类请通过原站多语下载入口获取。");
   const { game, pageId, folder, title, timeout: limit } = pages[category];
   const timeout = AbortSignal.timeout(limit);
   const active = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -504,7 +507,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const index = await sourceJson(sourceUrl, false, active, request, indexOnly ? maxLargeIndexBytes : maxJsonBytes);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
-      : sourceIndex(category, index);
+      : sourceIndex(category, index, locale);
     if (localized) readAchievementCategories(game, { version, sourceUrl,
       sources: entries.map(({ id, name, list }) => ({ id, name, list })) });
     if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
@@ -513,7 +516,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const cardNames = category === "gi/gcg" ? new Map(entries.map(({ id, name }) => [`a${id}`, name])) : undefined;
     if (cardNames) {
       for (const [prefix, table] of [["c", "card"], ["k", "keyword"], ["s", "skill"]] as const) {
-        const rows = object(await sourceJson(`${atlasSourceOrigin}/gi/${version}/zh/gcg/${table}.json`,
+        const rows = object(await sourceJson(`${atlasSourceOrigin}/gi/${version}/${locale}/gcg/${table}.json`,
           false, active, request, maxLargeIndexBytes));
         if (!Object.keys(rows).length) throw new Error(`七圣召唤来源缺少 ${table} 引用表。`);
         for (const [id, value] of Object.entries(rows)) {

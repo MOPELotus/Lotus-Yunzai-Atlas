@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, defaultAtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -31,23 +32,23 @@ async function writeAtomic(filepath: string, data: string | Buffer, signal?: Abo
   }
 }
 
-async function* matchedGenshinPortraits(data: string, version: string, signal?: AbortSignal) {
+async function* matchedGenshinPortraits(data: string, version: string, signal?: AbortSignal, locale = defaultAtlasLocale) {
   const map = object(await Bun.file(await candidateFile(data, "map.json")).json());
-  const page = object(object(object(object(object(map.games).gi).locales).zh).pages).character;
+  const page = object(atlasLocaleBlock(object(map.games).gi, locale).pages).character;
   const roles = object(object(page).records);
   if (object(page).version !== version) return;
   for (const [id, name, codename, size, sha256] of portraits) {
     signal?.throwIfAborted();
     const entry = object(roles[id]);
     const { path } = entry;
-    if (entry.id !== id || entry.name !== name || typeof path !== "string") continue;
+    if (entry.id !== id || (locale === defaultAtlasLocale && entry.name !== name) || typeof path !== "string") continue;
     const file = await candidateFile(data, path);
     const raw = await Bun.file(file).text();
     const item = object(JSON.parse(raw));
     const meta = object(item.meta);
     const content = object(item.content);
     const icon = `UI_AvatarIcon_${codename}`;
-    if (meta.recordId !== id || meta.name !== name || meta.version !== version || meta.gameId !== "gi" ||
+    if (meta.recordId !== id || meta.name !== entry.name || meta.version !== version || meta.gameId !== "gi" ||
         object(content.list).icon !== icon || object(content.detail).icon !== icon) continue;
     if (!Array.isArray(meta.images)) continue;
     const artwork = galleryArtwork(meta.images, "gi");
@@ -66,19 +67,19 @@ async function* matchedGenshinPortraits(data: string, version: string, signal?: 
   }
 }
 
-export async function genshinOriginalPortraitStatus(data: string, version: string, signal?: AbortSignal) {
+export async function genshinOriginalPortraitStatus(data: string, version: string, signal?: AbortSignal, locale = defaultAtlasLocale) {
   const ready: string[] = [];
   const pending: string[] = [];
-  for await (const { id, attached, hasImage } of matchedGenshinPortraits(data, version, signal)) {
+  for await (const { id, attached, hasImage } of matchedGenshinPortraits(data, version, signal, locale)) {
     (attached && hasImage ? ready : pending).push(id);
   }
   return { ready, pending };
 }
 
 /** Supplement a locked public exporter workspace after its original role records have passed validation. */
-export async function completeGenshinPortraits(root: string, version: string, signal?: AbortSignal, request: AtlasSourceFetch = fetch) {
+export async function completeGenshinPortraits(root: string, version: string, signal?: AbortSignal, request: AtlasSourceFetch = fetch, locale = defaultAtlasLocale) {
   const data = join(root, "data");
-  for await (const { file, raw, filename, localPath, size, sha256, attached, hasImage } of matchedGenshinPortraits(data, version, signal)) {
+  for await (const { file, raw, filename, localPath, size, sha256, attached, hasImage } of matchedGenshinPortraits(data, version, signal, locale)) {
     const url = `${atlasSourceOrigin}/assets/gi/${filename}`;
     if (!hasImage) {
       const bytes = await readAtlasSourceBytes(url, "image/webp", size, true, signal, request).catch(() => undefined);

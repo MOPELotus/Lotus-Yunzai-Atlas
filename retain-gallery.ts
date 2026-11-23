@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, defaultAtlasLocale } from "./locale.ts";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { candidateFile, candidateGallery, candidateImageReference, copyCandidateFile, hashCandidateFile } from "./candidate-gallery.ts";
@@ -32,8 +33,8 @@ function retainedReference(path: string, reference: Record<string, unknown>) {
 export async function* atlasCandidateItems(directory: string, pages: AtlasCandidateValidation["pages"], signal?: AbortSignal) {
   const map: unknown = JSON.parse(await readFile(await candidateFile(directory, "map.json"), "utf8"));
   const games = object(object(map).games);
-  for (const { game, pageId } of pages) {
-    const pageMap = object(object(object(object(games[game]).locales).zh).pages);
+  for (const { game, pageId, locale = defaultAtlasLocale } of pages) {
+    const pageMap = object(atlasLocaleBlock(games[game], locale).pages);
     for (const record of Object.values(object(object(pageMap[pageId]).records))) {
       signal?.throwIfAborted();
       const { path } = object(record);

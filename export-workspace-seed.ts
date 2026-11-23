@@ -1,3 +1,4 @@
+import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { candidateFile, candidateGallery, copyCandidateFile } from "./candidate-gallery.ts";
@@ -19,16 +20,23 @@ export async function seedExporterFromPublished(data: string, backend: string, s
   const pages = validation.pages.filter(({ game, pageId }) => exporterPages.has(`${game}/${pageId}`));
   if (!pages.length) throw new Error("现用图鉴没有旧导出器支持的分类。");
   const selectedPages: Record<string, string[]> = {};
-  for (const { game, pageId } of pages) (selectedPages[game] ??= []).push(pageId);
+  for (const { game, pageId } of pages) {
+    const selected = selectedPages[game] ??= [];
+    if (!selected.includes(pageId)) selected.push(pageId);
+  }
+  const selectedKeys = new Set(pages.map(atlasPageKey));
   for (const [game, value] of Object.entries(games)) {
     if (!selectedPages[game]) {
       delete games[game];
       continue;
     }
-    const localized = object(object(object(value).locales).zh);
-    const catalog = object(localized.pages);
-    for (const key of Object.keys(catalog)) {
-      if (!selectedPages[game].includes(key)) delete catalog[key];
+    const gameData = object(value);
+    for (const [language, block] of Object.entries(object(gameData.locales))) {
+      const locale = parseAtlasLocale(language) ?? parseAtlasLocale(object(object(block).locale).folder);
+      const catalog = object(object(block).pages);
+      for (const pageId of Object.keys(catalog)) {
+        if (!locale || !selectedKeys.has(atlasPageKey({ game, pageId, locale }))) delete catalog[pageId];
+      }
     }
   }
   listing.meta = { ...object(listing.meta), selectedPages };
@@ -36,9 +44,9 @@ export async function seedExporterFromPublished(data: string, backend: string, s
   await writeFile(join(target, "map.json"), JSON.stringify(listing) + "\n", { flag: "wx", signal });
   const gallery = candidateGallery(backend);
   const images = [];
-  for (const { game, pageId } of pages) {
+  for (const { game, pageId, locale = defaultAtlasLocale } of pages) {
     const gameData = object(object(listing.games)[game]);
-    const localized = object(object(gameData.locales).zh);
+    const localized = atlasLocaleBlock(gameData, locale);
     const page = object(object(localized.pages)[pageId]);
     for (const [recordId, value] of Object.entries(object(page.records))) {
       signal?.throwIfAborted();
@@ -53,7 +61,7 @@ export async function seedExporterFromPublished(data: string, backend: string, s
       for (const row of Array.isArray(rows) ? rows : []) {
         const image = object(row);
         const retryable = image.placeholder === true && image.status === "placeholder" ? image.retryable ?? false : image.retryable;
-        images.push({ ...image, gameId: game, pageId, recordId, retryable });
+        images.push({ ...image, gameId: game, pageId, recordId, retryable, ...(locale !== defaultAtlasLocale && { locale }) });
       }
     }
   }
