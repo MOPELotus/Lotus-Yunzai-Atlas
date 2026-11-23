@@ -59,7 +59,7 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   const prefix = gamePrefix.exec(input)?.[0];
   if (!prefix) return;
   const query = input.slice(prefix.length, -"图鉴".length).trim();
-  if (!query || reserved.test(query) || /^[0-9]+$/u.test(query.normalize("NFKC"))) return;
+  if (!query || reserved.test(query) || /^[0-9]$/u.test(query.normalize("NFKC"))) return;
   const game = prefixes[prefix];
   if (game) return { game, query };
 }

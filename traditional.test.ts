@@ -9,13 +9,15 @@ import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
     ["gi", "西风剑", ["#西风剑图鉴", "#原神西风剑图鉴"]],
+    ["gi", "123", ["#123图鉴", "#原神123图鉴"]],
+    ["gi", "１２３", ["#１２３图鉴"]],
     ["hsr", "锋镝", ["*锋镝图鉴", "#星铁锋镝图鉴", "#星穹铁道锋镝图鉴", "#崩坏星穹铁道锋镝图鉴"]],
     ["zzz", "深海访客", ["%深海访客图鉴", "％深海访客图鉴", "#绝区零深海访客图鉴"]],
   ] as const) {
     for (const command of commands) expect(parseEquipmentShortcut(command)).toEqual({ game, query });
   }
   for (const command of ["#图鉴", "#星铁图鉴", "#西风剑攻略图鉴", "#芙宁娜练度统计图鉴", "#芙宁娜命座图鉴",
-    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#123图鉴", "#１２３图鉴"]) {
+    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#1图鉴", "#１图鉴"]) {
     expect(parseEquipmentShortcut(command)).toBeUndefined();
   }
 });

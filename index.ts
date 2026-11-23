@@ -277,7 +277,7 @@ async function traditionalQuery(
   try {
     const quickLookup = mode === "bare" || mode === "weapon";
     const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
-    let matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? "name" : mode);
+    let matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? (query.length >= 2 ? "search" : "name") : mode);
     if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
@@ -580,7 +580,7 @@ function createTraditionalQueries(limit: number) {
   return traditionalAtlasEvent((argument, kind, game, delivery) => {
     if (kind !== "glued") return traditionalQuery(argument, limit, game, kind, delivery);
     const { query, game: statedGame } = searchTerms(argument);
-    return traditionalQuery(query, limit, statedGame, "name", delivery);
+    return traditionalQuery(query, limit, statedGame, "search", delivery);
   }, (mode, period, at, delivery) => challengeQuery(`${gameNames[mode.game]} ${mode.name} ${period}`, at, delivery));
 }
 
