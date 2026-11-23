@@ -169,6 +169,8 @@ test("旧角色资料词只取精确角色，现有装备和其他命令可继�
     ["#芙芙资料", "芙芙", "gi", undefined], ["芙芙技能", "芙芙", undefined, "skills"],
     ["#芙芙命之座", "芙芙", "gi", "ranks"], ["*卡芙卡行迹", "卡芙卡", "hsr", "skills"],
     ["卡芙卡图鉴", "卡芙卡", undefined, undefined],
+    ["#芙芙照片", "芙芙", "gi", "photo"], ["芙芙写真", "芙芙", undefined, "photo"],
+    ["*卡芙卡图片", "卡芙卡", "hsr", "photo"], ["#星铁卡芙卡图像", "卡芙卡", "hsr", "photo"],
   ] as const;
   const run = (msg: string) => route.rule.run({ msg, reply: (value) => replies.push(value) });
   for (const [msg, query, game, section] of commands) {
@@ -176,7 +178,7 @@ test("旧角色资料词只取精确角色，现有装备和其他命令可继�
     expect(await run(msg)).toBe(true);
     expect(calls.at(-1)).toEqual([query, "legacy-character", game, section]);
   }
-  for (const msg of ["#角色资料", "#今日技能", "#我的资料", "#原神卡芙卡行迹", "*芙芙命之座"]) {
+  for (const msg of ["#角色资料", "#今日技能", "#我的资料", "#原神卡芙卡行迹", "*芙芙命之座", "%安比写真"]) {
     expect(parseLegacyRoleShortcut(msg)).toBeUndefined();
   }
   for (const msg of ["刷新技能", "#更新所有角色技能", "#星铁更新行迹", "#展板更新面板", "大家今天一起试试技能"]) {

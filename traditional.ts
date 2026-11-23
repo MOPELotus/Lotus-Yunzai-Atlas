@@ -17,8 +17,9 @@ const glued = /^#?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const legacyRoleDetail = /^([^\r\n]{1,64}?)(命之座|行迹|技能|资料)(?:图鉴)?$/u;
+const legacyRolePhoto = /^([^\r\n]{1,64}?)(照片|写真|图片|图像)$/u;
 const bareRoleBook = /^([^#*%％\s][^\r\n]{1,63}?)图鉴$/u;
-const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${legacyRoleDetail.source}|${bareRoleBook.source}|${bareName.source}`, "u");
+const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${legacyRoleDetail.source}|${legacyRolePhoto.source}|${bareRoleBook.source}|${bareName.source}`, "u");
 const challengePeriod = /^(?:(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?)?(本期|当期|上期|下期)([^\r\n]+?)(图鉴)?$/u;
 type ChallengePeriod = "本期" | "上期" | "下期";
 
@@ -101,7 +102,8 @@ function validRoleQuery(query: string | undefined, prefix: string | undefined): 
 }
 
 export type RoleSection = "skills" | "ranks";
-type RoleShortcut = { game?: Game; query: string; section?: RoleSection };
+export type RoleQueryView = RoleSection | "photo";
+type RoleShortcut = { game?: Game; query: string; section?: RoleQueryView };
 
 export function parseRoleShortcut(message: string): RoleShortcut | undefined {
   const input = message.trim();
@@ -124,10 +126,13 @@ export function parseRoleShortcut(message: string): RoleShortcut | undefined {
 export function parseLegacyRoleShortcut(message: string): RoleShortcut | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
-  const match = prefix ? legacyRoleDetail.exec(input.slice(prefix.length)) : legacyRoleDetail.exec(input) ?? bareRoleBook.exec(input);
+  const term = input.slice(prefix?.length ?? 0);
+  const photo = legacyRolePhoto.exec(term);
+  const match = photo ?? legacyRoleDetail.exec(term) ?? (!prefix ? bareRoleBook.exec(term) : undefined);
   const query = match?.[1]?.trim();
   if (!validRoleQuery(query, prefix)) return;
   const game = prefix ? prefixes[prefix] : undefined;
+  if (photo) return game === "zzz" ? undefined : { game, query, section: "photo" };
   const part = match?.[2];
   const suffixGame = part === "命之座" ? "gi" : part === "行迹" ? "hsr" : undefined;
   if (suffixGame && game && game !== suffixGame) return;
@@ -174,7 +179,7 @@ async function send(event: ShortcutEvent, reply: AtlasReply | undefined): Promis
 }
 
 export function traditionalAtlasEvent(
-  findReply: (query: string, kind: Lookup, game?: Game, delivery?: AtlasDelivery, section?: RoleSection) => Promise<AtlasReply | undefined>,
+  findReply: (query: string, kind: Lookup, game?: Game, delivery?: AtlasDelivery, section?: RoleQueryView) => Promise<AtlasReply | undefined>,
   findChallengeReply: (mode: ChallengeMode, period: ChallengePeriod, at?: number, delivery?: AtlasDelivery) => Promise<AtlasReply>,
 ) {
   return {

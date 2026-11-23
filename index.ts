@@ -12,7 +12,7 @@ import { findAchievementCategories, findAchievements, type AchievementCategory }
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
 import { invalidChallengeDate, parseExplicitAtlasChallenge, traditionalAtlasEvent,
-  type AtlasDelivery, type AtlasImage, type AtlasReply, type RoleSection } from "./traditional.ts";
+  type AtlasDelivery, type AtlasImage, type AtlasReply, type RoleQueryView, type RoleSection } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
@@ -145,6 +145,18 @@ async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: r
     if (title) return `${role.overview.name}的${title}图片暂不可用。`;
     return `${await characterLine(catalog, entry, true)}\n图鉴图片暂不可用。`;
   }
+}
+
+async function characterPhoto(catalog: AtlasCatalog, entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery): Promise<AtlasReply> {
+  const role = await catalog.roleDetails(entry);
+  if (!role) return "暂无图片";
+  const { readRolePhoto } = await import("./role-render.ts");
+  const photo = await readRolePhoto(role, {
+    assetRoot: catalog.assetRoot(entry),
+    galleryName: characterGalleryName(entry, roster, role.overview.name),
+    inlineImageByteLimit: delivery?.inlineImageByteLimit,
+  });
+  return photo ? { type: "image", file: photo } : "暂无图片";
 }
 
 async function weaponCard(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasImage | undefined> {
@@ -295,7 +307,7 @@ async function lookupNotice(query: string, message: string, game: Game | undefin
 async function traditionalQuery(
   catalog: AtlasCatalog,
   query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" | "legacy-character" = "search",
-  delivery?: AtlasDelivery, section?: RoleSection,
+  delivery?: AtlasDelivery, section?: RoleQueryView,
 ): Promise<AtlasReply | undefined> {
   const explicit = mode === "search" || mode === "shortcut" || mode === "character";
   try {
@@ -308,6 +320,7 @@ async function traditionalQuery(
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
     }
+    if (section === "photo") matches = matches.filter(({ entry }) => entry.game !== "zzz");
     if (mode === "legacy-character" && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
       const category = await traditionalAchievementCategory(catalog, query, result, game, delivery);
@@ -345,7 +358,7 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
-      return characterBook(catalog, entry, roster, delivery, section);
+      return section === "photo" ? characterPhoto(catalog, entry, roster, delivery) : characterBook(catalog, entry, roster, delivery, section);
     }
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(catalog, first.entry, delivery);

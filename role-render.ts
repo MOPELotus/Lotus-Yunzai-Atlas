@@ -293,8 +293,21 @@ function isRaster(data: Buffer) {
     data[0] === 255 && data[1] === 216;
 }
 
+type ArtworkAsset = { readonly image: Image; readonly file: Buffer };
+
+async function artworkAsset(file: Buffer | undefined): Promise<ArtworkAsset | undefined> {
+  if (!file || !isRaster(file)) return;
+  const image = await loadImage(file).catch(() => undefined);
+  if (image?.width && image.height) return { image, file };
+}
+
 export async function readCharacterGalleryPortrait(game: Game, name: string | readonly string[] | undefined,
-  configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim(), installation?: string): Promise<Image | undefined> {
+  configured?: string, installation?: string): Promise<Image | undefined> {
+  return (await characterGalleryPortrait(game, name, maxImageBytes, configured, installation))?.image;
+}
+
+async function characterGalleryPortrait(game: Game, name: string | readonly string[] | undefined, maxBytes: number,
+  configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim(), installation?: string): Promise<ArtworkAsset | undefined> {
   const names = [...new Set(typeof name === "string" ? [name] : name ?? [])]
     .filter(value => value && value !== "." && value !== ".." && !/[\/\\\p{Cc}\p{Cf}]/u.test(value));
   if (!names.length) return;
@@ -327,10 +340,8 @@ export async function readCharacterGalleryPortrait(game: Game, name: string | re
       }
       while (candidates.length) {
         const [candidate] = candidates.splice(randomInt(candidates.length), 1);
-        const data = await localAsset(candidate!, maxImageBytes).catch(() => undefined);
-        if (!data || !isRaster(data)) continue;
-        const image = await loadImage(data).catch(() => undefined);
-        if (image?.width && image.height) return image;
+        const asset = await artworkAsset(await localAsset(candidate!, maxBytes).catch(() => undefined));
+        if (asset) return asset;
       }
     }
   }
@@ -342,7 +353,7 @@ const travelerPortraits = {
   "10000007": { name: "荧", digest: "4be7278c87656f59c5860263d6f8b8483a147bd5d04b840b0b7e76ad7b938a54" },
 } as const;
 
-async function indexedGenshinPortrait(id: string, digest?: string): Promise<Image | undefined> {
+async function indexedGenshinPortrait(id: string, maxBytes: number, digest?: string): Promise<ArtworkAsset | undefined> {
   const key = `gi-${id}`;
   const filename = `${key}.webp`;
   for (const theme of portraitDirectories) {
@@ -352,58 +363,84 @@ async function indexedGenshinPortrait(id: string, digest?: string): Promise<Imag
       if (await realpath(directory) !== directory) continue;
       const index = await localAsset(join(directory, "index.json"), 1_048_576);
       if (!index || object(JSON.parse(index.toString("utf8")))[key] !== filename) continue;
-      const bytes = await localAsset(join(directory, filename), maxImageBytes);
-      if (bytes && (!digest || createHash("sha256").update(bytes).digest("hex") === digest)) return await loadImage(bytes);
+      const bytes = await localAsset(join(directory, filename), maxBytes);
+      if (bytes && (!digest || createHash("sha256").update(bytes).digest("hex") === digest)) {
+        const asset = await artworkAsset(bytes);
+        if (asset) return asset;
+      }
     } catch {
       // Missing original illustrations fall back to the snapshot.
     }
   }
 }
 
-async function originalGenshinPortrait(role: RoleDetails): Promise<Image | undefined> {
+async function originalGenshinPortrait(role: RoleDetails, maxBytes = maxImageBytes): Promise<ArtworkAsset | undefined> {
   if (role.game !== "gi" || !/^[1-9]\d*(?:-\d+)?$/u.test(role.id)) return;
-  const exact = await indexedGenshinPortrait(role.id);
+  const exact = await indexedGenshinPortrait(role.id, maxBytes);
   const base = role.overview.traveler?.portraitBase;
   if (exact || !base) return exact;
   const { name, digest } = travelerPortraits[base];
-  const indexed = await indexedGenshinPortrait(base, digest);
+  const indexed = await indexedGenshinPortrait(base, maxBytes, digest);
   if (indexed || themeOverride) return indexed;
   const installed = fileURLToPath(new URL("../miao-plugin/resources/meta-gs/character/", import.meta.url));
   const directories = portraitDonor ? [join(portraitDonor, "meta-gs", "character"), installed] : [installed];
   for (const directory of directories) {
-    const bytes = await localAsset(join(directory, name, "imgs/splash.webp"), maxImageBytes).catch(() => undefined);
+    const bytes = await localAsset(join(directory, name, "imgs/splash.webp"), maxBytes).catch(() => undefined);
     if (!bytes || createHash("sha256").update(bytes).digest("hex") !== digest) continue;
-    const portrait = await loadImage(bytes).catch(() => undefined);
-    if (portrait?.width && portrait.height) return portrait;
+    const asset = await artworkAsset(bytes);
+    if (asset) return asset;
   }
+}
+
+async function galleryAsset(game: Game, path: string | undefined, roots: readonly string[], maxBytes: number): Promise<ArtworkAsset | undefined> {
+  if (!isAtlasGalleryPath(path, game)) return;
+  // Keep the official supplement available when the exported snapshot changes.
+  const digest = challengeArtworkDigests.get(path);
+  const bases = digest ? [...roots, ...await Promise.all(themeDirectories.map((directory) =>
+    realpath(directory).catch(() => undefined)))] : roots;
+  for (const base of bases) {
+    if (!base) continue;
+    try {
+      const resolved = await realpath(join(base, path));
+      if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
+      const bytes = await localAsset(resolved, maxBytes);
+      if (!bytes || (digest && createHash("sha256").update(bytes).digest("hex") !== digest)) continue;
+      const asset = await artworkAsset(bytes);
+      if (asset) return asset;
+    } catch {
+      // The next source can supply a safe copy when an illustration is missing.
+    }
+  }
+}
+
+async function snapshotGalleryRoots(assetRoot?: string) {
+  const root = assetRoot ? await realpath(assetRoot).catch(() => undefined) : undefined;
+  return !root ? [] : basename(root) === "data" ? [root, dirname(root)] : [root];
 }
 
 async function galleryImages(game: Game, paths: readonly (string | undefined)[], assetRoot: string | undefined) {
   const images = new Map<string, Image>();
-  const root = assetRoot ? await realpath(assetRoot).catch(() => undefined) : undefined;
-  const roots = !root ? [] : basename(root) === "data" ? [root, dirname(root)] : [root];
+  const roots = await snapshotGalleryRoots(assetRoot);
   for (const path of new Set(paths)) {
-    if (!isAtlasGalleryPath(path, game)) continue;
-    // Keep the official supplement available when the exported snapshot changes.
-    const digest = challengeArtworkDigests.get(path);
-    const bases = digest ? [...roots, ...await Promise.all(themeDirectories.map((directory) =>
-      realpath(directory).catch(() => undefined)))] : roots;
-    for (const base of bases) {
-      if (!base) continue;
-      try {
-        const resolved = await realpath(join(base, path));
-        if (!resolved.startsWith(join(base, "gallery", game) + sep)) continue;
-        const bytes = await localAsset(resolved, maxImageBytes);
-        if (!bytes) continue;
-        if (digest && createHash("sha256").update(bytes).digest("hex") !== digest) continue;
-        images.set(path, await loadImage(bytes));
-        break;
-      } catch {
-        // A missing or unreadable illustration still leaves the complete text available.
-      }
-    }
+    if (!path) continue;
+    const asset = await galleryAsset(game, path, roots, maxImageBytes);
+    if (asset) images.set(path, asset.image);
   }
   return images;
+}
+
+export async function readRolePhoto(role: RoleDetails, options: RoleRenderOptions = {}): Promise<Uint8Array | undefined> {
+  const maxBytes = Math.min(options.inlineImageByteLimit ?? maxImageBytes, maxImageBytes);
+  const { artwork, icon, iconFallback, portraitFallbacks, traveler } = role.overview;
+  const names = traveler?.name ?? options.galleryName;
+  const illustration = await characterGalleryPortrait(role.game, names, maxBytes) ?? await originalGenshinPortrait(role, maxBytes);
+  if (illustration) return illustration.file;
+  const roots = await snapshotGalleryRoots(options.assetRoot);
+  for (const path of new Set([artwork, ...(portraitFallbacks ?? [])])) {
+    if (!path || path === icon || path === iconFallback) continue;
+    const asset = await galleryAsset(role.game, path, roots, maxBytes);
+    if (asset) return asset.file;
+  }
 }
 
 async function starRailPartImages(parts: readonly SetPart[]) {
@@ -479,7 +516,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const snapshotPortrait = image(role.overview.artwork) ??
     role.overview.portraitFallbacks?.map(image).find((candidate) => candidate !== undefined) ?? icon;
   // The Genshin icon fields hold avatars. The Zenless source also stores full-body art in its icon fields.
-  const portrait = galleryPortrait ?? originalPortrait ??
+  const portrait = galleryPortrait ?? originalPortrait?.image ??
     (role.game === "gi" && snapshotPortrait === icon ? undefined : snapshotPortrait);
   const title = wrap(role.overview.name, icon ? 620 : contentWidth, 33);
   const overview: Block[] = [];

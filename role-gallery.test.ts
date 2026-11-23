@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCharacterGalleryPortrait } from "./role-render.ts";
+import type { RoleDetails } from "./role-data.ts";
+import { readCharacterGalleryPortrait, readRolePhoto } from "./role-render.ts";
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aKQgAAAAASUVORK5CYII=", "base64");
 
@@ -65,6 +66,38 @@ test("三游默认读各自的发布快照，拒绝越界指针并优先保留�
     await rm(current);
     await symlink(root, current);
     expect(await readCharacterGalleryPortrait("hsr", cases[1][2], undefined, root)).toBeUndefined();
+  } finally {
+    if (previous === undefined) delete Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
+    else Bun.env.LOTUS_CHARACTER_GALLERY_DIR = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("旧角色照片保留真实图片字节，不发送头像、错误来源或超限图片", async () => {
+  const root = await mkdtemp(join(tmpdir(), "atlas-role-photo-"));
+  const previous = Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
+  const role: RoleDetails = {
+    game: "hsr", id: "1005", version: "1", skills: [], ranks: [], materials: [],
+    overview: { name: "照片测试角色", rarity: "五星", facts: [],
+      artwork: "gallery/hsr/avatar.png", icon: "gallery/hsr/avatar.png", portraitFallbacks: ["gallery/hsr/artwork.png"] },
+  };
+  try {
+    Bun.env.LOTUS_CHARACTER_GALLERY_DIR = join(root, "configured");
+    await mkdir(join(root, "gallery", "hsr"), { recursive: true });
+    await writeFile(join(root, "gallery", "hsr", "avatar.png"), png);
+    const options = { galleryName: role.overview.name, assetRoot: root };
+    expect(await readRolePhoto(role, options)).toBeUndefined();
+    const artwork = join(root, "gallery", "hsr", "artwork.png");
+    await writeFile(artwork, png);
+    expect(await readRolePhoto(role, options)).toEqual(png);
+    expect(await readRolePhoto(role, { ...options, inlineImageByteLimit: png.byteLength - 1 })).toBeUndefined();
+    await rm(artwork);
+    await writeFile(join(root, "outside.png"), png);
+    await symlink(join(root, "outside.png"), artwork);
+    expect(await readRolePhoto(role, options)).toBeUndefined();
+    await rm(artwork);
+    await writeFile(artwork, "invalid artwork");
+    expect(await readRolePhoto(role, options)).toBeUndefined();
   } finally {
     if (previous === undefined) delete Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
     else Bun.env.LOTUS_CHARACTER_GALLERY_DIR = previous;
