@@ -155,4 +155,11 @@ test("关闭图库同步时保留旧字节和引用，发布新资料且没有�
   const refreshed = await applyAtlasCandidate(root, source, weapon);
   expect(refreshed).toMatchObject({ status: "published", version: 3 });
   expect(await readFile(join(root, "snapshots/3/gallery/gi/fresh.webp"), "utf8")).toBe("brand new bytes");
+
+  const unsupported = await Bun.file(join(source, "data/items/weapon.json")).json();
+  delete unsupported.meta.images[1].sha256;
+  await Bun.write(join(source, "data/items/weapon.json"), JSON.stringify(unsupported));
+  await expect(applyAtlasCandidate(root, source, weapon, undefined, undefined, { retainGallery: true }))
+    .rejects.toThrow("源图片路径或哈希无效");
+  expect(await readAtlasSnapshotVersion(root)).toBe(3);
 }));

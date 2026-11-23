@@ -103,7 +103,7 @@ export async function retainAtlasGallery(candidate: string, pages: AtlasCandidat
           continue;
         }
         const known = previous.get(asset.path);
-        if (known?.sha256 === asset.sha256) continue;
+        if (known && known.sha256 === asset.sha256) continue;
         const url = reference.remoteUrl ?? reference.url;
         const patch = known && typeof url === "string" && url.startsWith("https://static.nanoka.cc/") &&
             known.remoteUrl === url
