@@ -169,32 +169,43 @@ const legacyCharacterSetAliases = new Map(
   )]),
 );
 
-const fireflyPro = { id: "2310", name: "流萤Pro", baseId: "1310", baseName: "流萤" } as const;
-const fireflyProSources = new WeakMap<AtlasEntry, AtlasEntry>();
+// Fixed Miao 28607618 names and independent IDs corresponding to the public enhancement records.
+const starRailProRoles = [
+  { id: "2004", name: "瓦尔特Pro", baseId: "1004", baseName: "瓦尔特" },
+  { id: "2005", name: "卡芙卡Pro", baseId: "1005", baseName: "卡芙卡" },
+  { id: "2006", name: "银狼Pro", baseId: "1006", baseName: "银狼" },
+  { id: "2102", name: "希儿Pro", baseId: "1102", baseName: "希儿" },
+  { id: "2205", name: "刃Pro", baseId: "1205", baseName: "刃", variantSkills: [8] },
+  { id: "2212", name: "镜流Pro", baseId: "1212", baseName: "镜流", variantSkills: [9] },
+  { id: "2217", name: "藿藿Pro", baseId: "1217", baseName: "藿藿" },
+  { id: "2306", name: "花火Pro", baseId: "1306", baseName: "花火" },
+  { id: "2307", name: "黑天鹅Pro", baseId: "1307", baseName: "黑天鹅" },
+  { id: "2310", name: "流萤Pro", baseId: "1310", baseName: "流萤", variantSkills: [8, 9] },
+] as const;
+type StarRailProRole = (typeof starRailProRoles)[number];
+const starRailProSources = new WeakMap<AtlasEntry, { base: AtlasEntry; role: StarRailProRole }>();
 
-function matchingEntries(page: AtlasPage, literal: string, aliases: Set<string> | undefined): readonly AtlasEntry[] {
-  if (page.game !== "hsr" || page.kind !== "character" ||
-      (literal !== fireflyPro.id && literal !== exactName(fireflyPro.name) && !aliases?.has(compareKey(fireflyPro.name)))) {
-    return page.entries;
-  }
+function proEntries(page: AtlasPage, role: StarRailProRole): readonly AtlasEntry[] {
   // Prefer a real exported record if the data source begins publishing the enhancement separately.
-  if (page.entries.some(({ id, name }) => id === fireflyPro.id || exactName(name) === exactName(fireflyPro.name))) return page.entries;
-  const base = page.entries.find(({ id, name }) => id === fireflyPro.baseId && name === fireflyPro.baseName);
+  if (page.entries.some(({ id, name }) => id === role.id || exactName(name) === exactName(role.name))) return page.entries;
+  const base = page.entries.find(({ id, name }) => id === role.baseId && name === role.baseName);
   if (!base) return page.entries;
-  const enhanced = { ...base, id: fireflyPro.id, name: fireflyPro.name };
-  fireflyProSources.set(enhanced, base);
+  const enhanced = { ...base, id: role.id, name: role.name };
+  starRailProSources.set(enhanced, { base, role });
   return [...page.entries, enhanced];
 }
 
-function fireflyProItem(content: Record<string, unknown>, images: unknown) {
+function starRailProItem(variant: StarRailProRole, content: Record<string, unknown>, images: unknown) {
   const detail = object(content.detail);
-  if (label(detail.name) !== fireflyPro.baseName) return;
+  if (label(detail.name) !== variant.baseName) return;
   const enhancement = object(object(detail.enhanced)["1"]);
   const ranks = object(enhancement.ranks);
   const skillTrees = object(enhancement.skill_trees);
   const skills = object(enhancement.skills);
   // Do not present a partial or unrelated enhancement as the archived Pro character.
-  const skillIds = [1131001, 1131002, 1131003, 1131004, 1131007, 1131008, 1131009];
+  const baseSkillId = (10_000 + Number(variant.baseId)) * 100;
+  const variantSkills = "variantSkills" in variant ? variant.variantSkills : [];
+  const skillIds = [1, 2, 3, 4, 7, ...variantSkills].map(suffix => baseSkillId + suffix);
   if (!skillIds.every(id => object(skills[id]).id === id && label(object(skills[id]).name)) ||
       ![1, 2, 3, 4, 5, 6].every(rank => label(object(ranks[rank]).name)) ||
       !["point06", "point07", "point08"].every(point => {
@@ -230,10 +241,12 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal) : undefined;
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
     const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(legacyKey);
-    return matchingEntries(page, literal, legacyNames).map((entry) => {
-      const exactFireflyProId = kind === "character" && entry.game === "hsr" &&
-        entry.id === fireflyPro.id && entry.name === fireflyPro.name && literal === entry.id;
-      const direct = exact ? (exactName(entry.name) === key || exactFireflyProId ? 3 : 0) : score(entry, key, literal);
+    const pro = page.game === "hsr" && kind === "character" ? starRailProRoles.find(({ id, name }) =>
+      literal === id || literal === exactName(name) || legacyNames?.has(compareKey(name))) : undefined;
+    return (pro ? proEntries(page, pro) : page.entries).map((entry) => {
+      const matchedPro = pro && entry.id === pro.id && entry.name === pro.name;
+      const exactProId = matchedPro && literal === entry.id;
+      const direct = exact ? (exactName(entry.name) === key || exactProId ? 3 : 0) : score(entry, key, literal);
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
       // A verified name ranks below an exact record name and above a partial match.
       const alias = (aliasTarget?.id === entry.id && aliasTarget.name === entry.name) ||
@@ -242,7 +255,8 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
         legacyNames?.has(compareKey(entry.name)) ||
         (kind === "set" && page.game === "gi" && literal === "冰封迷途的勇士" &&
           entry.id === "14001" && entry.name === "冰风迷途的勇士");
-      return { kind, entry, score: alias ? Math.max(direct, 2.5) : direct };
+      // In the archived alias table a Pro alias registered after its base takes precedence.
+      return { kind, entry, score: alias ? Math.max(direct, matchedPro ? 2.75 : 2.5) : direct };
     });
   });
   const best = matches.reduce((best, match) => Math.max(best, match.score), 0);
@@ -561,7 +575,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
 
   return {
     assetRoot(entry: AtlasEntry): string {
-      return entryRoots.get(fireflyProSources.get(entry) ?? entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
+      return entryRoots.get(starRailProSources.get(entry)?.base ?? entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
     locale,
     findInDetails,
@@ -589,10 +603,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       if (item) return normalizeGenshinCard(entry.id, entry.version, item.content, item.meta.images);
     },
     async roleDetails(character: Character): Promise<RoleDetails | undefined> {
-      const base = fireflyProSources.get(character);
-      const item = await readItem(base ?? character, "character");
+      const pro = starRailProSources.get(character);
+      const item = await readItem(pro?.base ?? character, "character");
       if (!item) return;
-      const details = base ? fireflyProItem(item.content, item.meta.images) : { content: item.content, images: item.meta.images };
+      const details = pro ? starRailProItem(pro.role, item.content, item.meta.images) : { content: item.content, images: item.meta.images };
       if (!details) return;
       const { rank } = object(item.content.list);
       const rarity = character.game === "zzz" ? rank === 2 ? "" : zzzRarity(rank) : character.rarity;

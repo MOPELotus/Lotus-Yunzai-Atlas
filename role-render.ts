@@ -214,6 +214,16 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
     } };
   }
 
+  function railEnergy(value: number): Block {
+    return { height: 35, paint(ctx, top) {
+      const x = 169;
+      rounded(ctx, x, top, 106, 30, 5, "rgba(50,50,50,0.40)");
+      rounded(ctx, x, top, 80, 30, 5, "rgba(0,0,0,0.40)");
+      paintLines(ctx, ["能量恢复"], x + 8, top + 3, 16, 24, gold, "left", railFont, true);
+      paintLines(ctx, [String(value)], x + 93, top + 3, 16, 24, white, "center", railFont);
+    } };
+  }
+
   function railTableRow(values: readonly string[], widths: readonly number[], rowIndex: number): Block {
     const title = rowIndex === 0;
     const sizes = values.map((_, index) => index === 0 && !title ? 18 : 15);
@@ -347,7 +357,7 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
     return result;
   }
 
-  return { wrap, text, heading, railSkillText, row, statRow, material, levelBlocks };
+  return { wrap, text, heading, railSkillText, railEnergy, row, statRow, material, levelBlocks };
 }
 
 async function localAsset(path: string, maxBytes: number): Promise<Buffer | undefined> {
@@ -474,8 +484,11 @@ async function originalGenshinPortrait(role: RoleDetails, maxBytes = maxImageByt
   }
 }
 
-async function miaoSectionArtwork(role: RoleDetails, qFace: boolean, memosprite: boolean): Promise<{
+async function miaoSectionArtwork(role: RoleDetails, qFace: boolean, memosprite: boolean,
+  ranks: readonly number[], skills: ReadonlySet<string>): Promise<{
   card?: Image; face?: Image; talents?: Record<string, unknown>; memosprite?: Readonly<Record<"me" | "mt", Image | undefined>>;
+  ranks?: ReadonlyMap<number, Image>;
+  skills?: ReadonlyMap<string, Image>;
 }> {
   const { game, id, overview: { name } } = role;
   if (game === "zzz" || !/^[1-9]\d*$/u.test(id) || !name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return {};
@@ -502,15 +515,38 @@ async function miaoSectionArtwork(role: RoleDetails, qFace: boolean, memosprite:
       if (await realpath(folder).catch(() => undefined) !== folder) return;
       return (await artworkAsset(await localAsset(join(folder, filename), maxImageBytes).catch(() => undefined)))?.image;
     };
-    const [card, preferred, me, mt] = await Promise.all([
+    const talents = game === "hsr" ? object(record.talent) : undefined;
+    const talentImageSlots = /^(?:a|e|q|t|z|a1|a2|e1|e2|q1|q2|xe|me|mt)$/u;
+    const abilityFiles = [
+      ...Object.entries(talents ?? {}).flatMap(([slot, value]) => talentImageSlots.test(slot)
+        ? [[label(object(value).name), `talent-${slot}.webp`] as const] : []),
+      ...Object.values(object(record.treeData)).flatMap((value) => {
+        const trace = object(value);
+        return trace.type === "skill" && [1, 2, 3, 4].includes(Number(trace.idx))
+          ? [[label(trace.name), `tree-${Number(trace.idx)}.webp`] as const] : [];
+      }),
+    ];
+    const [card, preferred, me, mt, rankImages, skillImages] = await Promise.all([
       read(game === "gi" ? join(directory, "imgs") : join(base, "common", "imgs"), "card.webp"),
       qFace ? read(join(directory, "imgs"), "face-q.webp") : undefined,
       memosprite ? read(join(directory, "imgs"), "talent-me.webp") : undefined,
       memosprite ? read(join(directory, "imgs"), "talent-mt.webp") : undefined,
+      Promise.all(ranks.map(async rank => {
+        const skill = label(object(record.talentCons)[rank]);
+        const file = rank === 3 || rank === 5
+          ? talentImageSlots.test(skill) ? `talent-${skill}.webp` : undefined
+          : `cons-${rank}.webp`;
+        return [rank, file && await read(join(directory, "imgs"), file)] as const;
+      })),
+      Promise.all(abilityFiles.filter(([skill]) => skills.has(skill)).map(async ([skill, file]) =>
+        [skill, await read(join(directory, "imgs"), file)] as const)),
     ]);
     const face = preferred ?? await read(join(directory, "imgs"), "face.webp");
-    const talents = game === "hsr" ? object(record.talent) : undefined;
-    if (card || face || me || mt || (talents && Object.keys(talents).length)) return { card, face, talents, memosprite: { me, mt } };
+    const skillArtwork = new Map(skillImages.flatMap(([name, image]) => image ? [[name, image] as const] : []));
+    const rankArtwork = new Map(rankImages.flatMap(([rank, image]) => image ? [[rank, image] as const] : []));
+    if (card || face || me || mt || rankArtwork.size || skillArtwork.size || (talents && Object.keys(talents).length)) {
+      return { card, face, talents, memosprite: { me, mt }, ranks: rankArtwork, skills: skillArtwork };
+    }
   }
   return {};
 }
@@ -708,7 +744,8 @@ function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknow
   for (const { label: row, values } of card.sectionParameters) {
     const matches = oldRows.filter(({ values: old }) => Array.isArray(old) && values.every(({ level, value }) => {
       const previous = old[level - 1];
-      return typeof previous === "number" && Math.abs(previous - value) <= 1e-8;
+      // The archived tables round multipliers to five decimal places.
+      return typeof previous === "number" && Math.abs(previous - value) <= 0.00000501;
     }));
     const text = matches.length === 1 ? label(matches[0]!.name).slice(prefix ? prefix.length : 0) : "";
     if (text) labels.set(row, text);
@@ -740,13 +777,15 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
     section ? miaoSectionArtwork(role, options.qFace !== false,
-      skillGroups.some(({ cards }) => cards.some(card => card.memospriteIcon))) : undefined,
+      skillGroups.some(({ cards }) => cards.some(card => card.memospriteIcon)),
+      section === "ranks" && role.game === "hsr" ? ranks.map(rank => rank.rank) : [],
+      new Set(section === "skills" && role.game === "hsr" ? skillGroups.flatMap(({ cards }) => cards.map(({ name }) => name)) : [])) : undefined,
     section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
   const layout = makeLayout(texture, sectionBackdrop);
-  const { wrap, heading, text, statRow, material, railSkillText } = layout;
+  const { wrap, heading, text, statRow, material, railSkillText, railEnergy } = layout;
   const rail = role.game === "hsr" && section !== undefined;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
@@ -774,8 +813,11 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       const description = section ? card.sectionDescription ?? card.description : card.description;
       const levels = section ? sectionSkillLevels(card, sectionArt?.talents) : card.levels ?? [];
       const originalIcon = card.memospriteIcon ? sectionArt?.memosprite?.[card.memospriteIcon] : undefined;
-      const artwork = originalIcon ?? image(card.artwork);
-      const labels = (value: RoleSkillCard) => value.details.filter(item => !rail || item.label !== "类型").map(details);
+      const artwork = originalIcon ?? image(card.artwork) ?? sectionArt?.skills?.get(card.name);
+      const labels = (value: RoleSkillCard) => [
+        ...value.details.filter(item => !rail || item.label !== "类型").map(details),
+        ...(rail && value.sectionEnergy !== undefined ? [railEnergy(value.sectionEnergy)] : []),
+      ];
       const main = [
         ...(rail ? [railSkillText(card.name, description, artwork)] :
           [heading(card.name, artwork), ...(description ? [text(description)] : [])]),
@@ -803,7 +845,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   ]);
   if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
   if (ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: ranks.map((rank) => [
-    ...(rail ? [railSkillText(`${rank.rank} · ${rank.name}`, rank.description, image(rank.artwork))] :
+    ...(rail ? [railSkillText(`${rank.rank} · ${rank.name}`, rank.description, sectionArt?.ranks?.get(rank.rank) ?? image(rank.artwork))] :
       [heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)), ...(rank.description ? [text(rank.description)] : [])]),
     ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });

@@ -462,7 +462,7 @@ test("星铁流萤 Pro 的旧入口只读取已核实的强化技能、行迹和
     }] } as const;
     const skill = (id: number, name: string) => ({ id, name, type: 2, desc: name });
     const base = skill(131009, "普通技能");
-    const enhanced = skill(1131009, "强化技能");
+    const enhanced = { ...skill(1131009, "强化技能"), sp_base: 20 };
     const enhancedSkills = Object.fromEntries([1, 2, 3, 4, 7, 8, 9].map((suffix) => {
       const id = 1131000 + suffix;
       return [id, id === enhanced.id ? enhanced : skill(id, `技能${suffix}`)];
@@ -490,15 +490,17 @@ test("星铁流萤 Pro 的旧入口只读取已核实的强化技能、行迹和
 
     const [normal] = findCharacters(snapshot, "流萤", "hsr");
     expect(normal).toBe(flowfly);
-    expect((await catalog.roleDetails(normal!))?.skills[0]?.cards[0]).toMatchObject({
-      name: "普通技能", artwork: "gallery/hsr/base.webp",
-    });
+    const normalCard = (await catalog.roleDetails(normal!))?.skills[0]?.cards[0];
+    expect(normalCard).toMatchObject({ name: "普通技能", artwork: "gallery/hsr/base.webp" });
+    expect(normalCard?.sectionEnergy).toBeUndefined();
     for (const alias of ["流萤Pro", "流萤加强", "sam2", "Firefly2", "2310"]) {
       const [match] = findTraditionalEntries(snapshot, alias, "hsr", "character");
       expect(match?.entry).toMatchObject({ name: "流萤Pro", id: "2310" });
       const role = await catalog.roleDetails(match!.entry);
       expect(role?.overview).toMatchObject({ name: "流萤Pro", description: "角色简介" });
-      expect(role?.skills[0]?.cards.find(({ name }) => name === "强化技能")).toMatchObject({ artwork: "gallery/hsr/pro.webp" });
+      expect(role?.skills[0]?.cards.find(({ name }) => name === "强化技能")).toMatchObject({
+        artwork: "gallery/hsr/pro.webp", sectionEnergy: 20,
+      });
       expect(role?.skills[1]?.cards.map(({ name }) => name)).toEqual(["强化行迹6", "强化行迹7", "强化行迹8"]);
       expect(role?.ranks.map(({ name }) => name)).toEqual(Object.values(enhancedRanks).map(({ name }) => name));
     }
@@ -511,4 +513,18 @@ test("星铁流萤 Pro 的旧入口只读取已核实的强化技能、行迹和
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test("星铁 Pro 的重复旧别名优先指向最后登记的加强角色", () => {
+  const base = { ...entry("hsr"), id: "1006", name: "银狼" };
+  const snapshot = { stale: false, pages: [{
+    game: "hsr", kind: "character", sampled: false, name: "角色", version: base.version, entries: [base],
+  }] } as const;
+  for (const alias of ["牢狼pro", "老狼pro", "2006"]) {
+    expect(findTraditionalEntries(snapshot, alias, "hsr", "character").map(({ entry }) => [entry.id, entry.name]))
+      .toEqual([["2006", "银狼Pro"]]);
+  }
+  expect(findTraditionalEntries(snapshot, "牢狼pro", "gi", "character")).toEqual([]);
+  expect(findTraditionalEntries(snapshot, "小鸭鸭", "hsr", "character").map(({ entry }) => entry)).toEqual([base]);
 });

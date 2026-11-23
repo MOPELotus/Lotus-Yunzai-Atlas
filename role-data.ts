@@ -22,6 +22,7 @@ export interface RoleSkillCard {
   readonly levels?: readonly RoleSkillLevel[];
   readonly sectionLevels?: readonly RoleSkillLevel[];
   readonly sectionDescription?: string;
+  readonly sectionEnergy?: number;
   readonly sectionParameters?: readonly { label: string; values: readonly { level: number; value: number }[] }[];
   readonly omitFromSection?: boolean;
   readonly memospriteIcon?: "me" | "mt";
@@ -258,7 +259,7 @@ function starRailSkillCard(skill: RecordValue, artwork?: string): RoleSkillCard 
   const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
   const omitFromSection = label(skill.type) === "MazeNormal" || (!type && (integer(skill.id) ?? 0) % 100 === 6);
   return { name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
-    details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection,
+    details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection, sectionEnergy: number(skill.sp_base) || undefined,
     ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork };
 }
 
