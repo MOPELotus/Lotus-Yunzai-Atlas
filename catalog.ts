@@ -169,6 +169,56 @@ const legacyCharacterSetAliases = new Map(
   )]),
 );
 
+const fireflyPro = { id: "2310", name: "流萤Pro", baseId: "1310", baseName: "流萤" } as const;
+const fireflyProSources = new WeakMap<AtlasEntry, AtlasEntry>();
+
+function matchingEntries(page: AtlasPage, literal: string, aliases: Set<string> | undefined): readonly AtlasEntry[] {
+  if (page.game !== "hsr" || page.kind !== "character" ||
+      (literal !== fireflyPro.id && literal !== exactName(fireflyPro.name) && !aliases?.has(compareKey(fireflyPro.name)))) {
+    return page.entries;
+  }
+  // Prefer a real exported record if the data source begins publishing the enhancement separately.
+  if (page.entries.some(({ id, name }) => id === fireflyPro.id || exactName(name) === exactName(fireflyPro.name))) return page.entries;
+  const base = page.entries.find(({ id, name }) => id === fireflyPro.baseId && name === fireflyPro.baseName);
+  if (!base) return page.entries;
+  const enhanced = { ...base, id: fireflyPro.id, name: fireflyPro.name };
+  fireflyProSources.set(enhanced, base);
+  return [...page.entries, enhanced];
+}
+
+function fireflyProItem(content: Record<string, unknown>, images: unknown) {
+  const detail = object(content.detail);
+  if (label(detail.name) !== fireflyPro.baseName) return;
+  const enhancement = object(object(detail.enhanced)["1"]);
+  const ranks = object(enhancement.ranks);
+  const skillTrees = object(enhancement.skill_trees);
+  const skills = object(enhancement.skills);
+  // Do not present a partial or unrelated enhancement as the archived Pro character.
+  const skillIds = [1131001, 1131002, 1131003, 1131004, 1131007, 1131008, 1131009];
+  if (!skillIds.every(id => object(skills[id]).id === id && label(object(skills[id]).name)) ||
+      ![1, 2, 3, 4, 5, 6].every(rank => label(object(ranks[rank]).name)) ||
+      !["point06", "point07", "point08"].every(point => {
+        const trace = object(object(skillTrees[point])["1"]);
+        return trace.point_type === 3 && label(trace.point_name);
+      })) return;
+  const sourcePrefix = "detail.enhanced.1.";
+  const fields = Array.isArray(images) ? images : Object.values(object(images));
+  const covered = /^(?:skills|skill_trees|ranks)\./u;
+  const enhancedImages = fields.flatMap((raw) => {
+    const image = object(raw);
+    const fieldPath = label(image.fieldPath);
+    if (fieldPath.startsWith(sourcePrefix)) {
+      const field = fieldPath.slice(sourcePrefix.length);
+      return covered.test(field) ? [{ ...image, fieldPath: `detail.${field}` }] : [];
+    }
+    return fieldPath.startsWith("detail.") && covered.test(fieldPath.slice(7)) ? [] : [image];
+  });
+  return {
+    content: { ...content, detail: { ...detail, ranks, skill_trees: skillTrees, skills } },
+    images: enhancedImages,
+  };
+}
+
 function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false, includePartial = false) {
   const literal = exactName(query);
   const key = exact ? literal : compareKey(query);
@@ -180,8 +230,10 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal) : undefined;
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
     const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(legacyKey);
-    return page.entries.map((entry) => {
-      const direct = exact ? (exactName(entry.name) === key ? 3 : 0) : score(entry, key, literal);
+    return matchingEntries(page, literal, legacyNames).map((entry) => {
+      const exactFireflyProId = kind === "character" && entry.game === "hsr" &&
+        entry.id === fireflyPro.id && entry.name === fireflyPro.name && literal === entry.id;
+      const direct = exact ? (exactName(entry.name) === key || exactFireflyProId ? 3 : 0) : score(entry, key, literal);
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
       // A verified name ranks below an exact record name and above a partial match.
       const alias = (aliasTarget?.id === entry.id && aliasTarget.name === entry.name) ||
@@ -509,7 +561,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
 
   return {
     assetRoot(entry: AtlasEntry): string {
-      return entryRoots.get(entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
+      return entryRoots.get(fireflyProSources.get(entry) ?? entry) ?? (publishedRoot ? snapshot?.root : undefined) ?? configuredRoot;
     },
     locale,
     findInDetails,
@@ -537,11 +589,14 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       if (item) return normalizeGenshinCard(entry.id, entry.version, item.content, item.meta.images);
     },
     async roleDetails(character: Character): Promise<RoleDetails | undefined> {
-      const item = await readItem(character, "character");
+      const base = fireflyProSources.get(character);
+      const item = await readItem(base ?? character, "character");
       if (!item) return;
+      const details = base ? fireflyProItem(item.content, item.meta.images) : { content: item.content, images: item.meta.images };
+      if (!details) return;
       const { rank } = object(item.content.list);
       const rarity = character.game === "zzz" ? rank === 2 ? "" : zzzRarity(rank) : character.rarity;
-      return normalizeRoleDetails(character, item.content, rarity, item.meta.images, item.meta.materialNames);
+      return normalizeRoleDetails(character, details.content, rarity, details.images, item.meta.materialNames);
     },
     async weaponDetails(entry: AtlasEntry) {
       const item = await readItem(entry, equipmentPages[entry.game].id);

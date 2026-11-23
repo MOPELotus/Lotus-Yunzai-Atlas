@@ -450,3 +450,65 @@ test("星铁强化技能保留公式里的非百分比小数系数", () => {
   expect(enhanced?.sectionDescription).toBe("(0.2×击破特攻+175.0% (Lv8))攻击力，相邻比例0.1。");
   expect(enhanced?.sectionLevels?.[1]?.details).toEqual([{ label: "正文第 1 项", text: "175.0%" }]);
 });
+
+test("星铁流萤 Pro 的旧入口只读取已核实的强化技能、行迹和星魂", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lotus-atlas-flowfly-"));
+  try {
+    await mkdir(join(root, "items"));
+    const flowfly = { ...entry("hsr"), id: "1310", name: "流萤" };
+    const catalog = createAtlasCatalog(root);
+    const snapshot = { stale: false, pages: [{
+      game: "hsr", kind: "character", sampled: false, name: "角色", version: flowfly.version, entries: [flowfly],
+    }] } as const;
+    const skill = (id: number, name: string) => ({ id, name, type: 2, desc: name });
+    const base = skill(131009, "普通技能");
+    const enhanced = skill(1131009, "强化技能");
+    const enhancedSkills = Object.fromEntries([1, 2, 3, 4, 7, 8, 9].map((suffix) => {
+      const id = 1131000 + suffix;
+      return [id, id === enhanced.id ? enhanced : skill(id, `技能${suffix}`)];
+    }));
+    const enhancedTraces = Object.fromEntries([6, 7, 8].map(point =>
+      [`point0${point}`, { 1: { point_type: 3, point_name: `强化行迹${point}` } }]));
+    const enhancedRanks = Object.fromEntries(Array.from({ length: 6 }, (_, index) => {
+      const rank = index + 1;
+      return [rank, { level: rank, name: `强化星魂${rank}`, desc: "强化效果" }];
+    }));
+    const records = {
+      gameId: "hsr", pageId: "character", recordId: "1310", version: flowfly.version,
+      images: [
+        { fieldPath: "detail.skills.131009.icon", localPath: "gallery/hsr/base.webp", status: "downloaded", placeholder: false },
+        { fieldPath: "detail.enhanced.1.skills.1131009.icon", localPath: "gallery/hsr/pro.webp", status: "downloaded", placeholder: false },
+      ],
+    };
+    const descriptions = {
+      name: flowfly.name, desc: "角色简介", skills: { [base.id]: base },
+      ranks: { 1: { level: 1, name: "普通星魂", desc: "普通效果" } },
+      enhanced: { 1: { skills: enhancedSkills, ranks: enhancedRanks, skill_trees: enhancedTraces } },
+    };
+    const file = join(root, flowfly.path);
+    await writeFile(file, JSON.stringify({ meta: records, content: { detail: descriptions } }));
+
+    const [normal] = findCharacters(snapshot, "流萤", "hsr");
+    expect(normal).toBe(flowfly);
+    expect((await catalog.roleDetails(normal!))?.skills[0]?.cards[0]).toMatchObject({
+      name: "普通技能", artwork: "gallery/hsr/base.webp",
+    });
+    for (const alias of ["流萤Pro", "流萤加强", "sam2", "Firefly2", "2310"]) {
+      const [match] = findTraditionalEntries(snapshot, alias, "hsr", "character");
+      expect(match?.entry).toMatchObject({ name: "流萤Pro", id: "2310" });
+      const role = await catalog.roleDetails(match!.entry);
+      expect(role?.overview).toMatchObject({ name: "流萤Pro", description: "角色简介" });
+      expect(role?.skills[0]?.cards.find(({ name }) => name === "强化技能")).toMatchObject({ artwork: "gallery/hsr/pro.webp" });
+      expect(role?.skills[1]?.cards.map(({ name }) => name)).toEqual(["强化行迹6", "强化行迹7", "强化行迹8"]);
+      expect(role?.ranks.map(({ name }) => name)).toEqual(Object.values(enhancedRanks).map(({ name }) => name));
+    }
+    expect(findTraditionalEntries(snapshot, "流萤Pro", "gi", "character")).toEqual([]);
+    expect(findTraditionalEntries(snapshot, "流萤P", "hsr", "character")).toEqual([]);
+
+    const [missing] = findCharacters(snapshot, "2310", "hsr");
+    await writeFile(file, JSON.stringify({ meta: records, content: { detail: { ...descriptions, enhanced: {} } } }));
+    await expect(catalog.roleDetails(missing!)).resolves.toBeUndefined();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
