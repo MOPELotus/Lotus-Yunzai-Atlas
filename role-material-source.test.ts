@@ -82,6 +82,10 @@ test("角色材料按游戏和角色数据版本联查，保留直接名称和�
     expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([zzz]);
     const partial = await Bun.file(join(data, "items/zzz.json")).text();
     expect(await pendingAtlasRoleMaterials(data, selected)).toEqual([zzz]);
+    const beforeImageRetry = paths.length;
+    expect(await pendingAtlasRoleMaterials(data, selected, undefined, false)).toEqual([]);
+    expect(await completeAtlasRoleMaterials(root, selected, undefined, request, false)).toEqual([]);
+    expect(paths).toHaveLength(beforeImageRetry);
     expect(await completeAtlasRoleMaterials(root, selected, undefined, request)).toEqual([]);
     expect(await Bun.file(join(data, "items/zzz.json")).text()).toBe(partial);
     zzzIconAvailable = true;

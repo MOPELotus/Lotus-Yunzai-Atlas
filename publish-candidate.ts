@@ -1,12 +1,12 @@
 import { Database } from "bun:sqlite";
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, stat, symlink, unlink } from "node:fs/promises";
+import { lstat, mkdir, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { candidateFile, candidateGallery } from "./candidate-gallery.ts";
+import { candidateGallery } from "./candidate-gallery.ts";
 import { atlasResetTarget, atlasSnapshotTarget, isAtlasSnapshotVersion, readAtlasPublicationPointer,
   readAtlasSnapshotPointer, type discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
-import { atlasRootIsEmpty } from "./legacy-atlas-directory.ts";
-import { object } from "./source-values.ts";
+import { atlasRootIsEmpty, discoverRuntimeAtlasDataDirectory } from "./legacy-atlas-directory.ts";
+import { atlasCandidateItems, retainAtlasGallery } from "./retain-gallery.ts";
 import { validateAtlasCandidate, type AtlasCandidateValidation } from "./validate-candidate.ts";
 
 type Version = number | null;
@@ -21,6 +21,11 @@ export type AtlasPublication =
 
 export interface AtlasPreparation {
   baseline?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>;
+}
+
+export interface AtlasPublicationOptions {
+  readonly preparation?: AtlasPreparation;
+  readonly retainGallery?: boolean;
 }
 
 interface PreparedPublication {
@@ -100,19 +105,9 @@ export async function resetAtlasSnapshot(root: string, signal?: AbortSignal) {
 }
 
 async function verifyGallery(candidate: string, pages: AtlasCandidateValidation["pages"], signal?: AbortSignal) {
-  const map: unknown = JSON.parse(await readFile(await candidateFile(candidate, "map.json"), "utf8"));
-  const games = object(object(map).games);
   const gallery = candidateGallery();
-  for (const { game, pageId } of pages) {
-    const pageMap = object(object(object(object(games[game]).locales).zh).pages);
-    const { records } = object(pageMap[pageId]);
-    for (const record of Object.values(object(records))) {
-      signal?.throwIfAborted();
-      const { path } = object(record);
-      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("候选条目路径无效。");
-      const item: unknown = JSON.parse(await readFile(await candidateFile(candidate, path), "utf8"));
-      await gallery.include(item, game, dirname(candidate), signal);
-    }
+  for await (const { game, item } of atlasCandidateItems(candidate, pages, signal)) {
+    await gallery.include(item, game, dirname(candidate), signal);
   }
 }
 
@@ -123,7 +118,8 @@ async function verifyGallery(candidate: string, pages: AtlasCandidateValidation[
  */
 async function publish(root: string, expected: Version, expectedPages: AtlasCandidateValidation["pages"],
   prepare: (root: string) => Promise<PreparedPublication>, signal?: AbortSignal, initialize: Initialization = false,
-  preparation?: AtlasPreparation): Promise<AtlasPublication> {
+  options?: AtlasPublicationOptions): Promise<AtlasPublication> {
+  const { preparation, retainGallery } = options ?? {};
   signal?.throwIfAborted();
   if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
   const directory = await realpath(root);
@@ -151,6 +147,15 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     }
     try {
       await verifyGallery(candidate, validation.pages, signal);
+      if (retainGallery && !preparation) {
+        const baseline = pointer === "reset" ? undefined : await discoverRuntimeAtlasDataDirectory(directory)
+          .then(({ root }) => root, error => {
+            if (errorCode(error) !== "ENOENT") throw error;
+            return undefined;
+          });
+        await retainAtlasGallery(candidate, validation.pages, baseline, signal);
+        await verifyGallery(candidate, validation.pages, signal);
+      }
     } catch (error) {
       signal?.throwIfAborted();
       const issue = errorCode(error) ? "发布候选引用的图库文件缺失或不可读。" :
@@ -211,14 +216,14 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
 /** Move an assembled, caller-owned private candidate into the version store under the publication lock. */
 export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
   expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize: Initialization = false,
-  preparation?: AtlasPreparation): Promise<AtlasPublication> {
+  options?: AtlasPublicationOptions): Promise<AtlasPublication> {
   if (initialize && expected !== null) throw new Error("首版图鉴初始化要求没有现用指针。");
   return publish(root, expected, expectedPages, async (directory) => {
     const stagedRoot = dirname(prepared);
     if (dirname(stagedRoot) !== dirname(directory) || !basename(stagedRoot).startsWith(atlasApplyStagingPrefix) ||
         basename(prepared) !== "candidate") throw new Error("图鉴发布只接收相邻私有暂存中的合成候选。");
-    const target = preparation ? join(directory, ".prepared") : directory;
-    if (preparation) {
+    const target = options?.preparation ? join(directory, ".prepared") : directory;
+    if (options?.preparation) {
       await mkdir(target, { mode: 0o700 }).catch((error) => {
         if (errorCode(error) !== "EEXIST") throw error;
       });
@@ -253,5 +258,5 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
         await rmdir(stagedRoot);
       },
     };
-  }, signal, initialize, preparation);
+  }, signal, initialize, options);
 }

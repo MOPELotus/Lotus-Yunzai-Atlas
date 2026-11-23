@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import { createAtlasRuntimeCatalog, findCharacters, findEquipment } from "./catalog.ts";
 import { readAtlasSnapshotVersion, type AtlasPreparation } from "./publish-candidate.ts";
+import { galleryArtwork } from "./source-values.ts";
 
 async function fixture(run: (workspace: string, root: string) => Promise<void>) {
   const workspace = await mkdtemp(join(tmpdir(), "lotus-atlas-apply-fixture-"));
@@ -94,9 +96,10 @@ test("同轮不同分类累积到独立候选，活跃指针变化拒绝继续�
   await snapshot(root, "1", ["weapon", "character"]);
   await snapshot(source, "2", ["weapon", "character"]);
   const preparation: AtlasPreparation = {};
+  const publication = { preparation };
   const candidate = join(root, ".prepared");
-  expect(await applyAtlasCandidate(root, source, weapon, undefined, undefined, preparation)).toMatchObject({ status: "prepared", version: 1 });
-  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, preparation)).toMatchObject({ status: "prepared", version: 2 });
+  expect(await applyAtlasCandidate(root, source, weapon, undefined, undefined, publication)).toMatchObject({ status: "prepared", version: 1 });
+  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, publication)).toMatchObject({ status: "prepared", version: 2 });
   expect(await readAtlasSnapshotVersion(root)).toBeNull();
   expect(await readlink(join(candidate, "current"))).toBe("snapshots/2/data");
   expect(await readdir(join(candidate, "snapshots"))).toEqual(["2"]);
@@ -108,7 +111,48 @@ test("同轮不同分类累积到独立候选，活跃指针变化拒绝继续�
   expect(findCharacters(await staged.read(), "character 2", "gi")).toHaveLength(1);
 
   expect(await applyAtlasCandidate(root, source, weapon)).toMatchObject({ status: "published", version: 1 });
-  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, preparation))
+  expect(await applyAtlasCandidate(root, source, roles, undefined, preparation.baseline, publication))
     .toEqual({ status: "stale", current: 1 });
   expect(await readlink(join(candidate, "current"))).toBe("snapshots/2/data");
+}));
+
+test("关闭图库同步时保留旧字节和引用，发布新资料且没有新增图片的悬挂路径", () => fixture(async (workspace, root) => {
+  const source = join(workspace, "source");
+  await snapshot(root, "1");
+  await snapshot(source, "2");
+  async function attach(base: string, files: readonly (readonly [string, string])[]) {
+    const file = join(base, "data/items/weapon.json");
+    const previous = await Bun.file(file).json();
+    await mkdir(join(base, "gallery/gi"), { recursive: true });
+    const images = await Promise.all(files.map(async ([name, bytes]) => {
+      const localPath = `gallery/gi/${name}.webp`;
+      await writeFile(join(base, localPath), bytes);
+      return { fieldPath: name, status: "downloaded", placeholder: false, localPath, bytes: bytes.length,
+        remoteUrl: `https://static.nanoka.cc/assets/gi/${name}.webp`, sha256: createHash("sha256").update(bytes).digest("hex") };
+    }));
+    const text = JSON.stringify({ ...previous, meta: { ...previous.meta, images } });
+    await writeFile(file, text.replace('"detail":null', '"detail":null,"uncut":90071992547409939'));
+  }
+  await attach(root, [["same", "old bytes"], ["previous", "untouched"]]);
+  await attach(source, [["same", "changed image at same URL"], ["fresh", "brand new bytes"]]);
+  const result = await applyAtlasCandidate(root, source, weapon, undefined, undefined, { retainGallery: true });
+  expect(result).toMatchObject({ status: "published", version: 1 });
+  const output = join(root, "snapshots/1");
+  expect(await readFile(join(output, "gallery/gi/same.webp"), "utf8")).toBe("old bytes");
+  expect(await readFile(join(output, "gallery/gi/previous.webp"), "utf8")).toBe("untouched");
+  expect(await Bun.file(join(output, "gallery/gi/fresh.webp")).exists()).toBe(false);
+  const item = join(output, "data/items/weapon.json");
+  expect(await readFile(item, "utf8")).toContain('"uncut":90071992547409939');
+  const { meta } = await Bun.file(item).json();
+  expect(meta.version).toBe("2");
+  expect(meta.images[1]).toMatchObject({ status: "not-synced", localPath: null, sha256: null });
+  expect(galleryArtwork(meta.images, "gi")("same", "fresh")).toBe("gallery/gi/same.webp");
+  expect(galleryArtwork(meta.images, "gi")("fresh")).toBeUndefined();
+
+  expect(await applyAtlasCandidate(root, source, weapon, undefined, undefined, { retainGallery: true }))
+    .toMatchObject({ status: "published", version: 2 });
+  expect(await readFile(join(root, "snapshots/2/gallery/gi/previous.webp"), "utf8")).toBe("untouched");
+  const refreshed = await applyAtlasCandidate(root, source, weapon);
+  expect(refreshed).toMatchObject({ status: "published", version: 3 });
+  expect(await readFile(join(root, "snapshots/3/gallery/gi/fresh.webp"), "utf8")).toBe("brand new bytes");
 }));

@@ -9,7 +9,7 @@ import { inspectFullAtlasImages, inspectFullAtlasArtwork } from "./full-candidat
 import { evidenceObject, legacyEffectiveEvidenceDigest, parseLegacyJsonEvidence } from "./legacy-json-evidence.ts";
 import type { Game } from "./catalog.ts";
 import { challengeModes, deadlyAssaultMode, readChallengeFacts, shiyuMode } from "./challenges.ts";
-import { readAtlasSnapshotVersion, type AtlasPreparation, type AtlasPublication } from "./publish-candidate.ts";
+import { readAtlasSnapshotVersion, type AtlasPublicationOptions, type AtlasPublication } from "./publish-candidate.ts";
 import { discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { acquireAtlasSource } from "./source-acquisition.ts";
 import { effectText, label, object } from "./source-values.ts";
@@ -75,7 +75,7 @@ export interface AtlasRefreshOptions {
   readonly request?: Parameters<typeof acquireAtlasSource>[3];
   readonly preserveRecords?: boolean;
   readonly expected?: Awaited<ReturnType<typeof discoverAtlasDataDirectory>>;
-  readonly preparation?: AtlasPreparation;
+  readonly publication?: AtlasPublicationOptions;
 }
 
 export type AtlasSourceRefresh = AtlasPublication
@@ -321,7 +321,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
   const scope = [{ game: page.game, pageId: page.pageId }] as const;
   signal?.throwIfAborted();
   const directory = await realpath(root).catch(() => undefined);
-  const baseline = options.preparation?.baseline ?? (directory && await discoverAtlasDataDirectory(directory).catch(() => undefined));
+  const baseline = options.publication?.preparation?.baseline ?? (directory && await discoverAtlasDataDirectory(directory).catch(() => undefined));
   if (!directory || !baseline) return { status: "review", reason: "local-unverified" };
   if (options.expected && (options.expected.version !== baseline.version || options.expected.root !== baseline.root)) {
     return { status: "stale", current: baseline.version };
@@ -391,7 +391,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
       }
     }
     if (issues.length) return { status: "invalid", issues };
-    publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline, options.preparation);
+    publication = await applyAtlasCandidate(directory, source.directory, plan.candidateRequirements, signal, baseline, options.publication);
     return publication;
   } finally {
     const cleanup = rm(stage, { recursive: true, force: true });

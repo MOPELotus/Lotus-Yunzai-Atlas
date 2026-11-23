@@ -87,7 +87,7 @@ async function readRoleMaterials(data: string, path: unknown, recordId: string, 
 }
 
 export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(data: string, pages: readonly T[],
-  signal?: AbortSignal) {
+  signal?: AbortSignal, includeArtwork = true) {
   const map = await Bun.file(await candidateFile(data, "map.json")).json();
   const pending: T[] = [];
   for (const page of pages) {
@@ -98,7 +98,7 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
     for (const [recordId, record] of Object.entries(object(source.records))) {
       signal?.throwIfAborted();
       const { items } = await readRoleMaterials(data, object(record).path, recordId, game, version);
-      if (items.some(item => !item.name || !item.artwork)) {
+      if (items.some(item => !item.name || includeArtwork && !item.artwork)) {
         pending.push(page);
         break;
       }
@@ -109,15 +109,15 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
 
 /** Join exact-version item data only to character records already checked by the source exporter. */
 export async function completeAtlasRoleMaterials(root: string, scope: readonly AtlasCandidatePage[],
-  signal?: AbortSignal, request: AtlasSourceFetch = fetch) {
+  signal?: AbortSignal, request: AtlasSourceFetch = fetch, includeArtwork = true) {
   const data = join(root, "data");
   const map = await Bun.file(await candidateFile(data, "map.json")).json();
-  const pending = await pendingAtlasRoleMaterials(data, scope, signal);
+  const pending = await pendingAtlasRoleMaterials(data, scope, signal, includeArtwork);
   if (!pending.length) return [];
   const updated: AtlasCandidatePage[] = [];
   for (const { game, version } of pending) {
     try {
-      if (await completeGameMaterials(root, data, map, game, version, request, signal)) {
+      if (await completeGameMaterials(root, data, map, game, version, request, signal, includeArtwork)) {
         updated.push({ game, pageId: "character", version });
       }
     } catch (error) {
@@ -129,7 +129,7 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
 }
 
 async function completeGameMaterials(root: string, data: string, map: unknown, game: Game, version: string | undefined,
-  request: AtlasSourceFetch, signal?: AbortSignal) {
+  request: AtlasSourceFetch, signal: AbortSignal | undefined, includeArtwork: boolean) {
   if (!version || !materialVersion.test(version)) throw new Error("图鉴材料版本无效。");
   const rolePage = characterPage(map, game);
   const roles = [];
@@ -153,7 +153,7 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
   if (!sources.size) throw new Error("图鉴同版物品表未包含角色引用的材料。");
   const shared = new Map<string, ReturnType<typeof loadIcon>>();
   const icons = new Map<string, Awaited<ReturnType<typeof loadIcon>>>();
-  const wanted = [...new Set(roles.flatMap(({ items }) => items.flatMap(({ id, artwork }) => artwork ? [] : [id!])))];
+  const wanted = includeArtwork ? [...new Set(roles.flatMap(({ items }) => items.flatMap(({ id, artwork }) => artwork ? [] : [id!])))] : [];
   for (let index = 0; index < wanted.length; index += 6) {
     const results = await Promise.allSettled(wanted.slice(index, index + 6).map(async (id) => {
       for (const name of sources.get(id)?.icons ?? []) {

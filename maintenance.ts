@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { atlasSourcePlan, atlasSourceSelections, refreshAtlasSource, type AtlasRefreshOptions,
   type AtlasSourceRefresh, type SourceSelection } from "./refresh-source.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
-import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot, type AtlasPreparation, type AtlasPublication } from "./publish-candidate.ts";
+import { hasLegacyAtlasData, readAtlasSnapshotVersion, resetAtlasSnapshot, type AtlasPublicationOptions, type AtlasPublication } from "./publish-candidate.ts";
 import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.ts";
 import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
@@ -67,15 +67,22 @@ interface AtlasMaintenanceContext {
 export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOptions = {}) {
   const { signal, request, dataOverride, manifest = fetchAtlasManifest } = options;
   const policy = parseAtlasUpdatePolicy(options.updateConfig);
-  const configuredChannel = object(options.updateConfig).version_channel;
-  const syncAfterUpdate = object(options.updateConfig).sync_after_update !== false;
+  const configured = object(options.updateConfig);
+  const configuredChannel = configured.version_channel;
+  const syncAfterUpdate = configured.sync_after_update !== false;
+  const syncGallery = configured.sync_gallery !== false;
+  const includeArtwork = syncGallery || !syncAfterUpdate;
   const channel = configuredChannel === undefined ? "latest" : configuredChannel;
   const workspace = join(dirname(root), "atlas-download");
   let updating = false;
 
-  function acceptedBaseline(result: AtlasPublication, preparation?: AtlasPreparation) {
+  function publicationOptions(): AtlasPublicationOptions {
+    return { preparation: syncAfterUpdate ? undefined : {}, retainGallery: !syncGallery };
+  }
+
+  function acceptedBaseline(result: AtlasPublication, publication?: AtlasPublicationOptions) {
     if (result.status === "published") return { version: result.version, root: result.directory };
-    if (result.status === "prepared") return preparation?.baseline;
+    if (result.status === "prepared") return publication?.preparation?.baseline;
   }
 
   async function run(kind: "check" | "update", selections: readonly string[], trigger?: AtlasScheduleKind | "manual-update",
@@ -86,7 +93,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (kind === "update" && dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维更新该目录。";
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     if (kind === "update") updating = true;
-    const preparation: AtlasPreparation | undefined = kind === "update" && !syncAfterUpdate ? {} : undefined;
+    const publication = kind === "update" ? publicationOptions() : undefined;
     try {
       await onStart?.();
       let active = dataOverride ? undefined : await discoverAtlasDataDirectory(root).catch(() => undefined);
@@ -103,7 +110,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         if (initializeMissing && channel === configuredChannel && !dataOverride && await atlasRootIsEmpty(root)) {
           await mkdir(root, { recursive: true, mode: 0o700 });
           const result = await initializeAtlasFromPublic(root, workspace, signal, channel,
-            { manifest, request, emptyOnly: true, downloadVersion: options.downloadVersion, preparation });
+            { manifest, request, emptyOnly: true, downloadVersion: options.downloadVersion, publication });
           const action = trigger === "version" ? "自动初始化" : "初始化";
           if (result.status === "prepared") return `图鉴${action}候选已保存，尚未发布至现用目录。候选 ${result.version}。`;
           return result.status === "published" ? `图鉴${action}完成，已发布第 ${result.version} 版。`
@@ -144,23 +151,23 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         version === versions[game] && scope.some(page => page.game === game && page.pageId === pageId));
       if (trigger !== "challenge" && currentRoles.length && (!wantsCards || cardsVersion && !changeCards)) {
         const { completeAtlasRoleMaterials, pendingAtlasRoleMaterials } = await import("./role-material-source.ts");
-        const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal);
+        const pending = await pendingAtlasRoleMaterials(baseline, currentRoles, signal, includeArtwork);
         if (pending.length && kind === "check") {
-          lines.push(`${pending.length} 个角色分类待补齐同版材料名称与图标。`);
+          lines.push(`${pending.length} 个角色分类待补齐同版材料名称${includeArtwork ? "与图标" : ""}。`);
         } else if (pending.length) {
           const stage = await mkdtemp(join(dirname(root), ".atlas-material-update-"));
           try {
             const { copyAtlasSelectedPages } = await import("./assemble-candidate.ts");
             const prepared = await copyAtlasSelectedPages(dirname(baseline), join(stage, "source"), pending, signal);
-            const updated = await completeAtlasRoleMaterials(prepared.directory, pending, signal, request);
+            const updated = await completeAtlasRoleMaterials(prepared.directory, pending, signal, request, includeArtwork);
             if (pending.length > updated.length) {
-              lines.push(`${pending.length - updated.length} 个角色分类仍缺同版材料名称或原图。`);
+              lines.push(`${pending.length - updated.length} 个角色分类仍缺同版材料名称${includeArtwork ? "或原图" : ""}。`);
             }
             if (updated.length) {
-              const result = await applyAtlasCandidate(root, prepared.directory, updated, signal, active, preparation);
-              lines.push(result.status === "published" ? `${updated.length} 个角色分类已补齐同版材料名称与可用原图。`
+              const result = await applyAtlasCandidate(root, prepared.directory, updated, signal, active, publication);
+              lines.push(result.status === "published" ? `${updated.length} 个角色分类已补齐同版材料名称${includeArtwork ? "与可用原图" : ""}。`
                 : `同版角色材料：${describeRefresh(result, "")}。`);
-              const next = acceptedBaseline(result, preparation);
+              const next = acceptedBaseline(result, publication);
               if (next) {
                 active = next;
                 baseline = next.root;
@@ -176,7 +183,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         }
       }
 
-      if (allCurrent && trigger !== "challenge" && (!wantsCards || cardsVersion && !changeCards) &&
+      if (includeArtwork && allCurrent && trigger !== "challenge" && (!wantsCards || cardsVersion && !changeCards) &&
           versions.gi && scope.some(({ game, pageId }) => game === "gi" && pageId === "character")) {
         try {
           const { genshinOriginalPortraitStatus } = await import("./genshin-original-portraits.ts");
@@ -196,7 +203,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
             const repaired = await downloadAtlasVersionFromIndexes(workspace, root, indexes, async (source, pages) => {
               const { ready } = await genshinOriginalPortraitStatus(join(source, "data"), version, signal);
               recovered = pending.filter((id) => ready.includes(id)).length;
-              if (recovered) return applyAtlasCandidate(root, source, pages, signal, active, preparation);
+              if (recovered) return applyAtlasCandidate(root, source, pages, signal, active, publication);
             }, signal, baseline, request);
             lines.push(repaired?.status === "published"
               ? `原神角色已补齐 ${recovered} 张原立绘，发布至快照 ${repaired.version}。`
@@ -244,17 +251,17 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
                 const cards = await acquireAtlasSource(join(stage, "cards"), [
                   { game: "gi", pageId: "gcg", version: cardsVersion },
                 ], signal, request);
-                if (!source) return await applyAtlasCandidate(root, cards.directory, cards.pages, signal, active, preparation);
+                if (!source) return await applyAtlasCandidate(root, cards.directory, cards.pages, signal, active, publication);
                 const { assembleAtlasCandidate } = await import("./assemble-candidate.ts");
                 const combined = await assembleAtlasCandidate(source, cards.directory, join(stage, "combined"), cards.pages, signal);
-                return await applyAtlasCandidate(root, combined.directory, [...pages, ...cards.pages], signal, active, preparation);
+                return await applyAtlasCandidate(root, combined.directory, [...pages, ...cards.pages], signal, active, publication);
               } finally {
                 await rm(stage, { recursive: true, force: true }).catch(() => undefined);
               }
             };
             const publish = (source: string, pages: readonly AtlasCandidatePage[]) => changeCards
               ? publishWithCards(source, pages)
-              : applyAtlasCandidate(root, source, pages, signal, active, preparation);
+              : applyAtlasCandidate(root, source, pages, signal, active, publication);
             const { downloadAtlasVersion, downloadAtlasVersionFromIndexes } = await import("./download-legacy-atlas.ts");
             const result = observed ? await downloadAtlasVersionFromIndexes(workspace, root, observed, publish, signal, baseline)
               : allCurrent ? await publishWithCards()
@@ -283,9 +290,9 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         else {
           try {
             const result = await refreshAtlasSource(root, { selection, preserveRecords: true, expected: active, signal, request,
-              channel, manifest: async () => listing, preparation });
+              channel, manifest: async () => listing, publication });
             summary = describeRefresh(result, entry.targetVersion);
-            if (result.status === "published" || result.status === "prepared") active = acceptedBaseline(result, preparation);
+            if (result.status === "published" || result.status === "prepared") active = acceptedBaseline(result, publication);
             if (result.status === "busy" || result.status === "stale") {
               lines.push(`${title} · ${summary}`, "其余待更新分类留待下次检查。");
               return lines.join("\n");
@@ -373,13 +380,13 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
 
   async function runFullUpdate(channel: AtlasVersionChannel) {
     let existing = false;
-    const preparation: AtlasPreparation | undefined = syncAfterUpdate ? undefined : {};
+    const publication = publicationOptions();
     try {
       await mkdir(root, { recursive: true, mode: 0o700 });
       existing = await readAtlasSnapshotVersion(root) !== null || await hasLegacyAtlasData(root);
       if (existing) {
         const { refreshFullAtlasFromPublic } = await import("./full-refresh.ts");
-        const result = await refreshFullAtlasFromPublic(root, workspace, channel, manifest, request, signal, preparation);
+        const result = await refreshFullAtlasFromPublic(root, workspace, channel, manifest, request, signal, publication);
         if (result.status === "current") return "三款游戏的全部 30 类图鉴已重新核对，和现用资料一致。";
         if (result.status === "published") return `三款游戏的全部 30 类图鉴已更新，发布至快照 ${result.version}。`;
         if (result.status === "review") {
@@ -394,14 +401,14 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
         return `${describeRefresh(result, "")}。`;
       }
       const donor = configuredChannel === undefined ? await findLegacyAtlasExport(root) : undefined;
-      const result = donor ? await initializeAtlas(root, donor, signal, preparation)
-        : await initializeAtlasFromPublic(root, workspace, signal, channel, { manifest, request, preparation });
+      const result = donor ? await initializeAtlas(root, donor, signal, publication)
+        : await initializeAtlasFromPublic(root, workspace, signal, channel, { manifest, request, publication });
       if (result.status === "published" || result.status === "prepared") {
         const initial = result.status === "published" ? `图鉴初始化完成，已发布第 ${result.version} 版。`
           : `图鉴初始化候选 ${result.version} 已保存，尚未发布至现用目录。`;
         if (!donor) return initial;
         const next = await refreshAtlasSource(root, { selection: atlasGenshinCardSelection, channel, signal, request, manifest,
-          expected: acceptedBaseline(result, preparation), preparation }).catch(() => undefined);
+          expected: acceptedBaseline(result, publication), publication }).catch(() => undefined);
         if (next?.status === "published") return `${initial}七圣召唤已发布至第 ${next.version} 版。`;
         if (next?.status === "prepared") return `${initial}七圣召唤已保存到候选 ${next.version}。`;
         if (next?.status === "current") return initial;
