@@ -16,7 +16,7 @@ export async function atlasBookReply(name: string, render: (scale: 4 | 2) => Pro
   const batches = batchInlineImagePages(pages, budget, bytes);
   if (!batches?.length) throw new RangeError("图鉴单页超过当前聊天的图片大小上限。");
 
-  const sections = pages.map(({ section }) => section).join(" → ");
+  const sections = [...new Set(pages.map(({ section }) => section))].join(" → ");
   const title = `${name}完整图鉴\n${sections}\n共 ${pages.length} 页`;
   const image = ({ png }: BookPage) => ({ type: "image" as const, file: png });
   if (batches.length === 1) return { type: "forward", nodes: [title, ...pages.map(image)] };

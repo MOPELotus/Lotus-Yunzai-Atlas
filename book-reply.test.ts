@@ -28,6 +28,15 @@ test("二倍整册仍超限就沿原分项继续发合并批次", async () => {
   } else throw new Error("missing batches");
 });
 
+test("整册标题按旧顺序列各分项一次，保留同分项全部页", async () => {
+  const rendered = pages([7, 6, 5, 8]).map((page, index) => index === 2 ? { ...page, section: "技能" } : page);
+  const value = await atlasBookReply("资料", async () => rendered);
+  if (value instanceof Object && value.type === "forward") {
+    expect(value.nodes[0]).toBe("资料完整图鉴\n总览 → 技能 → 培养\n共 4 页");
+    expect(value.nodes.slice(1).map(node => typeof node === "string" ? 0 : node.file[0])).toEqual([1, 2, 3, 4]);
+  } else throw new Error("missing forward");
+});
+
 test("只有转发节点数超限时保留四倍页，无界协议保留单份转发", async () => {
   const scales: number[] = [];
   const render = async (scale: 4 | 2) => {
