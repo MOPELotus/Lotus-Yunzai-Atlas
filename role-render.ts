@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ImageSizeLimitError, renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
-import { zzzCharacterGalleryRoot } from "./gallery.ts";
+import { localPanelGalleryRoot, readSyncedPanelGalleryRoot } from "../../lib/panel-gallery-paths.ts";
 import type { AchievementCategory } from "./achievements.ts";
 import type { BangbooDetails } from "./bangboo-data.ts";
 import type { RoleDetails, RoleSkillCard, RoleText } from "./role-data.ts";
@@ -293,15 +293,19 @@ function isRaster(data: Buffer) {
 }
 
 export async function readCharacterGalleryPortrait(game: Game, name: string | readonly string[] | undefined,
-  configured = game === "zzz" ? zzzCharacterGalleryRoot() : Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim()): Promise<Image | undefined> {
+  configured = Bun.env.LOTUS_CHARACTER_GALLERY_DIR?.trim(), installation?: string): Promise<Image | undefined> {
   const names = [...new Set(typeof name === "string" ? [name] : name ?? [])]
     .filter(value => value && value !== "." && value !== ".." && !/[\/\\\p{Cc}\p{Cf}]/u.test(value));
   if (!names.length) return;
-  const roots = configured ? [{ root: configured, paths: [characterGalleryDirectories[game]] }] : [];
+  const galleryPath = characterGalleryDirectories[game];
+  const roots = [{ root: configured || localPanelGalleryRoot(installation), paths: [galleryPath] }];
   if (game === "zzz") {
     const legacyRoot = Bun.env.LOTUS_ZZZ_LEGACY_RESOURCES_DIR?.trim();
     if (legacyRoot) roots.push({ root: legacyRoot, paths: ["images/panel"] });
-  } else {
+  }
+  const synced = !configured && await readSyncedPanelGalleryRoot(installation);
+  if (synced) roots.push({ root: synced, paths: [galleryPath] });
+  if (game !== "zzz") {
     const paths = game === "gi" ? ["profile/normal-character", "profile"] : ["profile/normal-character"];
     for (const root of themeDirectories) roots.push({ root, paths });
   }

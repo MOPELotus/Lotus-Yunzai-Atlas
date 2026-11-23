@@ -35,3 +35,39 @@ test("原画读取限定项目和角色，坏图、跨游戏和越界目录不�
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("三游默认读各自的发布快照，拒绝越界指针并优先保留现有本地图", async () => {
+  const root = await mkdtemp(join(tmpdir(), "atlas-managed-gallery-"));
+  const previous = Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
+  const large = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwH4QBEfcD/ePF9e8AAAAASUVORK5CYII=", "base64");
+  const base = join(root, "data", "character-gallery-synced");
+  const current = join(base, "current");
+  const generation = "gallery-00000000-0000-4000-8000-000000000001";
+  try {
+    delete Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
+    const cases = [["gi", "gs-character", "图鉴托管原神甲"], ["hsr", "sr-character", "图鉴托管星铁甲"],
+      ["zzz", "zzz-character", "图鉴托管绝区零甲"]] as const;
+    for (const [, folder, name] of cases) {
+      const synced = join(base, "snapshots", generation, folder);
+      await mkdir(synced, { recursive: true });
+      await writeFile(join(synced, `${name}.png`), png);
+    }
+    await symlink(`snapshots/${generation}`, current);
+    for (const [game, , name] of cases) {
+      expect((await readCharacterGalleryPortrait(game, name, undefined, root))?.width).toBe(1);
+      expect(await readCharacterGalleryPortrait(game, name, join(root, "configured"), root)).toBeUndefined();
+    }
+    expect(await readCharacterGalleryPortrait("gi", cases[1][2], undefined, root)).toBeUndefined();
+    const local = join(root, "data", "character-gallery", cases[0][1]);
+    await mkdir(local, { recursive: true });
+    await writeFile(join(local, `${cases[0][2]}.png`), large);
+    expect((await readCharacterGalleryPortrait("gi", cases[0][2], undefined, root))?.width).toBe(2);
+    await rm(current);
+    await symlink(root, current);
+    expect(await readCharacterGalleryPortrait("hsr", cases[1][2], undefined, root)).toBeUndefined();
+  } finally {
+    if (previous === undefined) delete Bun.env.LOTUS_CHARACTER_GALLERY_DIR;
+    else Bun.env.LOTUS_CHARACTER_GALLERY_DIR = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
