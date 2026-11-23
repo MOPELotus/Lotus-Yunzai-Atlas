@@ -747,7 +747,7 @@ function atlasDefinitions(catalog: AtlasCatalog) {
       "#绝区零上期强袭战图鉴": "#绝区零上期危局图鉴",
     },
     commands: {
-      "#成就分类": achievementCategoryQuery,
+      "#成就分类": (argument: string) => achievementCategoryQuery(catalog, argument),
       "#挑战图鉴": (argument: string, delivery?: AtlasDelivery) => challengeQuery(catalog, argument, undefined, delivery),
       "#图鉴帮助": atlasHelp,
       "#本期幻想图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 本期"),
