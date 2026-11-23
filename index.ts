@@ -1,3 +1,4 @@
+import { readAtlasRoleSettings, type AtlasRoleSettings } from "./role-switches.ts";
 import { defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { atlasBookReply } from "./book-reply.ts";
 import { LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
@@ -304,8 +305,15 @@ async function lookupNotice(query: string, message: string, game: Game | undefin
   }
 }
 
+function roleQueriesEnabled(settings: AtlasRoleSettings, game: Game, section?: RoleQueryView) {
+  if (game === "zzz") return true;
+  if (section === "photo") return settings.role_photo;
+  if (section === "skills" || section === "ranks") return settings.role_talent;
+  return settings.role_wiki;
+}
+
 async function traditionalQuery(
-  catalog: AtlasCatalog,
+  catalog: AtlasCatalog, roleSettings: AtlasRoleSettings,
   query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" | "legacy-character" = "search",
   delivery?: AtlasDelivery, section?: RoleQueryView,
 ): Promise<AtlasReply | undefined> {
@@ -344,6 +352,9 @@ async function traditionalQuery(
       if (roleOnly && findTraditionalEntries(result, query, game, "name").length) return;
       matches = await catalog.findInDetails(result, query, game, roleOnly, limit);
     }
+    const available = matches.filter(({ kind, entry }) => kind !== "character" || roleQueriesEnabled(roleSettings, entry.game, section));
+    if (matches.length && !available.length) return mode === "search" ? "所查询的角色资料已关闭。" : undefined;
+    matches = available;
     if (!matches.length) {
       if (!explicit) return;
       const message = mode === "character" ? "未找到匹配的角色资料。" :
@@ -627,29 +638,29 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
   }
 }
 
-function createTraditionalQueries(catalog: AtlasCatalog, limit: number) {
+function createTraditionalQueries(catalog: AtlasCatalog, limit: number, roleSettings: AtlasRoleSettings) {
   return traditionalAtlasEvent((argument, kind, game, delivery, section) => {
-    if (kind !== "glued") return traditionalQuery(catalog, argument, limit, game, kind, delivery, section);
-    return explicitAtlasQuery(catalog, argument, limit, delivery);
+    if (kind !== "glued") return traditionalQuery(catalog, roleSettings, argument, limit, game, kind, delivery, section);
+    return explicitAtlasQuery(catalog, argument, limit, roleSettings, delivery);
   }, (mode, period, at, delivery) => challengeQuery(catalog, `${gameNames[mode.game]} ${mode.name} ${period}`, at, delivery));
 }
 
-async function explicitAtlasQuery(catalog: AtlasCatalog, argument: string, limit: number, delivery?: AtlasDelivery) {
+async function explicitAtlasQuery(catalog: AtlasCatalog, argument: string, limit: number, roleSettings: AtlasRoleSettings, delivery?: AtlasDelivery) {
   const { game, query } = searchTerms(argument);
   if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
   const challenge = parseExplicitAtlasChallenge(query, game);
   if (challenge?.invalidDate) return invalidChallengeDate;
   if (challenge) return challengeQuery(catalog, `${gameNames[challenge.mode.game]} ${challenge.mode.name} ${challenge.period}`, challenge.at, delivery);
-  return await traditionalQuery(catalog, query, limit, game, "search", delivery) ?? missing;
+  return await traditionalQuery(catalog, roleSettings, query, limit, game, "search", delivery) ?? missing;
 }
 
 function challengeCommand(catalog: AtlasCatalog, query: string) {
   return (_argument: string, delivery?: AtlasDelivery) => challengeQuery(catalog, query, undefined, delivery);
 }
 
-function searchCommands(catalog: AtlasCatalog, limit: number) {
+function searchCommands(catalog: AtlasCatalog, limit: number, roleSettings: AtlasRoleSettings) {
   return {
-    "#图鉴": (argument: string, delivery?: AtlasDelivery) => explicitAtlasQuery(catalog, argument, limit, delivery),
+    "#图鉴": (argument: string, delivery?: AtlasDelivery) => explicitAtlasQuery(catalog, argument, limit, roleSettings, delivery),
     "#武器图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#武器图鉴", limit, undefined, delivery),
     "#光锥图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#光锥图鉴", limit, "hsr", delivery),
     "#音擎图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#音擎图鉴", limit, "zzz", delivery),
@@ -672,6 +683,8 @@ function searchCommands(catalog: AtlasCatalog, limit: number) {
           if (alias) matches = [alias.entry];
         }
         if (!matches.length) return "未找到匹配的角色。";
+        matches = matches.filter(character => roleQueriesEnabled(roleSettings, character.game));
+        if (!matches.length) return "所查询的角色资料已关闭。";
         const lines = await Promise.all(matches.slice(0, limit).map((character) => characterLine(catalog, character)));
         if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的角色名。");
         if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
@@ -781,8 +794,9 @@ export function createModule({ signal, atlasUpdateConfig }: { readonly signal?: 
   const catalog = createAtlasRuntimeCatalog(atlasRoot, Bun.env.LOTUS_ATLAS_DATA_DIR, locale);
   const atlas = atlasDefinitions(catalog);
   const limit = parseAtlasSearchLimit(configured?.max_results) ?? defaultAtlasSearchLimit;
-  return { ...atlas, commands: { ...atlas.commands, ...searchCommands(catalog, limit), ...commands }, atlasSchedule,
-    nativeEvents: [createTraditionalQueries(catalog, limit)] };
+  const roles = readAtlasRoleSettings(configured);
+  return { ...atlas, commands: { ...atlas.commands, ...searchCommands(catalog, limit, roles), ...commands }, atlasSchedule,
+    nativeEvents: [createTraditionalQueries(catalog, limit, roles)] };
 }
 
 export default createModule();
