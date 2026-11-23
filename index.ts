@@ -129,7 +129,7 @@ async function bangbooQuery(catalog: AtlasCatalog, argument: string, limit: numb
 }
 
 async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery,
-  section?: RoleSection): Promise<AtlasReply> {
+  section?: RoleSection, qFace = true): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
   const part = entry.game === "zzz" ? undefined : section;
   const title = part === "skills" ? (entry.game === "gi" ? "天赋" : "行迹") :
@@ -140,7 +140,7 @@ async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: r
     const { renderRoleBook } = await import("./role-render.ts");
     const galleryName = characterGalleryName(entry, roster, role.overview.name);
     return await atlasBookReply(role.overview.name, scale => renderRoleBook(role, {
-      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName,
+      scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName, qFace,
     }, part), delivery, !part, title) ?? noData();
   } catch {
     if (title) return `${role.overview.name}的${title}图片暂不可用。`;
@@ -369,7 +369,8 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "character") {
       const { entry } = first;
       const roster = result.pages.find(page => page.kind === "character" && page.game === entry.game)?.entries ?? [];
-      return section === "photo" ? characterPhoto(catalog, entry, roster, delivery) : characterBook(catalog, entry, roster, delivery, section);
+      return section === "photo" ? characterPhoto(catalog, entry, roster, delivery) :
+        characterBook(catalog, entry, roster, delivery, section, roleSettings.role_q_face);
     }
     if (matches.length === 1 && first.kind === "equipment") {
       const image = await weaponCard(catalog, first.entry, delivery);

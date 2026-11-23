@@ -1,4 +1,4 @@
-export const atlasRoleFields = ["role_wiki", "role_talent", "role_photo"] as const;
+export const atlasRoleFields = ["role_wiki", "role_talent", "role_photo", "role_q_face"] as const;
 export type AtlasRoleField = typeof atlasRoleFields[number];
 export type AtlasRoleSettings = Record<AtlasRoleField, boolean>;
 
@@ -8,5 +8,6 @@ export function readAtlasRoleSettings(value: unknown): AtlasRoleSettings {
     role_wiki: atlas?.role_wiki !== false,
     role_talent: atlas?.role_talent !== false,
     role_photo: atlas?.role_photo !== false,
+    role_q_face: atlas?.role_q_face !== false,
   };
 }

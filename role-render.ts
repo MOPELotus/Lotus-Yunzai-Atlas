@@ -31,6 +31,7 @@ export interface RoleRenderOptions {
   readonly assetRoot?: string;
   readonly inlineImageByteLimit?: number;
   readonly galleryName?: string | readonly string[];
+  readonly qFace?: boolean;
 }
 
 const width = 800;
@@ -402,7 +403,7 @@ async function originalGenshinPortrait(role: RoleDetails, maxBytes = maxImageByt
   }
 }
 
-async function miaoSectionArtwork(role: RoleDetails): Promise<{ card?: Image; face?: Image; talents?: Record<string, unknown> }> {
+async function miaoSectionArtwork(role: RoleDetails, qFace: boolean): Promise<{ card?: Image; face?: Image; talents?: Record<string, unknown> }> {
   const { game, id, overview: { name } } = role;
   if (game === "zzz" || !/^[1-9]\d*$/u.test(id) || !name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return {};
   const meta = game === "gi" ? "meta-gs" : "meta-sr";
@@ -430,7 +431,7 @@ async function miaoSectionArtwork(role: RoleDetails): Promise<{ card?: Image; fa
     };
     const [card, preferred] = await Promise.all([
       read(game === "gi" ? join(directory, "imgs") : join(base, "common", "imgs"), "card.webp"),
-      read(join(directory, "imgs"), "face-q.webp"),
+      qFace ? read(join(directory, "imgs"), "face-q.webp") : undefined,
     ]);
     const face = preferred ?? await read(join(directory, "imgs"), "face.webp");
     const talents = game === "hsr" ? object(record.talent) : undefined;
@@ -640,7 +641,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
-    section ? miaoSectionArtwork(role) : undefined, section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
+    section ? miaoSectionArtwork(role, options.qFace !== false) : undefined, section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
