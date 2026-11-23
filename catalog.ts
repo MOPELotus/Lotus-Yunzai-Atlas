@@ -23,6 +23,8 @@ import equipmentAliasData from "./equipment-aliases.json";
 import legacyCharacterSetAliasData from "./legacy-character-set-aliases.json";
 import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
+export { defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
+
 export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
 export type Game = keyof typeof gameNames;
 
