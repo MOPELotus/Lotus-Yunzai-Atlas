@@ -315,7 +315,7 @@ async function traditionalQuery(
     const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
     const lookup = mode === "legacy-character" ? "character" : mode === "character" ? "character-search" :
       mode === "shortcut" ? "search" : mode;
-    let matches = findTraditionalEntries(result, query, game, lookup);
+    let matches: ReturnType<typeof findTraditionalEntries>[number][] = findTraditionalEntries(result, query, game, lookup);
     if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
