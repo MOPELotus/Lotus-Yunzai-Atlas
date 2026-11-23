@@ -327,16 +327,18 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     if (dataOverride) return "当前使用显式图鉴数据目录，请通过本地运维管理该目录。";
     if (updating) return "已有图鉴更新正在进行，请稍后再试。";
     updating = true;
+    let summary: string;
     try {
       const result = await resetAtlasSnapshot(root, signal);
       if (result.status === "busy") return "已有图鉴发布正在进行，请稍后再试。";
-      if (result.status === "empty") return "没有可重置的主图鉴快照。";
-      return "图鉴已重置，源文件和历次快照仍可恢复。请重新初始化图鉴。";
+      summary = result.status === "empty" ? "没有可重置的主图鉴快照。"
+        : "图鉴已重置，源文件和历次快照仍可恢复。请发送 #全量更新图鉴 重新初始化。";
     } catch {
-      return signal?.aborted ? "图鉴重置已中止。" : "无法重置图鉴，保留现有资料。";
+      summary = signal?.aborted ? "图鉴重置已中止。" : "无法重置图鉴，保留现有资料。";
     } finally {
       updating = false;
     }
+    return presentResult(context, "图鉴重置结果", summary);
   }
 
   async function fullUpdate(argument: string, context: AtlasMaintenanceContext) {

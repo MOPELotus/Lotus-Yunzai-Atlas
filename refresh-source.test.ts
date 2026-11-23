@@ -137,6 +137,8 @@ test("聊天图鉴更新先回执再查版本，发送结果卡失败时回落�
   delivered = false;
   expect(await commands["#检查图鉴更新"]("", context)).toContain("图鉴版本检查");
   expect(events.slice(-3)).toEqual(["正在检查图鉴版本差异。", "读取版本", "结果卡"]);
+  expect(await commands["#重置图鉴"]("", context)).toContain("请发送 #全量更新图鉴 重新初始化");
+  expect(events.at(-1)).toBe("结果卡");
 }));
 
 test("定时与手动共用分类、发布互斥和生命周期，失败后下次重新检查", () => fixture(async (work, root) => {
