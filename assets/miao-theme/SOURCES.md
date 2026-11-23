@@ -10,7 +10,7 @@
 
 固定旧模板按属性选背景。原神和星铁沿用各属性的文件，绝区零艾莲等冰属性角色沿用同一原冰底图。旧模板的无属性默认底图是 `bg-sr.webp`。
 
-原神天赋／命座与星铁行迹／星魂专用图使用旧 `character-talent` 布局与属性图标框。可从已有 Miao `28607618` 的 `resources/common/bg/talent-*.webp` 补九个可选图标框，启动只恢复符合固定文件摘要的原素材。已有旧部署保留 `meta-gs/character` 或 `meta-sr/character` 时，同 ID 的原卡面和 Q 版头像／头像也可只读使用。图鉴设置的「专用分项图使用 Q 版头像」默认开启，重启后生效。关闭后使用原普通头像。缺少旧卡面和头像时使用已登记的角色图和官方头像。未随仓库分发专用图资源。
+原神天赋／命座与星铁行迹／星魂专用图使用旧 `character-talent` 布局与属性图标框。可从已有 Miao `28607618` 的 `resources/common/bg/talent-*.webp` 补九个可选图标框，启动只恢复符合固定文件摘要的原素材。星铁专用图也从同一版本的 `resources/common/font/tttgbnumber.ttf` 恢复可选的原数字字体，缺少时使用图鉴主题字体。已有旧部署保留 `meta-gs/character` 或 `meta-sr/character` 时，同 ID 的原卡面和 Q 版头像／头像也可只读使用。图鉴设置的「专用分项图使用 Q 版头像」默认开启，重启后生效。关闭后使用原普通头像。缺少旧卡面和头像时使用已登记的角色图和官方头像。未随仓库分发专用图资源。
 
 星铁套装优先使用图鉴快照已记录的部件图。旧 Lotus-ReFactor 的 `resources/miao-theme/relic-parts/index.json` 与对应本地图片可补足快照未收录的部件。图缺失时保留快照中的部件名称。
 

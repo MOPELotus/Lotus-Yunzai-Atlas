@@ -42,6 +42,7 @@ const header = 184;
 const footer = 62;
 const maxImageBytes = 8 * 1024 * 1024;
 const font = '"MiaoWiki", MiSans, "Noto Sans CJK SC", sans-serif';
+const railFont = `"AtlasNumber", ${font}`;
 const gold = "#d3bc8e";
 const white = "#f1efed";
 const muted = "#c2c5cb";
@@ -60,7 +61,9 @@ const themeImages = new Map<ThemeAsset, Promise<Image | undefined>>();
 let themeFonts: Promise<void> | undefined;
 
 async function loadThemeFonts(): Promise<void> {
-  for (const [family, filename] of [["MiaoWiki", "HYWH-65W.ttf"], ["MiSans", "MiSans-VF.ttf"]] as const) {
+  for (const [family, filename] of [
+    ["MiaoWiki", "HYWH-65W.ttf"], ["MiSans", "MiSans-VF.ttf"], ["AtlasNumber", "tttgbnumber.ttf"],
+  ] as const) {
     const paths = themeDirectories.flatMap((directory) => family === "MiSans"
       ? [join(directory, "fonts", filename), join(dirname(directory), "fonts", filename)]
       : [join(directory, "fonts", filename)]);
@@ -98,6 +101,7 @@ type RoleSectionStyle = {
   readonly headerHeight: number;
   readonly paintHeader: (ctx: Context, section: string, page: string) => void;
   readonly panelBackground?: Image;
+  readonly skillFrame?: { readonly margin: number; readonly gap: number; readonly radius: number; readonly texture?: Image };
 };
 
 function rounded(ctx: Context, x: number, y: number, w: number, h: number, radius: number, fill: string) {
@@ -108,10 +112,10 @@ function rounded(ctx: Context, x: number, y: number, w: number, h: number, radiu
 }
 
 function paintLines(ctx: Context, lines: readonly string[], x: number, y: number, size: number,
-  lineHeight: number, color: string) {
-  ctx.font = `${size}px ${font}`;
+  lineHeight: number, color: string, align: "left" | "center" = "left", family = font, bold = false) {
+  ctx.font = `${bold ? "bold " : ""}${size}px ${family}`;
   ctx.textBaseline = "top";
-  ctx.textAlign = "left";
+  ctx.textAlign = align;
   ctx.fillStyle = color;
   for (const [row, line] of lines.entries()) ctx.fillText(line, x, y + row * lineHeight);
 }
@@ -128,8 +132,8 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
   metrics.gpu = false;
   const measure = metrics.getContext("2d");
 
-  function wrap(text: string, maxWidth: number, size: number) {
-    measure.font = `${size}px ${font}`;
+  function wrap(text: string, maxWidth: number, size: number, family = font, bold = false) {
+    measure.font = `${bold ? "bold " : ""}${size}px ${family}`;
     return text.split(/\r?\n/u).flatMap((paragraph) => {
       const lines: string[] = [];
       let line = "";
@@ -139,7 +143,10 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
           line = token.trimStart();
         } else line += token;
       };
-      for (const token of paragraph.match(/[-+]?\d+(?:[.,]\d+)*%?|[A-Za-z][A-Za-z0-9.-]*|./gu) ?? []) {
+      const pattern = family === railFont
+        ? /[-+]?\d+(?:[.,]\d+)*%?(?: \(Lv\d+\))?[，。；！？）】〉》」』]?|[A-Za-z][A-Za-z0-9.-]*|.[，。；！？）】〉》」』]|./gu
+        : /[-+]?\d+(?:[.,]\d+)*%?|[A-Za-z][A-Za-z0-9.-]*|./gu;
+      for (const token of paragraph.match(pattern) ?? []) {
         if (measure.measureText(token).width > maxWidth) Array.from(token).forEach(add);
         else add(token);
       }
@@ -172,6 +179,61 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
       }
       paintLines(ctx, lines, x, top + (small ? 12 : 14), size, lineHeight, gold);
       if (subtitle) paintLines(ctx, [subtitle], x, top + 19 + lines.length * lineHeight, 14, 21, muted);
+    } };
+  }
+
+  function railSkillText(name: string, body?: string, artwork?: Image, nested = false): Block {
+    const x = 170;
+    const titleSize = nested ? 24 : 30;
+    const titleLine = nested ? 34 : 45;
+    const topPadding = nested ? 20 : 30;
+    const lines = wrap(name, 590, titleSize, railFont, true);
+    const description = body ? wrap(body, 590, 18, railFont) : [];
+    const descriptionTop = topPadding + lines.length * titleLine + 15;
+    return { height: Math.max(artwork ? 145 : 100, descriptionTop + description.length * 26 + 20), paint(ctx, top) {
+      if (artwork) {
+        if (sectionIcon) contain(ctx, sectionIcon, 30, top + 20, 120, 120);
+        else rounded(ctx, 50, top + 40, 80, 80, 40, "rgba(255,255,255,0.10)");
+        contain(ctx, artwork, 62, top + 52, 56, 56);
+      }
+      paintLines(ctx, lines, x, top + topPadding, titleSize, titleLine, gold, "left", railFont, true);
+      for (const [index, line] of description.entries()) {
+        const y = top + descriptionTop + index * 26;
+        let nextX = x;
+        let previous = 0;
+        for (const segment of line.matchAll(/[-+]?\d+(?:[.,]\d+)*%?(?: \(Lv\d+\))?/gu)) {
+          const lead = line.slice(previous, segment.index);
+          paintLines(ctx, [lead], nextX, y, 18, 26, white, "left", railFont);
+          nextX += ctx.measureText(lead).width;
+          paintLines(ctx, [segment[0]], nextX, y, 18, 26, "#ffe699", "left", railFont);
+          nextX += ctx.measureText(segment[0]).width;
+          previous = segment.index + segment[0].length;
+        }
+        paintLines(ctx, [line.slice(previous)], nextX, y, 18, 26, white, "left", railFont);
+      }
+    } };
+  }
+
+  function railTableRow(values: readonly string[], widths: readonly number[], rowIndex: number): Block {
+    const title = rowIndex === 0;
+    const sizes = values.map((_, index) => index === 0 && !title ? 18 : 15);
+    const cells = values.map((value, index) => wrap(value, widths[index]! - 8, sizes[index]!, railFont, title || index === 0));
+    const height = Math.max(38, ...cells.map((lines) => lines.length * 24 + 14));
+    return { height, paint(ctx, top) {
+      const left = 15;
+      ctx.fillStyle = rowIndex % 2 ? "rgba(0,0,0,0.40)" : "rgba(50,50,50,0.40)";
+      ctx.fillRect(left, top, width - 2 * left, height);
+      let x = left;
+      for (const [index, lines] of cells.entries()) {
+        const column = widths[index]!;
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, top + 0.5, column, height);
+        const mid = top + (height - lines.length * 24) / 2;
+        paintLines(ctx, lines, x + column / 2, mid, sizes[index]!, 24,
+          title || index === 0 ? gold : white, "center", railFont, title || index === 0);
+        x += column;
+      }
     } };
   }
 
@@ -223,10 +285,12 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
     } };
   }
 
-  function levelBlocks(levels: NonNullable<RoleSkillCard["levels"]>): Block[] {
+  function levelBlocks(levels: NonNullable<RoleSkillCard["levels"]>, rail = false): Block[] {
     const result: Block[] = [];
-    const titles = levels.map(({ level, sourceId }, _, all) => all.filter((entry) => entry.level === level).length > 1 && sourceId
-      ? `等级 ${level} · ${sourceId}` : `等级 ${level}`);
+    const titles = levels.map(({ level, sourceId }, _, all) => {
+      const title = rail ? `Lv${level}` : `等级 ${level}`;
+      return all.filter((entry) => entry.level === level).length > 1 && sourceId ? `${title} · ${sourceId}` : title;
+    });
     const descriptions = new Map<string, { index: number; parts: string[] }[]>();
     const numeric = /^\d/u;
     for (const [index, { description }] of levels.entries()) {
@@ -251,13 +315,16 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
       }).join("")));
     }
 
-    for (let start = 0; start < levels.length; start += 4) {
-      const group = levels.slice(start, start + 4);
+    const columns = rail ? 8 : 4;
+    for (let start = 0; start < levels.length; start += columns) {
+      const group = levels.slice(start, start + columns);
       const extras = valuesByLevel.slice(start, start + group.length);
       if (!extras.some((values) => values.length) && !group.some(({ details }) => details.length)) continue;
-      const labelWidth = 280;
-      const widths = [labelWidth, ...group.map(() => (contentWidth - labelWidth) / group.length)];
-      result.push(row(["等级数值", ...titles.slice(start, start + group.length)], widths, true));
+      const labelWidth = rail ? 174 : 280;
+      const tableWidth = rail ? width - 30 : contentWidth;
+      const widths = [labelWidth, ...group.map(() => (tableWidth - labelWidth) / group.length)];
+      const headerCells = [rail ? "" : "等级数值", ...titles.slice(start, start + group.length)];
+      result.push(rail ? railTableRow(headerCells, widths, 0) : row(headerCells, widths, true));
       const details = new Map<string, { label: string; values: string[] }>();
       for (const [column, level] of group.entries()) {
         const occurrences = new Map<string, number>();
@@ -271,12 +338,16 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
           details.set(key, values);
         }
       }
-      for (const { label, values } of details.values()) result.push(row([label, ...values], widths));
+      let rowIndex = 1;
+      for (const { label, values } of details.values()) {
+        const cells = [label, ...values];
+        result.push(rail ? railTableRow(cells, widths, rowIndex++) : row(cells, widths));
+      }
     }
     return result;
   }
 
-  return { wrap, text, heading, row, statRow, material, levelBlocks };
+  return { wrap, text, heading, railSkillText, row, statRow, material, levelBlocks };
 }
 
 async function localAsset(path: string, maxBytes: number): Promise<Buffer | undefined> {
@@ -525,9 +596,9 @@ async function starRailPartImages(parts: readonly SetPart[]) {
   return images;
 }
 
-function measurePage(head: number, panels: readonly Block[][], trailingGap: boolean) {
+function measurePage(head: number, panels: readonly Block[][], trailingGap: boolean, panelGap: number) {
   const heights = panels.map((blocks) => blocks.reduce((sum, { height }) => sum + height, 0));
-  const gap = Math.max(0, heights.length - (trailingGap ? 0 : 1)) * 16;
+  const gap = Math.max(0, heights.length - (trailingGap ? 0 : 1)) * panelGap;
   return { heights, height: Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight, 0) + gap + footer) };
 }
 
@@ -541,64 +612,84 @@ export async function renderLookupNotice(query: string, message: string, game: G
 }
 
 function roleSectionStyle(role: RoleDetails, wrap: ReturnType<typeof makeLayout>["wrap"],
-  background: Image | undefined, portrait: Image | undefined, icon: Image | undefined, panelBackground: Image | undefined): RoleSectionStyle {
+  background: Image | undefined, portrait: Image | undefined, icon: Image | undefined, panelBackground: Image | undefined, texture?: Image): RoleSectionStyle {
   const { facts, sectionStats, description, name } = role.overview;
   const title = facts.find(({ label }) => label === "称号")?.value;
-  const names = wrap(title ? `${title}·${name}` : name, 546, 38);
-  const intro = description ? wrap(description.replaceAll("\\n", "\n"), 536, 20) : [];
-  const statsTop = Math.max(209, 91 + names.length * 44 + intro.length * 28);
+  const rail = role.game === "hsr";
+  const headerFont = rail ? railFont : font;
+  const names = wrap(title ? `${title}·${name}` : name, rail ? 540 : 546, 38, headerFont);
+  const text = description?.replaceAll("\\n", "\n");
+  const intro = text ? wrap(rail ? text.replace(/\s+/gu, " ") : text, rail ? 540 : 536, 20, headerFont) : [];
+  const namesTop = rail ? 35 : 29;
+  const introTop = rail ? namesTop + names.length * 44 + 17 : 43 + names.length * 44;
+  const introLine = rail ? 26 : 28;
+  const statsTop = rail ? Math.max(210, introTop + intro.length * introLine + 10) : Math.max(209, 91 + names.length * 44 + intro.length * 28);
+  const headerEnd = rail ? Math.max(355, statsTop + 125) : statsTop + 125;
+  const frame = rail ? { margin: 15, gap: 20, radius: 25, texture } : undefined;
   return {
-    headerHeight: statsTop + 150,
+    headerHeight: headerEnd + 25,
     panelBackground,
+    skillFrame: frame,
     paintHeader(ctx, section, page) {
-      const headerEnd = statsTop + 125;
       ctx.fillStyle = "#272f43";
       ctx.fillRect(0, 0, width, headerEnd);
       if (background) {
         const scale = Math.max(width / background.width, headerEnd / background.height);
         const sourceWidth = width / scale;
         const sourceHeight = headerEnd / scale;
-        ctx.drawImage(background, (background.width - sourceWidth) / 2, (background.height - sourceHeight) / 2,
-          sourceWidth, sourceHeight, 0, 0, width, headerEnd);
+        const sourceX = rail ? 0 : (background.width - sourceWidth) / 2;
+        const sourceY = rail ? 0 : (background.height - sourceHeight) / 2;
+        ctx.drawImage(background, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, headerEnd);
       } else if (portrait) {
         contain(ctx, portrait, 428, 0, 372, headerEnd);
       }
-      const shade = ctx.createLinearGradient(0, 0, width, 0);
-      shade.addColorStop(0, "rgba(9,15,27,0.75)");
-      shade.addColorStop(1, "rgba(9,15,27,0.25)");
-      ctx.fillStyle = shade;
-      ctx.fillRect(0, 0, width, headerEnd);
+      if (!rail || !background) {
+        const shade = ctx.createLinearGradient(0, 0, width, 0);
+        shade.addColorStop(0, "rgba(9,15,27,0.75)");
+        shade.addColorStop(1, "rgba(9,15,27,0.25)");
+        ctx.fillStyle = shade;
+        ctx.fillRect(0, 0, width, headerEnd);
+      }
       if (icon) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(116, 100, 62, 0, 2 * Math.PI);
+        const centerY = rail ? 99 : 100;
+        const radius = rail ? 61 : 62;
+        ctx.arc(116, centerY, radius, 0, 2 * Math.PI);
         ctx.clip();
         ctx.fillStyle = "#272f43";
-        ctx.fillRect(54, 38, 124, 124);
-        contain(ctx, icon, 54, 38, 124, 124);
+        ctx.fillRect(116 - radius, centerY - radius, radius * 2, radius * 2);
+        contain(ctx, icon, 116 - radius, centerY - radius, radius * 2, radius * 2);
         ctx.restore();
         ctx.strokeStyle = "#f0efe0";
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(116, 100, 62, 0, 2 * Math.PI);
+        ctx.arc(116, centerY, rail ? 62.5 : 62, 0, 2 * Math.PI);
         ctx.stroke();
       }
-      paintLines(ctx, names, 225, 29, 38, 44, white);
-      paintLines(ctx, intro, 225, 43 + names.length * 44, 20, 28, white);
-      paintLines(ctx, [`${gameNames[role.game]} · ${section} · ${page}`], 225, statsTop - 41, 16, 22, gold);
-      rounded(ctx, 16, statsTop, width - 32, 104, 15, "rgba(245,245,245,0.87)");
+      ctx.save();
+      if (rail) {
+        ctx.shadowColor = "rgba(0,0,0,0.70)";
+        ctx.shadowBlur = 3;
+      }
+      paintLines(ctx, names, 225, namesTop, 38, 44, white, "left", headerFont);
+      paintLines(ctx, intro, 225, introTop, 20, introLine, white, "left", headerFont);
+      ctx.restore();
+      if (!rail) paintLines(ctx, [`${gameNames[role.game]} · ${section} · ${page}`], 225, statsTop - 41, 16, 22, gold);
+      rounded(ctx, rail ? 15 : 16, statsTop, width - (rail ? 30 : 32), rail ? 117 : 104, 15,
+        rail ? "rgba(245,245,245,0.8)" : "rgba(245,245,245,0.87)");
       const statTitle = sectionStats ? `${sectionStats.level}级基础数据` : "基础数据";
-      rounded(ctx, 30, statsTop - 19, 172, 32, 8, "#272f43");
-      paintLines(ctx, [statTitle], 44, statsTop - 14, 19, 24, white);
+      rounded(ctx, rail ? 35 : 30, statsTop - 19, rail ? 170 : 172, 32, 8, "#272f43");
+      paintLines(ctx, [statTitle], rail ? 55 : 44, statsTop - 14, 19, 24, white, "left", headerFont);
       const rows = sectionStats?.rows;
       if (!rows?.length) {
         paintLines(ctx, ["暂无详细数据"], 44, statsTop + 35, 20, 28, "#292e3a");
       } else {
-        const cell = (width - 32) / rows.length;
+        const cell = (width - (rail ? 60 : 32)) / rows.length;
         for (const [i, { value, label }] of rows.entries()) {
-          const x = 44 + i * cell;
-          paintLines(ctx, [value], x, statsTop + 24, 34, 44, "#1e1f20");
-          paintLines(ctx, [label], x, statsTop + 66, 18, 24, "#626c73");
+          const x = rail ? 30 + (i + 0.5) * cell : 44 + i * cell;
+          paintLines(ctx, [value], x, statsTop + (rail ? 30 : 24), rail ? 40 : 34, 44, "#1e1f20", rail ? "center" : "left", headerFont);
+          paintLines(ctx, [label], x, statsTop + (rail ? 80 : 66), 18, 24, rail ? "#7f858a" : "#626c73", rail ? "center" : "left", headerFont);
         }
       }
     },
@@ -655,7 +746,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
   const layout = makeLayout(texture, sectionBackdrop);
-  const { wrap, heading, text, statRow, material } = layout;
+  const { wrap, heading, text, statRow, material, railSkillText } = layout;
+  const rail = role.game === "hsr" && section !== undefined;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
   const snapshotPortrait = image(role.overview.artwork) ??
@@ -677,42 +769,50 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
 
   const pages: Page[] = section ? [] : [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
   const skills = skillGroups.flatMap(({ title, cards }) => [
-    [heading(title, undefined, true)],
+    ...(rail && title === "技能" ? [] : [[heading(title, undefined, true)]]),
     ...cards.flatMap((card) => {
       const description = section ? card.sectionDescription ?? card.description : card.description;
       const levels = section ? sectionSkillLevels(card, sectionArt?.talents) : card.levels ?? [];
       const originalIcon = card.memospriteIcon ? sectionArt?.memosprite?.[card.memospriteIcon] : undefined;
-      const main = [heading(card.name, originalIcon ?? image(card.artwork)), ...(description ? [text(description)] : []),
-        ...card.details.map(details), ...layout.levelBlocks(levels)];
+      const artwork = originalIcon ?? image(card.artwork);
+      const labels = (value: RoleSkillCard) => value.details.filter(item => !rail || item.label !== "类型").map(details);
+      const main = [
+        ...(rail ? [railSkillText(card.name, description, artwork)] :
+          [heading(card.name, artwork), ...(description ? [text(description)] : [])]),
+        ...labels(card), ...layout.levelBlocks(levels, rail),
+      ];
       if (section && card.sectionVariants?.length) {
         if (card.sectionVariantTitle) main.push(heading(card.sectionVariantTitle, undefined, true));
         for (const variant of card.sectionVariants) {
           const body = variant.sectionDescription ?? variant.description;
           const source = card.sectionVariantTitle ? { name: card.sectionVariantTitle, rowPrefix: variant.name + "·" } : undefined;
-          main.push(heading(variant.name, undefined, true), ...(body ? [text(body)] : []),
-            ...variant.details.map(details), ...layout.levelBlocks(sectionSkillLevels(variant, sectionArt?.talents, source)));
+          main.push(...(rail ? [railSkillText(variant.name, body, undefined, true)] :
+            [heading(variant.name, undefined, true), ...(body ? [text(body)] : [])]),
+          ...labels(variant), ...layout.levelBlocks(sectionSkillLevels(variant, sectionArt?.talents, source), rail));
         }
       }
       const effects = (section ? card.linkedEffects ?? [] : []).map(effect => {
         const body = effect.sectionDescription ?? effect.description;
         const source = { name: card.name, rowPrefix: effect.name.replace(/^献予/u, "") + "•" };
-        return [heading(effect.name, undefined, true), ...(body ? [text(body)] : []),
-          ...layout.levelBlocks(sectionSkillLevels(effect, sectionArt?.talents, source))];
+        return [...(rail ? [railSkillText(effect.name, body, undefined, true)] :
+          [heading(effect.name, undefined, true), ...(body ? [text(body)] : [])]),
+        ...layout.levelBlocks(sectionSkillLevels(effect, sectionArt?.talents, source), rail)];
       });
       return [main, ...effects];
     }),
   ]);
   if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
   if (ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: ranks.map((rank) => [
-    heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)),
-    ...(rank.description ? [text(rank.description)] : []), ...(rank.story ? [text(rank.story, muted, 17)] : []),
+    ...(rail ? [railSkillText(`${rank.rank} · ${rank.name}`, rank.description, image(rank.artwork))] :
+      [heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)), ...(rank.description ? [text(rank.description)] : [])]),
+    ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
     ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
   ]) });
 
-  const style = section ? roleSectionStyle(role, wrap, sectionArt?.card, portrait, sectionArt?.face ?? icon, background) : undefined;
+  const style = section ? roleSectionStyle(role, wrap, sectionArt?.card, portrait, sectionArt?.face ?? icon, background, texture) : undefined;
   return renderAtlasPages(pages, title, role.game, role.version, icon, background, options, undefined, true, style);
 }
 
@@ -1094,14 +1194,23 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
   const pageScale = low ? 1 : scale;
   const game = gameId ? gameNames[gameId] : "全部游戏";
   const head = style?.headerHeight ?? Math.max(header, 118 + title.length * 39);
+  const frame = style?.skillFrame;
+  const panelMargin = frame?.margin ?? margin;
+  const panelWidth = width - 2 * panelMargin;
+  const panelGap = frame?.gap ?? 16;
   const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
-    const { heights, height } = measurePage(head, panels, trailingGap !== false);
+    const { heights, height } = measurePage(head, panels, trailingGap !== false, panelGap);
     const paint = (ctx: Context) => {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.fillStyle = "#252c40";
       ctx.fillRect(0, 0, width, height);
-      if (background) ctx.drawImage(background, 0, 0, width, height);
+      if (background) {
+        if (frame) {
+          const tileHeight = width * background.height / background.width;
+          for (let y = 0; y < height; y += tileHeight) ctx.drawImage(background, 0, y, width, tileHeight);
+        } else ctx.drawImage(background, 0, 0, width, height);
+      }
 
       if (style) {
         style.paintHeader(ctx, section, page);
@@ -1130,17 +1239,20 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
         const panelHeight = heights[panel]!;
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(margin, y, inner, panelHeight, style ? 23 : 10);
+        ctx.roundRect(panelMargin, y, panelWidth, panelHeight, frame?.radius ?? (style ? 23 : 10));
         ctx.clip();
-        if (style?.panelBackground) ctx.drawImage(style.panelBackground, margin, y, inner, panelHeight);
-        ctx.fillStyle = "rgba(15,20,31,0.58)";
-        ctx.fillRect(margin, y, inner, panelHeight);
+        if (style?.panelBackground) ctx.drawImage(style.panelBackground, panelMargin, y, panelWidth, panelHeight);
+        if (frame?.texture) ctx.drawImage(frame.texture, panelMargin, y, panelWidth, panelHeight);
+        else {
+          ctx.fillStyle = "rgba(15,20,31,0.58)";
+          ctx.fillRect(panelMargin, y, panelWidth, panelHeight);
+        }
         for (const block of blocks) {
           block.paint(ctx, y);
           y += block.height;
         }
         ctx.restore();
-        y += 16;
+        y += panelGap;
       }
       paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, muted);
     };

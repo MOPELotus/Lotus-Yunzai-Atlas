@@ -20,8 +20,8 @@ const assets = [
   ["fonts/MiSans-VF.ttf", 20000736, "5daf8d5447bfd423cfdec94a0e07c53b205892223ccc6ea21b7b8a37248b44d9"],
 ] as const;
 
-// The historic element frames are optional and fall back to a plain icon frame.
-const sectionIconFrames = [
+// The optional original skill frames and numeric face have display fallbacks.
+const optionalSkillAssets = [
   ["bg/talent-anemo.webp", 8412, "e40653924caa342a853f34deb868379f13857e3b6bf9131a706724f1a5762dfb"],
   ["bg/talent-cryo.webp", 8476, "658ff147b66a76fc9e47ac9dc7a2e64240f381cc2c70e582baf43e35abd5db3d"],
   ["bg/talent-dendro.webp", 8586, "5ba55c58bad8f9fceb39f7ce4c06a77f20899c1a8dea48dde70020c2f215ed43"],
@@ -31,6 +31,7 @@ const sectionIconFrames = [
   ["bg/talent-pyro.webp", 8396, "45af3ce09e32b6fd70c558db48616dd6a2c58b24591b4295ab54a8a86d692b11"],
   ["bg/talent-quantum.webp", 8244, "6a941aa38c9278c75aed74ac830d238c5fa3a136d59792387f37e4c3813370f0"],
   ["bg/talent-sr.webp", 6752, "3ae8f639e1cbbb3a1c225fec5f40712846b3f18f8e64745eddce7b7d17ff875a"],
+  ["fonts/tttgbnumber.ttf", 20056, "2397a53ac610214da8a6823968c9573c99704b767759d9781707cdb4efde1005"],
 ] as const;
 
 function paths(directory: string, asset: string): readonly string[] {
@@ -38,11 +39,12 @@ function paths(directory: string, asset: string): readonly string[] {
   return asset === "fonts/MiSans-VF.ttf" ? [direct, join(dirname(directory), asset)] : [direct];
 }
 
-function donorPaths(directory: string, asset: (typeof assets | typeof sectionIconFrames)[number][0]): readonly string[] {
+function donorPaths(directory: string, asset: (typeof assets | typeof optionalSkillAssets)[number][0]): readonly string[] {
   const candidates = paths(directory, asset);
   const original = asset.startsWith("bg/") ? `common/${asset}`
     : asset === "card-bg.png" ? "common/cont/card-bg.png"
-    : asset === "fonts/HYWH-65W.ttf" ? "common/font/HYWH-65W.ttf" : undefined;
+    : asset === "fonts/HYWH-65W.ttf" ? "common/font/HYWH-65W.ttf"
+    : asset === "fonts/tttgbnumber.ttf" ? "common/font/tttgbnumber.ttf" : undefined;
   return original ? [...candidates, join(directory, original)] : candidates;
 }
 
@@ -82,7 +84,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
   const sources = override?.trim() ? [] : [...(donor ? [donor] : []), ...directories.slice(1)];
   const copied: string[] = [];
   const missing: string[] = [];
-  for (const [asset, size, digest] of [...assets, ...sectionIconFrames]) {
+  for (const [asset, size, digest] of [...assets, ...optionalSkillAssets]) {
     signal?.throwIfAborted();
     if (await available(theme, asset)) continue;
     const target = join(theme, asset);
@@ -101,7 +103,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
         }
       }
     }
-    if (!asset.startsWith("bg/talent-") && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
+    if (assets.some(([required]) => required === asset) && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
       missing.push(asset);
     }
   }
