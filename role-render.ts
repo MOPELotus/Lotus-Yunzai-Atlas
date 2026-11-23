@@ -441,6 +441,15 @@ function measurePage(head: number, panels: readonly Block[][], trailingGap: bool
   return { heights, height: Math.max(460, head + heights.reduce((sum, panelHeight) => sum + panelHeight, 0) + gap + footer) };
 }
 
+export async function renderLookupNotice(query: string, message: string, game: Game | undefined, options: RoleRenderOptions = {}) {
+  const [background] = await Promise.all([themeImage("bg/bg-sr.webp"), themeFonts ??= loadThemeFonts()]);
+  const { wrap, text } = makeLayout();
+  const title = wrap(query, 620, 33);
+  const [page] = await renderAtlasPages([{ section: "图鉴资料", panels: [[text(message)]] }], title,
+    game, "", undefined, background, options, 152);
+  return page!;
+}
+
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}) {
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
@@ -868,13 +877,13 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
   return renderAtlasPages(pages, title, "zzz", bangboo.version, icon, background, options, 152);
 }
 
-async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, version: string, icon: Image | undefined,
+async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | undefined, version: string, icon: Image | undefined,
   background: Image | undefined, { mode = "auto", scale = 4, inlineImageByteLimit }: RoleRenderOptions, titleX = icon ? 152 : margin + 20,
   allowPanelContinuation = false) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const low = nativeImageRasterScale() === 1;
   const pageScale = low ? 1 : scale;
-  const game = gameNames[gameId];
+  const game = gameId ? gameNames[gameId] : "Nanoka Atlas";
   const head = Math.max(header, 118 + title.length * 39);
   const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
     const { heights, height } = measurePage(head, panels, trailingGap !== false);

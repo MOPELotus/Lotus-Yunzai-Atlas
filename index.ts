@@ -11,7 +11,8 @@ import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
   gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
-import { traditionalAtlasEvent, type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
+import { invalidChallengeDate, parseExplicitAtlasChallenge, traditionalAtlasEvent,
+  type AtlasDelivery, type AtlasImage, type AtlasReply } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
 import { atlasHelp, atlasHelpAliases } from "./help.ts";
@@ -272,19 +273,33 @@ async function localZzzAlias(catalogue: Awaited<ReturnType<AtlasCatalog["read"]>
   if (matches.length === 1 && match) return { ...match, kind: "character" as const };
 }
 
+async function lookupNotice(query: string, message: string, game: Game | undefined, delivery?: AtlasDelivery): Promise<string | AtlasImage> {
+  const title = query.replace(/\s+/gu, " ").trim().slice(0, 96).toWellFormed();
+  try {
+    const { renderLookupNotice } = await import("./role-render.ts");
+    const { png } = await renderLookupNotice(title || "图鉴查询", message, game, {
+      inlineImageByteLimit: delivery?.inlineImageByteLimit,
+    });
+    return { type: "image", file: png };
+  } catch {
+    return message;
+  }
+}
+
 async function traditionalQuery(
   catalog: AtlasCatalog,
   query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" = "search", delivery?: AtlasDelivery,
 ): Promise<AtlasReply | undefined> {
+  const explicit = mode === "search" || mode === "shortcut" || mode === "character";
   try {
     const quickLookup = mode === "bare" || mode === "weapon";
     const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
-    let matches = findTraditionalEntries(result, query, game, mode === "shortcut" ? (query.length >= 2 ? "search" : "name") : mode);
+    let matches = findTraditionalEntries(result, query, game,
+      mode === "shortcut" ? "search" : mode === "character" ? "character-search" : mode);
     if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
     }
-    if (mode === "character" && !game && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
       const category = await traditionalAchievementCategory(catalog, query, result, game, delivery);
       if (category) return category;
@@ -302,7 +317,13 @@ async function traditionalQuery(
         return (await challengeDetails(catalog, entry, arbitrationMode, false)).join("\n");
       }
     }
-    if (!matches.length) return mode === "search" ? "未找到匹配的角色、装备、套装、邦布、敌人或幽境危战资料。" : undefined;
+    if (!matches.length) {
+      if (mode === "character" && findTraditionalEntries(result, query, game, "name").length) return;
+      if (!explicit) return;
+      const message = mode === "character" ? "未找到匹配的角色资料。" :
+        "未找到匹配的图鉴资料。请补充游戏名或更完整的名称。";
+      return lookupNotice(query, result.stale ? `${message}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : message, game, delivery);
+    }
     const first = matches[0]!;
     if (quickLookup && first.kind === "equipment") {
       if (matches.length !== 1) return;
@@ -351,8 +372,10 @@ async function traditionalQuery(
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
     if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
     return lines.join("\n");
-  } catch {
-    return mode === "search" ? missing : undefined;
+  } catch (error) {
+    if (!explicit) return;
+    const message = error instanceof LegacyAtlasSourceConflict || error instanceof AtlasSnapshotReset ? error.message : missing;
+    return lookupNotice(query, message, game, delivery);
   }
 }
 
@@ -581,9 +604,17 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
 function createTraditionalQueries(catalog: AtlasCatalog, limit: number) {
   return traditionalAtlasEvent((argument, kind, game, delivery) => {
     if (kind !== "glued") return traditionalQuery(catalog, argument, limit, game, kind, delivery);
-    const { query, game: statedGame } = searchTerms(argument);
-    return traditionalQuery(catalog, query, limit, statedGame, "search", delivery);
+    return explicitAtlasQuery(catalog, argument, limit, delivery);
   }, (mode, period, at, delivery) => challengeQuery(catalog, `${gameNames[mode.game]} ${mode.name} ${period}`, at, delivery));
+}
+
+async function explicitAtlasQuery(catalog: AtlasCatalog, argument: string, limit: number, delivery?: AtlasDelivery) {
+  const { game, query } = searchTerms(argument);
+  if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
+  const challenge = parseExplicitAtlasChallenge(query, game);
+  if (challenge?.invalidDate) return invalidChallengeDate;
+  if (challenge) return challengeQuery(catalog, `${gameNames[challenge.mode.game]} ${challenge.mode.name} ${challenge.period}`, challenge.at, delivery);
+  return await traditionalQuery(catalog, query, limit, game, "search", delivery) ?? missing;
 }
 
 function challengeCommand(catalog: AtlasCatalog, query: string) {
@@ -592,11 +623,7 @@ function challengeCommand(catalog: AtlasCatalog, query: string) {
 
 function searchCommands(catalog: AtlasCatalog, limit: number) {
   return {
-    async "#图鉴"(argument: string, delivery?: AtlasDelivery) {
-      const { game, query } = searchTerms(argument);
-      if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
-      return await traditionalQuery(catalog, query, limit, game, "search", delivery) ?? missing;
-    },
+    "#图鉴": (argument: string, delivery?: AtlasDelivery) => explicitAtlasQuery(catalog, argument, limit, delivery),
     "#武器图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#武器图鉴", limit, undefined, delivery),
     "#光锥图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#光锥图鉴", limit, "hsr", delivery),
     "#音擎图鉴": (argument: string, delivery?: AtlasDelivery) => equipmentQuery(catalog, argument, "#音擎图鉴", limit, "zzz", delivery),

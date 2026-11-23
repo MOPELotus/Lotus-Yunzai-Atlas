@@ -47,6 +47,20 @@ export function parseChallengeShortcut(message: string) {
   return { mode, period, at: valid ? at : undefined, invalidDate: !valid };
 }
 
+export function parseExplicitAtlasChallenge(query: string, game?: Game) {
+  const text = query.replace(/\s+/gu, "");
+  const date = /\d{4}[./年-]\d{1,2}[./月-]\d{1,2}日?/u.exec(text)?.[0];
+  const normalized = date ? date + text.replace(date, "") : text;
+  const shortcut = normalized.endsWith("图鉴") ? normalized : normalized + "图鉴";
+  const prefixesByGame = { gi: "#", hsr: "*", zzz: "%" } as const;
+  for (const prefix of game ? [prefixesByGame[game]] : Object.values(prefixesByGame)) {
+    const result = parseChallengeShortcut(prefix + shortcut);
+    if (result) return result;
+  }
+}
+
+export const invalidChallengeDate = "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。";
+
 export function parseGluedLookup(message: string): string | undefined {
   const input = message.trim();
   if (operations.test(input)) return;
@@ -61,7 +75,7 @@ export function parseEquipmentShortcut(message: string): { game: Game; query: st
   if (!prefix) return;
   const query = input.slice(prefix.length, -"图鉴".length).trim();
   const key = query.normalize("NFKC").replace(/\s+/gu, "");
-  if (!query || reserved.test(query) || reservedBare.test(key) || genericShortcut.test(key) || /^[0-9]$/u.test(key)) return;
+  if (Array.from(key).length < 2 || reserved.test(query) || reservedBare.test(key) || genericShortcut.test(key)) return;
   const game = prefixes[prefix];
   if (game) return { game, query };
 }
@@ -85,7 +99,8 @@ export function parseRoleShortcut(message: string): { game?: Game; query: string
   const result = roleDetail.exec(input.slice(prefix?.length ?? 0));
   const query = result?.[1]?.trim();
   const suffix = result?.[2];
-  if (!query || (!prefix && query.length < 2) || query === "角色" || reserved.test(query)) return;
+  if (!query || (!prefix && query.length < 2) || genericShortcut.test(query) || reserved.test(query) ||
+      reservedBare.test(query) || /^(?:我的|个人|今日|今天|每日|明天|明日|周[1-7一二三四五六日](?:素材|材料)?$)/u.test(query)) return;
   const game = prefix ? prefixes[prefix] : undefined;
   if (suffix === "天赋") return game ? { game, query } : { query };
   const suffixGame = suffix === "命座" ? "gi" : suffix === "星魂" ? "hsr" : "zzz";
@@ -148,7 +163,7 @@ export function traditionalAtlasEvent(
         if (role) return send(event, await findReply(role.query, "character", role.game, delivery));
         const challenge = parseChallengeShortcut(event.msg);
         if (challenge) return send(event, challenge.invalidDate
-          ? "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。"
+          ? invalidChallengeDate
           : await findChallengeReply(challenge.mode, challenge.period, challenge.at, delivery));
         const target = parseEquipmentShortcut(event.msg);
         if (target) return send(event, await findReply(target.query, "shortcut", target.game, delivery));

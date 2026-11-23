@@ -17,7 +17,7 @@ test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项�
     for (const command of commands) expect(parseEquipmentShortcut(command)).toEqual({ game, query });
   }
   for (const command of ["#图鉴", "#星铁图鉴", "#西风剑攻略图鉴", "#芙宁娜练度统计图鉴", "#芙宁娜命座图鉴",
-    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#1图鉴", "#１图鉴",
+    "*卡芙卡星魂", "％艾莲影画图鉴", "#当期深渊", "*本期末日", "%防卫战", "#1图鉴", "#１图鉴", "#风图鉴",
     "#材料图鉴", "*遗器套装图鉴", "%音擎图鉴", "#武 器图鉴", "#最强西风剑图鉴", "#更新面板图鉴"]) {
     expect(parseEquipmentShortcut(command)).toBeUndefined();
   }
@@ -149,7 +149,8 @@ test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", ()
   expect(parseRoleShortcut("芙宁娜天赋")).toEqual({ query: "芙宁娜" });
   expect(parseRoleShortcut("#芙宁娜天赋")).toEqual({ game: "gi", query: "芙宁娜" });
   expect(parseRoleShortcut("%雅影画")).toEqual({ game: "zzz", query: "雅" });
-  for (const command of ["#角色天赋", "角色天赋", "芙宁娜攻略命座", "*卡芙卡影画", "#绝区零艾莲星魂", "芙宁娜图鉴", "雅影画"]) {
+  for (const command of ["#角色天赋", "角色天赋", "芙宁娜攻略命座", "*卡芙卡影画", "#绝区零艾莲星魂", "芙宁娜图鉴", "雅影画",
+    "*我的卡芙卡星魂", "#今日天赋", "#周一素材天赋"]) {
     expect(parseRoleShortcut(command)).toBeUndefined();
   }
 });
@@ -173,6 +174,7 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
       games: {
         gi: { locales: { zh: { pages: {
           character: page({ id: "10", name: "西风剑客" },
+            { id: "11", name: "峡谷西风" },
             { id: "10000005-2", name: "旅行者" }, { id: "10000007-3", name: "旅行者" }),
           weapon: page({ id: "100", name: "西风剑" }, { id: "101", name: "余响 · 旧曲" },
             { id: "11505", name: "磐岩结绿" }),
@@ -188,6 +190,10 @@ test("显式旧搜索择优且保留同名结果，装备捷径只认指定游�
     expect(hits("西风剑")).toEqual([["gi", "equipment", "100"], ["gi", "set", "202"], ["hsr", "equipment", "300"]]);
     expect(hits("100")).toEqual([["gi", "equipment", "100"]]);
     expect(hits("西风剑客")).toEqual([["gi", "character", "10"]]);
+    expect(hits("西风", "gi", "character-search")).toEqual([["gi", "character", "10"], ["gi", "character", "11"]]);
+    expect(hits("西风", "gi", "search")).toEqual([
+      ["gi", "equipment", "100"], ["gi", "set", "202"], ["gi", "character", "10"], ["gi", "character", "11"],
+    ]);
     expect(hits("10000005-2", "gi")).toEqual([["gi", "character", "10000005-2"]]);
     expect(hits("１００００００７－３", "gi")).toEqual([["gi", "character", "10000007-3"]]);
     expect(hits("100000052", "gi")).toEqual([]);

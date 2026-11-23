@@ -169,7 +169,7 @@ const legacyCharacterSetAliases = new Map(
   )]),
 );
 
-function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false) {
+function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], query: string, game?: Game, exact = false, includePartial = false) {
   const literal = exactName(query);
   const key = exact ? literal : compareKey(query);
   if (!key) return [];
@@ -194,6 +194,9 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     });
   });
   const best = matches.reduce((best, match) => Math.max(best, match.score), 0);
+  if (best > 0 && best <= 2 && includePartial) return matches.filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.entry.name.length - right.entry.name.length ||
+      left.entry.name.localeCompare(right.entry.name, "zh-Hans-CN"));
   return best > 0 ? matches.filter((match) => match.score === best) : [];
 }
 
@@ -201,7 +204,7 @@ function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): 
   return findMatches(catalog, [kind], query, game).map(({ entry }) => entry);
 }
 
-export type TraditionalLookup = "search" | "name" | "equipment" | "weapon" | "character" | "bare";
+export type TraditionalLookup = "search" | "name" | "equipment" | "weapon" | "character" | "character-search" | "bare";
 
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
   if (mode === "weapon") return findMatches(catalog, ["equipment"], query, game, true);
@@ -211,10 +214,14 @@ export function findTraditionalEntries(catalog: Catalog, query: string, game?: G
   }
   if (mode === "equipment") return findMatches(catalog, ["equipment", "set"], query, game, true);
   if (mode === "character") return findMatches(catalog, ["character"], query, game, true);
+  if (mode === "character-search") {
+    const exact = findMatches(catalog, ["character"], query, game, true);
+    return exact.length || Array.from(query.trim()).length < 2 ? exact : findMatches(catalog, ["character"], query, game, false, true);
+  }
   const pages = catalog.pages.filter((page) => page.kind !== "challenge" || page.challengeMode?.id === "leyline");
   const existing = findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"],
-    query, game, mode === "name");
-  const cards = findMatches(catalog, ["gcg"], query, game, mode === "name");
+    query, game, mode === "name", mode === "search");
+  const cards = findMatches(catalog, ["gcg"], query, game, mode === "name", mode === "search");
   return cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
 }
 
