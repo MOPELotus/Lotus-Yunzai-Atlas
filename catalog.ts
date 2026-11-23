@@ -17,6 +17,7 @@ import { genshinCardPage, normalizeGenshinCard } from "./gcg-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
+import { rebuildLegacyAtlasIndex } from "./rebuild-legacy-index.ts";
 import equipmentAliasData from "./equipment-aliases.json";
 import legacyCharacterSetAliasData from "./legacy-character-set-aliases.json";
 import { zzzCharacterAliases } from "./zzz-role-names.ts";
@@ -90,6 +91,7 @@ interface AtlasPage {
 interface Catalog {
   readonly pages: readonly AtlasPage[];
   readonly stale: boolean;
+  readonly rebuilt?: true;
 }
 
 interface Snapshot extends Catalog {
@@ -273,6 +275,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
   const publishedRoot = publicationRoot && resolve(publicationRoot);
   const entryRoots = new WeakMap<AtlasEntry, string>();
   let snapshot: Snapshot | undefined;
+  let rebuiltAt = 0;
   let reading: Promise<Catalog> | undefined;
   let checkingShortcuts: Promise<Catalog> | undefined;
 
@@ -290,22 +293,29 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
         throw new Error("图鉴发布指针丢失或版本倒退。");
       }
       const mapPath = join(root, "map.json");
-      const info = version === null ? await stat(mapPath, { bigint: true }) : await lstat(mapPath, { bigint: true });
-      if (version !== null && !info.isFile()) throw new Error("已发布图鉴索引须为实体文件。");
-      const mapIdentity = [info.dev, info.ino, info.ctimeNs, info.mtimeNs, info.size].join(":");
+      const marker = await lstat(mapPath, { bigint: true }).catch(error => {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT" || version !== null) throw error;
+        return undefined;
+      });
+      const info = marker?.isSymbolicLink() && version === null ? await stat(mapPath, { bigint: true }) : marker;
+      if (version !== null && !info?.isFile()) throw new Error("已发布图鉴索引须为实体文件。");
+      const mapIdentity = info ? [info.dev, info.ino, info.ctimeNs, info.mtimeNs, info.size].join(":") : "rebuilt";
       // Recent writes can share a filesystem clock tick. Compare bytes until they are outside that window.
       // Explicit queries always compare bytes.
-      const settledIdentity = info.ctimeNs < BigInt(Date.now()) * 1_000_000n - shortcutIdentityAgeNs;
+      const settledIdentity = info ? info.ctimeNs < BigInt(Date.now()) * 1_000_000n - shortcutIdentityAgeNs
+        : Date.now() < rebuiltAt + 10_000;
       if (shortcut && settledIdentity && snapshot && !snapshot.stale && root === snapshot.root &&
           version === snapshot.version && legacy === snapshot.legacy && mapIdentity === snapshot.mapIdentity) {
-        return { pages: snapshot.pages, stale: false };
+        return { pages: snapshot.pages, stale: false, ...(snapshot.rebuilt && { rebuilt: true }) };
       }
-      const map = await readFile(mapPath);
+      const map = info ? await readFile(mapPath) : await rebuildLegacyAtlasIndex(root);
+      if (!info) rebuiltAt = Date.now();
       if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version ||
-          legacy !== snapshot.legacy || !map.equals(snapshot.map)) {
+          legacy !== snapshot.legacy || (!info) !== (snapshot.rebuilt === true) || !map.equals(snapshot.map)) {
         const source = object(JSON.parse(map.toString("utf8")));
         const pages: AtlasPage[] = [];
-        const previousPages = snapshot?.legacy === legacy && (!legacy || snapshot.root === root) ? snapshot.pages : [];
+        const previousPages = info && snapshot?.legacy === legacy && !snapshot.rebuilt && (!legacy || snapshot.root === root)
+          ? snapshot.pages : [];
         let stale = false;
         for (const game of Object.keys(gameNames) as Game[]) {
           const gameBlock = object(object(source.games)[game]);
@@ -359,18 +369,20 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
             }
           }
         }
-        if (!pages.length || (version !== null && stale)) throw new Error("图鉴索引缺少可用分类。");
-        snapshot = { map, mapIdentity, root, version, legacy, pages, stale };
+        if (!pages.length || ((version !== null || !info) && stale)) throw new Error("图鉴索引缺少可用分类。");
+        snapshot = { map, mapIdentity, root, version, legacy, pages, stale, ...(!info && { rebuilt: true }) };
       } else if (mapIdentity !== snapshot.mapIdentity) {
         snapshot = { ...snapshot, mapIdentity };
       }
-      return { pages: snapshot.pages, stale: snapshot.stale };
+      return { pages: snapshot.pages, stale: snapshot.stale, ...(snapshot.rebuilt && { rebuilt: true }) };
     } catch (error) {
       if (error instanceof AtlasSnapshotReset) {
         snapshot = undefined;
         throw error;
       }
-      if (snapshot && !snapshot.legacy && !(error instanceof LegacyAtlasSourceConflict)) return { pages: snapshot.pages, stale: true };
+      if (snapshot && !snapshot.rebuilt && !snapshot.legacy && !(error instanceof LegacyAtlasSourceConflict)) {
+        return { pages: snapshot.pages, stale: true };
+      }
       throw error;
     }
   }

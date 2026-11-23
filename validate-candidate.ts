@@ -37,7 +37,7 @@ function itemPath(value: unknown): value is string {
     value.split("/").every((part) => part && part !== "." && part !== "..");
 }
 
-async function candidateJson(directory: string, relative: string): Promise<unknown> {
+export async function candidateJson(directory: string, relative: string): Promise<unknown> {
   const path = join(directory, relative);
   if (await realpath(path) !== path) throw new Error("快照文件路径经过链接。");
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

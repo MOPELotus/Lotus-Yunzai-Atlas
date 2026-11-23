@@ -27,6 +27,7 @@ export async function atlasStatus(catalog: Pick<ReturnType<typeof createAtlasCat
     rows.push(`${gameNames[game]} · ${name} · ${version} · ${count}${sampled ? "（样例）" : ""}`);
   }
   if (result?.stale) rows.push("部分索引更新失败，已有数据的分类保留了上一次可用的版本。");
+  if (result?.rebuilt) rows.push("旧索引缺失，本次按实体条目重建索引，原导出未修改，资料完整性待核对。");
   if (failure) rows.push(failure);
   const lead = `${result ? "READY" : "MISSING"}\n数据目录：${root}`;
   return renderAtlasStatus("图鉴状态", lead, rows, delivery?.inlineImageByteLimit);
