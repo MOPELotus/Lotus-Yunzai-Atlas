@@ -10,7 +10,7 @@ import { initializeAtlas, initializeAtlasFromPublic } from "./initialize-atlas.t
 import { atlasManifestVersion, fetchAtlasManifest, type AtlasVersionChannel } from "./update-plan.ts";
 import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-candidate.ts";
 import { object } from "./source-values.ts";
-import { atlasAllowsMissingDataInitialization, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
+import { atlasAllowsMissingDataInitialization, atlasUpdatePublicationOptions, atlasGenshinCardSelection, parseAtlasUpdatePolicy, type AtlasScheduleKind } from "./update-policy.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { applyAtlasCandidate } from "./apply-candidate.ts";
 import type { downloadAtlasVersion as DownloadAtlasVersion } from "./download-legacy-atlas.ts";
@@ -79,7 +79,7 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
   let updating = false;
 
   function publicationOptions(): AtlasPublicationOptions {
-    return { preparation: syncAfterUpdate ? undefined : {}, retainGallery: !syncGallery };
+    return atlasUpdatePublicationOptions(configured);
   }
 
   function acceptedBaseline(result: AtlasPublication, publication?: AtlasPublicationOptions) {

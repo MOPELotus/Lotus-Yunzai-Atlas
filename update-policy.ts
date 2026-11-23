@@ -1,5 +1,6 @@
 import { defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
+import type { AtlasPublicationOptions } from "./publish-candidate.ts";
 import { object } from "./source-values.ts";
 
 export type AtlasScheduleKind = "version" | "challenge";
@@ -111,6 +112,11 @@ function configuredScope(value: unknown, selections: readonly string[], locale: 
   if (locales.size && !locales.has(locale)) return [];
   return selections.filter((selection) => (!games.size || games.has(selection.split("/")[0]!)) &&
     (!pages.size || pages.has(selection)));
+}
+
+export function atlasUpdatePublicationOptions(value: unknown): AtlasPublicationOptions {
+  const configured = object(value);
+  return { preparation: configured.sync_after_update === false ? {} : undefined, retainGallery: configured.sync_gallery === false };
 }
 
 export function atlasAllowsMissingDataInitialization(value: unknown): boolean {
