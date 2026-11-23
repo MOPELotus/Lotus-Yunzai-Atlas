@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ImageSizeLimitError, renderPng } from "@lotus-yunzai/skia";
+import { ImageSizeLimitError, nativeImageRasterScale, renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
 import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
 import { localPanelGalleryRoot, readSyncedPanelGalleryRoot } from "../../lib/panel-gallery-paths.ts";
@@ -872,6 +872,8 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
   background: Image | undefined, { mode = "auto", scale = 4, inlineImageByteLimit }: RoleRenderOptions, titleX = icon ? 152 : margin + 20,
   allowPanelContinuation = false) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
+  const low = nativeImageRasterScale() === 1;
+  const pageScale = low ? 1 : scale;
   const game = gameNames[gameId];
   const head = Math.max(header, 118 + title.length * 39);
   const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
@@ -922,7 +924,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
     return renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
       ctx.scale(zoom, zoom);
       paint(ctx);
-    }, mode, { allowHalfScale });
+    }, mode, { allowHalfScale, renderScale: zoom });
   };
   const fits = (image: { readonly png: Uint8Array }) =>
     inlineImageByteLimit === undefined || image.png.byteLength <= inlineImageByteLimit;
@@ -934,8 +936,8 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
   for (const [index, layout] of pages.entries()) {
     const { section, continuation } = layout;
     const pageNumber = `${index + 1}/${pages.length}`;
-    let image = await renderWithinCodec(layout, section, pageNumber, scale, scale === 4);
-    if (!(image instanceof ImageSizeLimitError) && !fits(image) && scale === 4 && image.reducedScaleReason === undefined) {
+    let image = await renderWithinCodec(layout, section, pageNumber, pageScale, pageScale === 4);
+    if (!(image instanceof ImageSizeLimitError) && !fits(image) && pageScale === 4 && image.reducedScaleReason === undefined) {
       const smaller = await renderWithinCodec(layout, section, pageNumber, 2);
       image = smaller instanceof ImageSizeLimitError ? smaller :
         { ...smaller, reducedScaleReason: "四倍图超过当前聊天的单图大小上限。" };
@@ -947,17 +949,19 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game, ve
     const groups = continuation ?? (allowPanelContinuation ? layout.panels : []);
     const sizeError = new RangeError(`图鉴「${section}」超过当前聊天的单图大小上限。`);
     const failure = image instanceof ImageSizeLimitError ? image : sizeError;
-    if ((scale !== 4 && scale !== 2) || groups.length < 2) throw failure;
-    // Keep each room or section intact. Split only after 2× exceeds the codec or chat limit.
+    if ((!low && pageScale !== 4 && pageScale !== 2) || groups.length < 2) throw failure;
+    // Keep each room or section intact at the smallest scale of the active preset.
+    const continuationScale = low ? 1 : 2;
+    const reason = low ? "低配整图超限，按原分项续页。" : "二倍整图超限，按原分项续页。";
     const renderContinuation = async (start: number, end: number): Promise<void> => {
       const selected = groups.slice(start, end);
       const range = end === start + 1 ? String(end) : `${start + 1}–${end}`;
       const part = `${range}/${groups.length}`;
       const partSection = `${section}（${part}）`;
       const panels = continuation ? [selected.flat()] : selected;
-      const next = await renderWithinCodec({ ...layout, panels }, section, `${pageNumber} · 原分项 ${part}`, 2);
+      const next = await renderWithinCodec({ ...layout, panels }, section, `${pageNumber} · 原分项 ${part}`, continuationScale);
       if (!(next instanceof ImageSizeLimitError) && fits(next)) {
-        output.push({ section: partSection, ...next, reducedScaleReason: `二倍整图超限，按原分项续页。${failure.message}` });
+        output.push({ section: partSection, ...next, reducedScaleReason: reason + failure.message });
         return;
       }
       if (end - start < 2) throw next instanceof ImageSizeLimitError ? next : sizeError;

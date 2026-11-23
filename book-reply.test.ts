@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { setImageRenderPreset } from "@lotus-yunzai/skia";
 import { atlasBookReply } from "./book-reply.ts";
 
 const pages = (sizes: readonly number[]) => sizes.map((size, index) => ({
@@ -39,7 +40,7 @@ test("整册标题按旧顺序列各分项一次，保留同分项全部页", as
 
 test("只有转发节点数超限时保留四倍页，无界协议保留单份转发", async () => {
   const scales: number[] = [];
-  const render = async (scale: 4 | 2) => {
+  const render = async (scale: 4 | 2 | 1) => {
     scales.push(scale);
     return pages(Array.from({ length: 101 }, () => 1));
   };
@@ -48,4 +49,20 @@ test("只有转发节点数超限时保留四倍页，无界协议保留单份�
   expect(scales).toEqual([4, 4]);
   expect(bounded && typeof bounded === "object" && bounded.type === "forward-image-batches" && bounded.batches.map(nodes => nodes.length)).toEqual([100,3]);
   expect(unbounded && typeof unbounded === "object" && unbounded.type === "forward" && unbounded.nodes.length).toBe(102);
+});
+
+test("低配图鉴用原有的一倍页分批，每页只渲染一次", async () => {
+  const scales: number[] = [];
+  setImageRenderPreset("low");
+  try {
+    const value = await atlasBookReply("混沌回忆", async scale => {
+      scales.push(scale);
+      return pages([7, 6, 5, 8]);
+    }, { inlineImageByteLimit: 16 });
+    expect(scales).toEqual([1]);
+    expect(value && typeof value === "object" && value.type === "forward-image-batches" &&
+      value.batches.map(nodes => nodes.length)).toEqual([3, 3]);
+  } finally {
+    setImageRenderPreset("standard");
+  }
 });

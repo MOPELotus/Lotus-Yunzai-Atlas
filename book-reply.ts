@@ -1,16 +1,18 @@
+import { nativeImageRasterScale } from "@lotus-yunzai/skia";
 import { batchInlineImagePages } from "@lotus-yunzai/skia/forward-images";
 import type { AtlasDelivery, AtlasReply } from "./traditional.ts";
 
 type BookPage = { readonly section: string; readonly png: Uint8Array };
 
-export async function atlasBookReply(name: string, render: (scale: 4 | 2) => Promise<readonly BookPage[]>,
+export async function atlasBookReply(name: string, render: (scale: 4 | 2 | 1) => Promise<readonly BookPage[]>,
   delivery?: AtlasDelivery, singleAsForward = false): Promise<AtlasReply | undefined> {
   const budget = delivery?.inlineImageByteLimit;
-  let pages = await render(4);
+  const scale = nativeImageRasterScale();
+  let pages = await render(scale);
   if (!pages.length) return;
   if (pages.length === 1 && !singleAsForward) return { type: "image", file: pages[0]!.png };
   const bytes = (page: BookPage) => page.png.byteLength;
-  if (budget !== undefined && pages.reduce((total, page) => total + bytes(page), 0) > budget) {
+  if (scale === 4 && budget !== undefined && pages.reduce((total, page) => total + bytes(page), 0) > budget) {
     pages = await render(2);
   }
   const batches = batchInlineImagePages(pages, budget, bytes);
