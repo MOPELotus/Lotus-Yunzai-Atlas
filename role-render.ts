@@ -403,7 +403,9 @@ async function originalGenshinPortrait(role: RoleDetails, maxBytes = maxImageByt
   }
 }
 
-async function miaoSectionArtwork(role: RoleDetails, qFace: boolean): Promise<{ card?: Image; face?: Image; talents?: Record<string, unknown> }> {
+async function miaoSectionArtwork(role: RoleDetails, qFace: boolean, memosprite: boolean): Promise<{
+  card?: Image; face?: Image; talents?: Record<string, unknown>; memosprite?: Readonly<Record<"me" | "mt", Image | undefined>>;
+}> {
   const { game, id, overview: { name } } = role;
   if (game === "zzz" || !/^[1-9]\d*$/u.test(id) || !name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return {};
   const meta = game === "gi" ? "meta-gs" : "meta-sr";
@@ -429,13 +431,15 @@ async function miaoSectionArtwork(role: RoleDetails, qFace: boolean): Promise<{ 
       if (await realpath(folder).catch(() => undefined) !== folder) return;
       return (await artworkAsset(await localAsset(join(folder, filename), maxImageBytes).catch(() => undefined)))?.image;
     };
-    const [card, preferred] = await Promise.all([
+    const [card, preferred, me, mt] = await Promise.all([
       read(game === "gi" ? join(directory, "imgs") : join(base, "common", "imgs"), "card.webp"),
       qFace ? read(join(directory, "imgs"), "face-q.webp") : undefined,
+      memosprite ? read(join(directory, "imgs"), "talent-me.webp") : undefined,
+      memosprite ? read(join(directory, "imgs"), "talent-mt.webp") : undefined,
     ]);
     const face = preferred ?? await read(join(directory, "imgs"), "face.webp");
     const talents = game === "hsr" ? object(record.talent) : undefined;
-    if (card || face || (talents && Object.keys(talents).length)) return { card, face, talents };
+    if (card || face || me || mt || (talents && Object.keys(talents).length)) return { card, face, talents, memosprite: { me, mt } };
   }
   return {};
 }
@@ -601,19 +605,21 @@ function roleSectionStyle(role: RoleDetails, wrap: ReturnType<typeof makeLayout>
   };
 }
 
-function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknown>) {
+function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknown>, parent?: RoleSkillCard) {
   const levels = card.sectionLevels ?? card.levels ?? [];
   if (!talents || !card.sectionParameters?.length) return levels;
-  const sources = Object.values(talents).map(object).filter(({ name }) => label(name) === card.name);
+  const sources = Object.values(talents).map(object).filter(({ name }) => label(name) === (parent ?? card).name);
   if (sources.length !== 1) return levels;
-  const oldRows = Object.values(object(sources[0]!.tables)).map(object);
+  const prefix = parent && card.name.replace(/^献予/u, "") + "•";
+  const oldRows = Object.values(object(sources[0]!.tables)).map(object).filter(({ name }) =>
+    prefix ? label(name).startsWith(prefix) : !card.linkedEffects?.length || !/^「[^」]+」之诗•/u.test(label(name)));
   const labels = new Map<string, string>();
   for (const { label: row, values } of card.sectionParameters) {
     const matches = oldRows.filter(({ values: old }) => Array.isArray(old) && values.every(({ level, value }) => {
       const previous = old[level - 1];
       return typeof previous === "number" && Math.abs(previous - value) <= 1e-8;
     }));
-    const text = matches.length === 1 ? label(matches[0]!.name) : "";
+    const text = matches.length === 1 ? label(matches[0]!.name).slice(prefix ? prefix.length : 0) : "";
     if (text) labels.set(row, text);
   }
   return levels.map((level) => ({ ...level, details: level.details.map((item) =>
@@ -621,7 +627,8 @@ function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknow
 }
 
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}, section?: RoleSection) {
-  const skillGroups = section === "ranks" ? [] : role.skills.flatMap(({ title, cards }) => {
+  const sourceGroups = section === "skills" ? role.sectionSkills ?? role.skills : role.skills;
+  const skillGroups = section === "ranks" ? [] : sourceGroups.flatMap(({ title, cards }) => {
     const available = section ? cards.filter(({ omitFromSection }) => !omitFromSection) : cards;
     return available.length ? [{ title, cards: available }] : [];
   });
@@ -641,7 +648,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
-    section ? miaoSectionArtwork(role, options.qFace !== false) : undefined, section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
+    section ? miaoSectionArtwork(role, options.qFace !== false, section === "skills" && !!role.sectionSkills) : undefined,
+    section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
@@ -669,11 +677,18 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const pages: Page[] = section ? [] : [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
   const skills = skillGroups.flatMap(({ title, cards }) => [
     [heading(title, undefined, true)],
-    ...cards.map((card) => {
+    ...cards.flatMap((card) => {
       const description = section ? card.sectionDescription ?? card.description : card.description;
       const levels = section ? sectionSkillLevels(card, sectionArt?.talents) : card.levels ?? [];
-      return [heading(card.name, image(card.artwork)), ...(description ? [text(description)] : []),
+      const originalIcon = card.memospriteIcon ? sectionArt?.memosprite?.[card.memospriteIcon] : undefined;
+      const main = [heading(card.name, originalIcon ?? image(card.artwork)), ...(description ? [text(description)] : []),
         ...card.details.map(details), ...layout.levelBlocks(levels)];
+      const effects = (section ? card.linkedEffects ?? [] : []).map(effect => {
+        const body = effect.sectionDescription ?? effect.description;
+        return [heading(effect.name, undefined, true), ...(body ? [text(body)] : []),
+          ...layout.levelBlocks(sectionSkillLevels(effect, sectionArt?.talents, card))];
+      });
+      return [main, ...effects];
     }),
   ]);
   if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });

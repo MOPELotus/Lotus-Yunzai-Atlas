@@ -24,6 +24,8 @@ export interface RoleSkillCard {
   readonly sectionDescription?: string;
   readonly sectionParameters?: readonly { label: string; values: readonly { level: number; value: number }[] }[];
   readonly omitFromSection?: boolean;
+  readonly memospriteIcon?: "me" | "mt";
+  readonly linkedEffects?: readonly RoleSkillCard[];
 }
 
 export interface RoleSkillGroup {
@@ -74,6 +76,7 @@ export interface RoleDetails {
     };
   };
   readonly skills: readonly RoleSkillGroup[];
+  readonly sectionSkills?: readonly RoleSkillGroup[];
   readonly ranks: readonly RoleRank[];
   readonly materials: readonly RoleMaterialGroup[];
 }
@@ -236,26 +239,75 @@ function starRailSectionSkill(template: unknown, source: readonly RecordValue[],
   return { sectionDescription, sectionLevels: displayed, sectionParameters };
 }
 
-function starRailSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[] {
+function starRailSkillCard(skill: RecordValue, artwork?: string): RoleSkillCard | undefined {
+  const name = text(skill.name);
+  if (!name) return;
+  const sourceLevels = values(skill.level);
+  const levels = sourceLevels.flatMap((row) => {
+    const level = integer(row.level);
+    const description = text(skill.desc, row.param_list);
+    return level && description ? [{ level, description, details: [] }] : [];
+  });
+  const type = text(skill.type_name);
+  const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
+  const omitFromSection = !type && (integer(skill.id) ?? 0) % 100 === 6;
+  return { name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
+    details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection,
+    ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork };
+}
+
+// In the fixed original character sheets these source slots map to me/me2, then mt/mt1/mt2.
+// The variant attack uses 02 or 07; slots 13 and later are separate linked effects.
+const memospriteSectionSlots = [
+  ["01", "忆灵技", "me"], [["02", "07"], "忆灵技", undefined],
+  ["03", "忆灵天赋", "mt"], ["05", "忆灵天赋", undefined], ["06", "忆灵天赋", undefined],
+] as const;
+
+function memospriteCard(skill: RecordValue, artwork?: string) {
+  const clean = (value: unknown) => label(value).replace(/<\/?icon(?:\s[^<>\r\n]{0,160})?\s*\/?>/giu, "");
+  const desc = clean(skill.desc);
+  const card = starRailSkillCard({ ...skill, desc, simple_desc: clean(skill.simple_desc) }, artwork);
+  return card && { ...card, sectionDescription: card.sectionDescription ?? text(desc),
+    sectionLevels: card.sectionParameters?.length ? card.sectionLevels : [] };
+}
+
+function cyrenePoemEffects(skills: RecordValue): RoleSkillCard[] {
+  // The fixed original template lists the fourteen effects by source ID, beneath the second memosprite skill.
+  return Array.from({ length: 14 }, (_, index) => object(skills[String(1_141_513 + index)])).flatMap(skill => {
+    if (label(skill.type_name) !== "忆灵技" || !integer(object(skill.link).link_avatar) || !/^献予「[^」]+」之诗$/u.test(label(skill.name))) return [];
+    const card = memospriteCard(skill);
+    return card ? [card] : [];
+  });
+}
+
+function starRailMemospriteCards(id: string, detail: RecordValue, artwork: Artwork): RoleSkillCard[] {
+  const companion = object(detail.memosprite);
+  const skills = object(companion.skills);
+  if (!Object.keys(skills).length) return [];
+  // The male and female Trailblazers share the same Remembrance companion skill IDs.
+  const owners = id === "8008" ? [id, "8007"] : [id];
+  return memospriteSectionSlots.flatMap(([slot, type, memospriteIcon]) => {
+    const suffixes = typeof slot === "string" ? [slot] : slot;
+    const keys = owners.flatMap(owner => suffixes.map(suffix => `1${owner}${suffix}`));
+    const key = keys.find(candidate => label(object(skills[candidate]).type_name) === type);
+    if (!key) return [];
+    const skill = object(skills[key]);
+    const card = memospriteCard(skill,
+      artwork(`detail.memosprite.skills.${key}.icon`, ...(memospriteIcon ? ["detail.memosprite.icon"] : [])));
+    if (!card) return [];
+    const linkedEffects = key === "1141502" && skill.exclusive === true ? cyrenePoemEffects(skills) : undefined;
+    return [{ ...card, memospriteIcon, linkedEffects }];
+  });
+}
+
+function starRailSkills(id: string, detail: RecordValue, artwork: Artwork) {
   const groups = rows(detail.skill_trees);
   const skills = rows(detail.skills).flatMap(([key, skill]) => {
-    const name = text(skill.name);
-    if (!name) return [];
-    const sourceLevels = values(skill.level);
-    const levels = sourceLevels.flatMap((row) => {
-      const level = integer(row.level);
-      const description = text(skill.desc, row.param_list);
-      return level && description ? [{ level, description, details: [] }] : [];
-    });
     const source = groups.flatMap(([point, group]) => rows(group).flatMap(([key, row]) =>
       Array.isArray(row.level_up_skill_id) && row.level_up_skill_id.includes(skill.id)
         ? [`detail.skill_trees.${point}.${key}.icon`] : []));
-    const type = text(skill.type_name);
-    const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
-    const omitFromSection = !type && (integer(skill.id) ?? 0) % 100 === 6;
-    return [{ name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
-      details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection,
-      ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork: artwork(`detail.skills.${key}.icon`, ...source) }];
+    const card = starRailSkillCard(skill, artwork(`detail.skills.${key}.icon`, ...source));
+    return card ? [card] : [];
   });
   const traces = groups.flatMap(([point, group]) => {
     const data = rows(group).filter(([, row]) => row.point_type === 1 || row.point_type === 3);
@@ -278,7 +330,13 @@ function starRailSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[]
     return [{ name, description: levels[0]?.description, details: levels[0]?.details ?? [], levels, sectionLevels: [],
       omitFromSection: first[1].point_type === 1, artwork: artwork(`detail.skill_trees.${point}.${first[0]}.icon`) }];
   });
-  return [...skillGroup("技能", skills), ...skillGroup("行迹", traces)];
+  const active = skillGroup("技能", skills);
+  const passive = skillGroup("行迹", traces);
+  const memosprite = starRailMemospriteCards(id, detail, artwork);
+  return {
+    skills: [...active, ...passive],
+    sectionSkills: memosprite.length ? [...active, ...skillGroup("忆灵技能", memosprite), ...passive] : undefined,
+  };
 }
 
 function zenlessNumbers(entry: RecordValue, levelNumbers: readonly number[]): RoleSkillLevel[] {
@@ -683,10 +741,11 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
     const path = artwork(field);
     return path ? [path] : [];
   }))];
-  const skills = game === "gi" ? genshinSkills(detail, artwork) : game === "hsr" ? starRailSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork);
+  const railSkills = game === "hsr" ? starRailSkills(id, detail, artwork) : undefined;
+  const skills = railSkills?.skills ?? (game === "gi" ? genshinSkills(detail, artwork) : zenlessSkillsAndCores(detail, artwork));
   const materials = roleMaterialGroups(game, detail, images, materialNames);
   return {
-    game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
+    game, id, version, skills, sectionSkills: railSkills?.sectionSkills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name: title, rarity, description,
       artwork: portrait ?? icon, icon, portraitFallbacks: portraitFallbacks.length ? portraitFallbacks : undefined,
       iconFallback, element, traveler, facts: overviewFacts(game, detail), stats: overviewStats(game, detail),

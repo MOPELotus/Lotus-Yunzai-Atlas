@@ -367,3 +367,44 @@ test("星铁专用分项把倍率代回正文并注明旧代表等级，保留�
     { label: "正文第 1 项", text: "140.0%" }, { label: "正文第 2 项", text: "52.5%" },
   ]);
 });
+
+test("星铁旧忆灵分项恢复昔涟主动后被动的顺序，仅专用技能卡读取对应同角色槽位", () => {
+  const memo = (name: string, type_name: string, desc = "效果提高<unbreak>#1[i]%</unbreak>。") => ({
+    name, type_name, desc, level: [{ level: 1, param_list: [0.3] }, { level: 5, param_list: [0.54] }],
+  });
+  const role = normalizeRoleDetails({ ...entry("hsr"), id: "1415" }, { detail: {
+    skills: [{ name: "看，希望的起始！", type_name: "普攻" }],
+    skill_trees: { point1: { "1": { point_type: 3, point_name: "额外能力" } } },
+    memosprite: { skills: {
+      "1141505": memo("「你好，世界♪」", "忆灵天赋", "解除控制。"),
+      "1141503": memo("等待，在所有的过去", "忆灵天赋"),
+      "1141501": memo("花与箭的舞曲", "忆灵技"),
+      "1141502": { ...memo("此诗，献予一切生命", "忆灵技",
+        "获得<icon SpriteName=AvatarCyrene id=0 width=1 height=1>特殊效果，提高#1[i]%。"), exclusive: true },
+      "1141526": { ...memo("献予「真我」之诗", "忆灵技"), link: { link_avatar: 1415 } },
+      "1141527": { ...memo("献予「其它」之诗", "忆灵技"), link: { link_avatar: 1415 } },
+      "1141513": { ...memo("献予「创世」之诗", "忆灵技"), link: { link_avatar: 8007 } },
+      "1141514": memo("献予「不能核实」之诗", "忆灵技"),
+      "1141506": memo("错误的能力类别", "忆灵技"),
+      "1140907": memo("其他角色的忆灵能力", "忆灵技"),
+    } },
+  } }, "五星", [{ fieldPath: "detail.memosprite.icon", localPath: "gallery/hsr/memo.webp", status: "downloaded", placeholder: false }]);
+  expect(role?.skills.map(({ title }) => title)).toEqual(["技能", "行迹"]);
+  expect(role?.sectionSkills?.map(({ title }) => title)).toEqual(["技能", "忆灵技能", "行迹"]);
+  const memoCards = role?.sectionSkills?.[1]?.cards ?? [];
+  expect(memoCards.map(({ name }) => name)).toEqual(["花与箭的舞曲", "此诗，献予一切生命", "等待，在所有的过去", "「你好，世界♪」"]);
+  expect(memoCards[0]).toMatchObject({ sectionDescription: "效果提高54.0% (Lv5)。", memospriteIcon: "me", artwork: "gallery/hsr/memo.webp" });
+  expect(memoCards[1]?.sectionDescription).toBe("获得特殊效果，提高54.0% (Lv5)。");
+  expect(memoCards[1]?.linkedEffects?.map(({ name, sectionDescription }) => [name, sectionDescription])).toEqual([
+    ["献予「创世」之诗", "效果提高54.0% (Lv5)。"], ["献予「真我」之诗", "效果提高54.0% (Lv5)。"],
+  ]);
+  expect(memoCards[2]?.memospriteIcon).toBe("mt");
+  expect(memoCards[3]).toMatchObject({ sectionDescription: "解除控制。", sectionLevels: [] });
+  expect(normalizeRoleDetails({ ...entry("hsr"), id: "1005" }, {
+    detail: { skills: [{ name: "夜间喧嚣不止" }] },
+  }, "五星")?.sectionSkills).toBeUndefined();
+  const march = normalizeRoleDetails({ ...entry("hsr"), id: "1413" }, {
+    detail: { memosprite: { skills: { "1141307": memo("迷梦，流失，如露", "忆灵技") } } },
+  }, "五星");
+  expect(march?.sectionSkills?.[0]?.cards[0]?.name).toBe("迷梦，流失，如露");
+});
