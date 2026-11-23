@@ -20,6 +20,10 @@ export interface RoleSkillCard {
   readonly artwork?: string;
   readonly details: readonly RoleText[];
   readonly levels?: readonly RoleSkillLevel[];
+  readonly sectionLevels?: readonly RoleSkillLevel[];
+  readonly sectionDescription?: string;
+  readonly sectionParameters?: readonly { label: string; values: readonly { level: number; value: number }[] }[];
+  readonly omitFromSection?: boolean;
 }
 
 export interface RoleSkillGroup {
@@ -64,6 +68,10 @@ export interface RoleDetails {
     readonly traveler?: GenshinTraveler;
     readonly facts: readonly { label: string; value: string }[];
     readonly stats?: readonly { label: string; value: string }[];
+    readonly sectionStats?: {
+      readonly level: number;
+      readonly rows: readonly { label: string; value: string }[];
+    };
   };
   readonly skills: readonly RoleSkillGroup[];
   readonly ranks: readonly RoleRank[];
@@ -143,6 +151,10 @@ function skillGroup(title: string, cards: RoleSkillCard[]): RoleSkillGroup[] {
   return cards.length ? [{ title, cards }] : [];
 }
 
+function sectionLevelRange(levels: readonly RoleSkillLevel[], min: number, max: number) {
+  return levels.filter(({ level }) => level >= min && level <= max);
+}
+
 function genshinNumbers(value: string, params: unknown): string | undefined {
   const numbers = Array.isArray(params) ? params : [];
   const resolved = value.replace(/\{param(\d+):(I|P|F[0-4]P?)\}/gu, (source, index, format: string) => {
@@ -170,7 +182,7 @@ function genshinSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[] 
       });
       return details.length ? [{ level, details }] : [];
     });
-    return [{ name, description: text(skill.desc), details: [], levels,
+    return [{ name, description: text(skill.desc), details: [], levels, sectionLevels: sectionLevelRange(levels, 6, 13),
       artwork: artwork(`detail.skills.${key}.icon`, `detail.skills.${key}.promote.0.icon`) }];
   });
   const passives = rows(detail.passives).flatMap(([key, passive]) => {
@@ -185,12 +197,52 @@ function genshinSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[] 
   return [...skillGroup("战斗天赋", skills), ...skillGroup("固有天赋", passives), ...skillGroup("绘想游迹", echoes)];
 }
 
+function starRailSectionSkill(template: unknown, source: readonly RecordValue[], basic: boolean,
+  sourceLevels: readonly RoleSkillLevel[]): Pick<RoleSkillCard, "sectionDescription" | "sectionLevels" | "sectionParameters"> {
+  const raw = label(template);
+  const marker = /#(\d+)\[(i|f[0-4])\](%?)/gu;
+  const markers = [...new Map([...raw.matchAll(marker)].map((entry) => [entry[0], entry])).values()];
+  if (!markers.length) return { sectionLevels: sectionLevelRange(sourceLevels, basic ? 1 : 6, basic ? 7 : 12) };
+  const levels = source.flatMap((data) => {
+    const level = integer(data.level);
+    return level && Array.isArray(data.param_list) ? [{ level, params: data.param_list as readonly unknown[] }] : [];
+  });
+  const target = levels.find(({ level }) => level === (basic ? 5 : 8)) ?? levels[0];
+  if (!target) return { sectionLevels: [] };
+  const selected = levels.filter(({ level }) => basic ? level >= 1 && level <= 7 : level >= 6 && level <= 12);
+  const displayed = selected.map(({ level }) => ({ level, details: [] as RoleText[] }));
+  const display = new Map<string, string>();
+  const sectionParameters: NonNullable<RoleSkillCard["sectionParameters"]>[number][] = [];
+  for (const [token, index, format, percent] of markers) {
+    const key = Number(index) - 1;
+    const scalar = number(target.params[key]);
+    if (scalar === undefined) return { sectionLevels: [] };
+    const print = (value: number) => percent ? (value * 100).toFixed(format === "f2" ? 2 : 1) + "%" : wholeStat.format(value);
+    const variable = levels.some(({ params }) => number(params[key]) !== scalar);
+    display.set(token, `${print(scalar)}${variable ? ` (Lv${target.level})` : ""}`);
+    if (!variable) continue;
+    const values = selected.flatMap(({ level, params }) => {
+      const value = number(params[key]);
+      return value === undefined ? [] : [{ level, value }];
+    });
+    if (values.length !== selected.length || !values.length) continue;
+    const row = `正文第 ${sectionParameters.length + 1} 项`;
+    sectionParameters.push({ label: row, values });
+    for (const [i, { value }] of values.entries()) {
+      displayed[i]!.details.push({ label: row, text: print(value) });
+    }
+  }
+  const sectionDescription = text(raw.replace(marker, (token) => display.get(token) ?? token));
+  return { sectionDescription, sectionLevels: displayed, sectionParameters };
+}
+
 function starRailSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[] {
   const groups = rows(detail.skill_trees);
   const skills = rows(detail.skills).flatMap(([key, skill]) => {
     const name = text(skill.name);
     if (!name) return [];
-    const levels = values(skill.level).flatMap((row) => {
+    const sourceLevels = values(skill.level);
+    const levels = sourceLevels.flatMap((row) => {
       const level = integer(row.level);
       const description = text(skill.desc, row.param_list);
       return level && description ? [{ level, description, details: [] }] : [];
@@ -199,8 +251,11 @@ function starRailSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[]
       Array.isArray(row.level_up_skill_id) && row.level_up_skill_id.includes(skill.id)
         ? [`detail.skill_trees.${point}.${key}.icon`] : []));
     const type = text(skill.type_name);
+    const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
+    const omitFromSection = !type && (integer(skill.id) ?? 0) % 100 === 6;
     return [{ name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
-      details: type ? [{ label: "类型", text: type }] : [], levels, artwork: artwork(`detail.skills.${key}.icon`, ...source) }];
+      details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection,
+      ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork: artwork(`detail.skills.${key}.icon`, ...source) }];
   });
   const traces = groups.flatMap(([point, group]) => {
     const data = rows(group).filter(([, row]) => row.point_type === 1 || row.point_type === 3);
@@ -220,8 +275,8 @@ function starRailSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[]
       });
       return level && (description || details.length) ? [{ level, description, details }] : [];
     });
-    return [{ name, description: levels[0]?.description, details: levels[0]?.details ?? [], levels,
-      artwork: artwork(`detail.skill_trees.${point}.${first[0]}.icon`) }];
+    return [{ name, description: levels[0]?.description, details: levels[0]?.details ?? [], levels, sectionLevels: [],
+      omitFromSection: first[1].point_type === 1, artwork: artwork(`detail.skill_trees.${point}.${first[0]}.icon`) }];
   });
   return [...skillGroup("技能", skills), ...skillGroup("行迹", traces)];
 }
@@ -401,18 +456,24 @@ function levelPairs(high: number | undefined, calculate: (stat: LevelStats, high
   ]);
 }
 
+const genshinBaseField = {
+  生命: ["hp", "base_hp", "fight_prop_base_hp"],
+  攻击: ["atk", "base_atk", "fight_prop_base_attack"],
+  防御: ["def", "base_def", "fight_prop_base_defense"],
+} as const;
+
+function genshinBase(detail: RecordValue, modifiers: RecordValue, stat: LevelStats, level: number, ascension?: RecordValue) {
+  const [curve, baseField, bonus] = genshinBaseField[stat];
+  const base = number(detail[baseField]);
+  const factor = number(object(modifiers[curve])[String(level)]);
+  if (base !== undefined && factor !== undefined) return base * factor + (number(ascension?.[bonus]) ?? 0);
+}
+
 function genshinStats(detail: RecordValue): Stat[] {
   const modifiers = object(detail.stats_modifier);
   const ascension = values(modifiers.ascension).at(-1);
-  const fields = { 生命: ["hp", "base_hp", "fight_prop_base_hp"], 攻击: ["atk", "base_atk", "fight_prop_base_attack"],
-    防御: ["def", "base_def", "fight_prop_base_defense"] } as const;
-  const leveled = levelPairs(ascension ? 90 : undefined, (stat, high) => {
-    const [curve, baseField, bonus] = fields[stat];
-    const base = number(detail[baseField]);
-    const factor = number(object(modifiers[curve])[high ? "90" : "1"]);
-    if (base === undefined || factor === undefined) return;
-    return base * factor + (high ? number(ascension?.[bonus]) ?? 0 : 0);
-  });
+  const leveled = levelPairs(ascension ? 90 : undefined, (stat, high) =>
+    genshinBase(detail, modifiers, stat, high ? 90 : 1, high ? ascension : undefined));
   function critical(baseField: string, bonusField: string) {
     const base = number(detail[baseField]);
     if (base !== undefined) return base + (number(ascension?.[bonusField]) ?? 0);
@@ -468,6 +529,44 @@ function zenlessStats(detail: RecordValue): Stat[] {
   return [...leveled, ["冲击力", number(stats.break_stun), decimalStat],
     ["暴击率", critical === undefined ? undefined : critical / 10_000, percentStat],
     ["暴击伤害", criticalDamage === undefined ? undefined : criticalDamage / 10_000, percentStat]];
+}
+
+const genshinGrowthLabels: Readonly<Record<string, string>> = {
+  fight_prop_hp_percent: "大生命", fight_prop_attack_percent: "大攻击", fight_prop_defense_percent: "大防御",
+  fight_prop_critical: "暴击", fight_prop_critical_hurt: "爆伤", fight_prop_charge_efficiency: "充能",
+  fight_prop_element_mastery: "精通", fight_prop_heal_add: "治疗",
+  fight_prop_fire_add_hurt: "火伤", fight_prop_water_add_hurt: "水伤", fight_prop_wind_add_hurt: "风伤",
+  fight_prop_ice_add_hurt: "冰伤", fight_prop_rock_add_hurt: "岩伤", fight_prop_elec_add_hurt: "雷伤",
+  fight_prop_grass_add_hurt: "草伤", fight_prop_physical_add_hurt: "物伤",
+};
+
+function sectionBaseStats(game: Game, detail: RecordValue): RoleDetails["overview"]["sectionStats"] {
+  if (game === "zzz") return;
+  if (game === "hsr") {
+    const stats = new Map(starRailStats(detail).map(([label, value]) => [label, value]));
+    const rows = levelStats.map((label) => ({ label: `基础${label}`, value: stats.get(`Lv80${label}`) }));
+    const speed = stats.get("速度");
+    if (speed !== undefined) rows.push({ label: "速度", value: speed });
+    if (!rows.slice(0, 3).every(({ value }) => value !== undefined)) return;
+    return { level: 80, rows: rows.map(({ label, value }) => ({ label, value: decimalStat.format(value!) })) };
+  }
+
+  const modifiers = object(detail.stats_modifier);
+  const ascension = values(modifiers.ascension).at(-1);
+  if (!ascension) return;
+  for (const level of [100, 90]) {
+    const base = levelStats.map((stat) => ({ label: `基础${stat}`, value: genshinBase(detail, modifiers, stat, level, ascension) }));
+    if (base.some(({ value }) => value === undefined)) continue;
+    const rows = base.map(({ label, value }) => ({ label, value: decimalStat.format(Number(value!.toFixed(2))) }));
+    const bonus = Object.entries(ascension).flatMap(([property, raw]) => {
+      const label = genshinGrowthLabels[property];
+      const value = number(raw);
+      if (!label || !value) return [];
+      return [{ label, value: (property === "fight_prop_element_mastery" ? decimalStat : percentStat).format(value) }];
+    });
+    if (bonus.length === 1) rows.push(bonus[0]!);
+    return { level, rows };
+  }
 }
 
 function overviewStats(game: Game, detail: RecordValue) {
@@ -590,6 +689,7 @@ export function normalizeRoleDetails(character: Character, content: RecordValue,
     game, id, version, skills, ranks: ranksFor(game, detail, artwork), materials,
     overview: { name: title, rarity, description,
       artwork: portrait ?? icon, icon, portraitFallbacks: portraitFallbacks.length ? portraitFallbacks : undefined,
-      iconFallback, element, traveler, facts: overviewFacts(game, detail), stats: overviewStats(game, detail) },
+      iconFallback, element, traveler, facts: overviewFacts(game, detail), stats: overviewStats(game, detail),
+      sectionStats: sectionBaseStats(game, detail) },
   };
 }

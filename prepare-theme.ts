@@ -20,12 +20,25 @@ const assets = [
   ["fonts/MiSans-VF.ttf", 20000736, "5daf8d5447bfd423cfdec94a0e07c53b205892223ccc6ea21b7b8a37248b44d9"],
 ] as const;
 
+// The historic element frames are optional and fall back to a plain icon frame.
+const sectionIconFrames = [
+  ["bg/talent-anemo.webp", 8412, "e40653924caa342a853f34deb868379f13857e3b6bf9131a706724f1a5762dfb"],
+  ["bg/talent-cryo.webp", 8476, "658ff147b66a76fc9e47ac9dc7a2e64240f381cc2c70e582baf43e35abd5db3d"],
+  ["bg/talent-dendro.webp", 8586, "5ba55c58bad8f9fceb39f7ce4c06a77f20899c1a8dea48dde70020c2f215ed43"],
+  ["bg/talent-electro.webp", 8378, "ea9df5f47448539b7d2d9715df72f73ca14ac0714ddd73ec9715efcc28f8b4dd"],
+  ["bg/talent-geo.webp", 8600, "e1e0d89b75645a928e1ef0923a8b1a9e0fd935bb61ad87ce36ef8d9804f611f0"],
+  ["bg/talent-hydro.webp", 8704, "433fba81b7e8593e22342b989cb5ae77e4a24820edba2ad400c33b532f72ca5d"],
+  ["bg/talent-pyro.webp", 8396, "45af3ce09e32b6fd70c558db48616dd6a2c58b24591b4295ab54a8a86d692b11"],
+  ["bg/talent-quantum.webp", 8244, "6a941aa38c9278c75aed74ac830d238c5fa3a136d59792387f37e4c3813370f0"],
+  ["bg/talent-sr.webp", 6752, "3ae8f639e1cbbb3a1c225fec5f40712846b3f18f8e64745eddce7b7d17ff875a"],
+] as const;
+
 function paths(directory: string, asset: string): readonly string[] {
   const direct = join(directory, asset);
   return asset === "fonts/MiSans-VF.ttf" ? [direct, join(dirname(directory), asset)] : [direct];
 }
 
-function donorPaths(directory: string, asset: (typeof assets)[number][0]): readonly string[] {
+function donorPaths(directory: string, asset: (typeof assets | typeof sectionIconFrames)[number][0]): readonly string[] {
   const candidates = paths(directory, asset);
   const original = asset.startsWith("bg/") ? `common/${asset}`
     : asset === "card-bg.png" ? "common/cont/card-bg.png"
@@ -69,7 +82,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
   const sources = override?.trim() ? [] : [...(donor ? [donor] : []), ...directories.slice(1)];
   const copied: string[] = [];
   const missing: string[] = [];
-  for (const [asset, size, digest] of assets) {
+  for (const [asset, size, digest] of [...assets, ...sectionIconFrames]) {
     signal?.throwIfAborted();
     if (await available(theme, asset)) continue;
     const target = join(theme, asset);
@@ -88,7 +101,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
         }
       }
     }
-    if (!(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
+    if (!asset.startsWith("bg/talent-") && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
       missing.push(asset);
     }
   }

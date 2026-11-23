@@ -307,3 +307,63 @@ test("绝区零图库接受同一角色经过核验的全名，保留短名与�
   expect(characterGalleryName(ellen, [ellen, { ...collision, game: "hsr" }], "艾莲·乔"))
     .toEqual(["艾莲", "艾莲·乔"]);
 });
+
+test("角色分项保持旧满级基础数据，原神缺少 100 级曲线才回到可核实的 90 级", () => {
+  const modifiers = { hp: { "90": 8.739, "100": 9.652 }, atk: { "90": 8.739, "100": 11.629 },
+    def: { "90": 8.739, "100": 9.652 }, ascension: [{ fight_prop_base_hp: 4893.559,
+      fight_prop_base_attack: 77.987366, fight_prop_base_defense: 222.3585, fight_prop_critical: 0.192 }] };
+  const genshin = (data: object) => normalizeRoleDetails(entry("gi"), { detail: {
+    base_hp: 1191.65, base_atk: 18.9924, base_def: 54.14615, stats_modifier: data,
+  } }, "五星")?.overview;
+  expect(genshin(modifiers)?.sectionStats).toMatchObject({ level: 100,
+    rows: [{ label: "基础生命" }, { label: "基础攻击" }, { label: "基础防御" }, { label: "暴击", value: "19.2%" }] });
+  expect(genshin({ ...modifiers, hp: { "90": 8.739 } })?.sectionStats?.level).toBe(90);
+  expect(genshin({ ...modifiers, hp: {} })?.sectionStats).toBeUndefined();
+
+  const rail = normalizeRoleDetails(entry("hsr"), { detail: { stats: { "6": {
+    hp_base: 502.656, hp_add: 7.392, attack_base: 314.16, attack_add: 4.62,
+    defence_base: 224.4, defence_add: 3.3, speed_base: 100,
+  } } } }, "五星");
+  expect(rail?.overview.sectionStats).toEqual({ level: 80,
+    rows: [{ label: "基础生命", value: "1,086.6" }, { label: "基础攻击", value: "679.1" },
+      { label: "基础防御", value: "485.1" }, { label: "速度", value: "100" }] });
+});
+
+test("专用技能图沿用原等级区间及大行迹，整册仍保留完整条目", () => {
+  const original = normalizeRoleDetails(entry("gi"), { detail: {
+    skills: [{ name: "普攻", promote: Array.from({ length: 15 }, (_, i) =>
+      ({ level: i + 1, desc: ["伤害|1.0%"] })) }],
+  } }, "五星");
+  const talent = original?.skills[0]?.cards[0];
+  expect(talent?.levels).toHaveLength(15);
+  expect(talent?.sectionLevels?.map(({ level }) => level)).toEqual([6, 7, 8, 9, 10, 11, 12, 13]);
+  const rail = normalizeRoleDetails(entry("hsr"), { detail: {
+    skills: [{ id: 100501, name: "普攻", type_name: "普攻", desc: "攻击", level: [{ level: 1 }, { level: 8 }] },
+      { id: 100506, name: "攻击", desc: "大世界普通攻击" }],
+    skill_trees: { a: { "1": { point_type: 1, point_name: "小行迹" } },
+      b: { "1": { point_type: 3, point_name: "额外能力" } } },
+  } }, "五星");
+  expect(rail?.skills[0]?.cards[0]?.levels?.map(({ level }) => level)).toEqual([1, 8]);
+  expect(rail?.skills[0]?.cards[0]?.sectionLevels?.map(({ level }) => level)).toEqual([1]);
+  expect(rail?.skills[0]?.cards[1]?.omitFromSection).toBe(true);
+  expect(rail?.skills[1]?.cards.map(({ omitFromSection }) => omitFromSection)).toEqual([true, false]);
+});
+
+test("星铁专用分项把倍率代回正文并注明旧代表等级，保留精确参数的每级表格", () => {
+  const row = (level: number, params: number[]) => ({ level, param_list: params });
+  const role = normalizeRoleDetails(entry("hsr"), { detail: { skills: [{
+    name: "普攻", type_name: "普攻", desc: "造成#1[i]%攻击，持续#2[i]回合。",
+    simple_desc: "攻击。", level: [row(1, [0.5, 2]), row(5, [0.9, 2]), row(7, [1.1, 2]), row(8, [1.2, 2])],
+  }, {
+    name: "战技", type_name: "战技", desc: "造成#1[i]%伤害。\n追加#3[i]%伤害。",
+    level: [row(6, [1.2, 2, 0.45]), row(8, [1.4, 2, 0.525]), row(12, [1.76, 2, 0.66])],
+  }] } }, "五星");
+  const [basic, skill] = role!.skills[0]!.cards;
+  expect(basic?.description).toBe("攻击。");
+  expect(basic?.sectionDescription).toBe("造成90.0% (Lv5)攻击，持续2回合。");
+  expect(basic?.sectionLevels?.[1]?.details).toEqual([{ label: "正文第 1 项", text: "90.0%" }]);
+  expect(skill?.sectionDescription).toBe("造成140.0% (Lv8)伤害。\n追加52.5% (Lv8)伤害。");
+  expect(skill?.sectionLevels?.[1]?.details).toEqual([
+    { label: "正文第 1 项", text: "140.0%" }, { label: "正文第 2 项", text: "52.5%" },
+  ]);
+});

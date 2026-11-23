@@ -50,7 +50,7 @@ const backgrounds = [
 ] as const;
 
 type Background = (typeof backgrounds)[number][1] | "sr";
-type ThemeAsset = `bg/bg-${Background}.webp` | "card-bg.png";
+type ThemeAsset = `bg/${"bg" | "talent"}-${Background}.webp` | "card-bg.png";
 const themeOverride = Bun.env.LOTUS_ATLAS_THEME_DIR?.trim();
 const themeDirectories = atlasThemeDirectories(import.meta.url, themeOverride);
 const portraitDonor = themeOverride ? undefined : Bun.env.LOTUS_ATLAS_THEME_SOURCE_DIR?.trim();
@@ -93,6 +93,11 @@ function themeImage(asset: ThemeAsset): Promise<Image | undefined> {
 
 type Block = { readonly height: number; paint(ctx: Context, top: number): void };
 type Page = { section: string; panels: Block[][]; trailingGap?: false; continuation?: Block[][] };
+type RoleSectionStyle = {
+  readonly headerHeight: number;
+  readonly paintHeader: (ctx: Context, section: string, page: string) => void;
+  readonly panelBackground?: Image;
+};
 
 function rounded(ctx: Context, x: number, y: number, w: number, h: number, radius: number, fill: string) {
   ctx.fillStyle = fill;
@@ -117,7 +122,7 @@ function contain(ctx: Context, image: Image, x: number, y: number, w: number, h:
   ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
-function makeLayout(texture?: Image) {
+function makeLayout(texture?: Image, sectionIcon?: Image) {
   const metrics = new Canvas(1, 1);
   metrics.gpu = false;
   const measure = metrics.getContext("2d");
@@ -151,14 +156,19 @@ function makeLayout(texture?: Image) {
   function heading(value: string, artwork?: Image, small = false, subtitle?: string): Block {
     const size = small ? 21 : 26;
     const lineHeight = size + 8;
-    const lines = wrap(value, inner - (artwork ? 124 : 40), size);
-    return { height: Math.max(small ? 48 : 82, lines.length * lineHeight + (small ? 24 : 35)), paint(ctx, top) {
+    const wideIcon = artwork && sectionIcon;
+    const x = wideIcon ? 175 : artwork ? 122 : 44;
+    const lines = wrap(value, inner - (wideIcon ? 178 : artwork ? 124 : 40), size);
+    const minHeight = small ? 48 : wideIcon ? 120 : 82;
+    return { height: Math.max(minHeight, lines.length * lineHeight + (small ? 24 : 35)), paint(ctx, top) {
       if (texture) ctx.drawImage(texture, margin, top, inner, this.height);
-      if (artwork) {
+      if (wideIcon && artwork) {
+        contain(ctx, wideIcon, 38, top + 4, 112, 112);
+        contain(ctx, artwork, 68, top + 34, 52, 52);
+      } else if (artwork) {
         rounded(ctx, 40, top + 11, 62, 62, 31, "rgba(255,255,255,0.10)");
         contain(ctx, artwork, 49, top + 20, 44, 44);
       }
-      const x = artwork ? 122 : 44;
       paintLines(ctx, lines, x, top + (small ? 12 : 14), size, lineHeight, gold);
       if (subtitle) paintLines(ctx, [subtitle], x, top + 19 + lines.length * lineHeight, 14, 21, muted);
     } };
@@ -392,6 +402,43 @@ async function originalGenshinPortrait(role: RoleDetails, maxBytes = maxImageByt
   }
 }
 
+async function miaoSectionArtwork(role: RoleDetails): Promise<{ card?: Image; face?: Image; talents?: Record<string, unknown> }> {
+  const { game, id, overview: { name } } = role;
+  if (game === "zzz" || !/^[1-9]\d*$/u.test(id) || !name || name === "." || name === ".." || /[\/\\\p{Cc}\p{Cf}]/u.test(name)) return {};
+  const meta = game === "gi" ? "meta-gs" : "meta-sr";
+  const installed = fileURLToPath(new URL("../miao-plugin/resources/", import.meta.url));
+  const archive = fileURLToPath(new URL("../../backup/plugins/miao-plugin/resources/", import.meta.url));
+  const sources = themeOverride ? themeDirectories : [...new Set([...portraitDirectories, installed, archive])];
+  for (const configured of sources) {
+    const root = await realpath(configured).catch(() => undefined);
+    if (!root) continue;
+    const base = join(root, meta, "character");
+    const directory = join(base, name);
+    if (await realpath(directory).catch(() => undefined) !== directory) continue;
+    const metadata = await localAsset(join(directory, "data.json"), 1_048_576).catch(() => undefined);
+    if (!metadata) continue;
+    let record;
+    try {
+      record = object(JSON.parse(metadata.toString("utf8")));
+      if (String(record.id) !== id) continue;
+    } catch {
+      continue;
+    }
+    const read = async (folder: string, filename: string) => {
+      if (await realpath(folder).catch(() => undefined) !== folder) return;
+      return (await artworkAsset(await localAsset(join(folder, filename), maxImageBytes).catch(() => undefined)))?.image;
+    };
+    const [card, preferred] = await Promise.all([
+      read(game === "gi" ? join(directory, "imgs") : join(base, "common", "imgs"), "card.webp"),
+      read(join(directory, "imgs"), "face-q.webp"),
+    ]);
+    const face = preferred ?? await read(join(directory, "imgs"), "face.webp");
+    const talents = game === "hsr" ? object(record.talent) : undefined;
+    if (card || face || (talents && Object.keys(talents).length)) return { card, face, talents };
+  }
+  return {};
+}
+
 async function galleryAsset(game: Game, path: string | undefined, roots: readonly string[], maxBytes: number): Promise<ArtworkAsset | undefined> {
   if (!isAtlasGalleryPath(path, game)) return;
   // Keep the official supplement available when the exported snapshot changes.
@@ -488,8 +535,95 @@ export async function renderLookupNotice(query: string, message: string, game: G
   return page!;
 }
 
+function roleSectionStyle(role: RoleDetails, wrap: ReturnType<typeof makeLayout>["wrap"],
+  background: Image | undefined, portrait: Image | undefined, icon: Image | undefined, panelBackground: Image | undefined): RoleSectionStyle {
+  const { facts, sectionStats, description, name } = role.overview;
+  const title = facts.find(({ label }) => label === "称号")?.value;
+  const names = wrap(title ? `${title}·${name}` : name, 546, 38);
+  const intro = description ? wrap(description.replaceAll("\\n", "\n"), 536, 20) : [];
+  const statsTop = Math.max(209, 91 + names.length * 44 + intro.length * 28);
+  return {
+    headerHeight: statsTop + 150,
+    panelBackground,
+    paintHeader(ctx, section, page) {
+      const headerEnd = statsTop + 125;
+      ctx.fillStyle = "#272f43";
+      ctx.fillRect(0, 0, width, headerEnd);
+      if (background) {
+        const scale = Math.max(width / background.width, headerEnd / background.height);
+        const sourceWidth = width / scale;
+        const sourceHeight = headerEnd / scale;
+        ctx.drawImage(background, (background.width - sourceWidth) / 2, (background.height - sourceHeight) / 2,
+          sourceWidth, sourceHeight, 0, 0, width, headerEnd);
+      } else if (portrait) {
+        contain(ctx, portrait, 428, 0, 372, headerEnd);
+      }
+      const shade = ctx.createLinearGradient(0, 0, width, 0);
+      shade.addColorStop(0, "rgba(9,15,27,0.75)");
+      shade.addColorStop(1, "rgba(9,15,27,0.25)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, 0, width, headerEnd);
+      if (icon) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(116, 100, 62, 0, 2 * Math.PI);
+        ctx.clip();
+        ctx.fillStyle = "#272f43";
+        ctx.fillRect(54, 38, 124, 124);
+        contain(ctx, icon, 54, 38, 124, 124);
+        ctx.restore();
+        ctx.strokeStyle = "#f0efe0";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(116, 100, 62, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      paintLines(ctx, names, 225, 29, 38, 44, white);
+      paintLines(ctx, intro, 225, 43 + names.length * 44, 20, 28, white);
+      paintLines(ctx, [`${gameNames[role.game]} · ${section} · ${page}`], 225, statsTop - 41, 16, 22, gold);
+      rounded(ctx, 16, statsTop, width - 32, 104, 15, "rgba(245,245,245,0.87)");
+      const statTitle = sectionStats ? `${sectionStats.level}级基础数据` : "基础数据";
+      rounded(ctx, 30, statsTop - 19, 172, 32, 8, "#272f43");
+      paintLines(ctx, [statTitle], 44, statsTop - 14, 19, 24, white);
+      const rows = sectionStats?.rows;
+      if (!rows?.length) {
+        paintLines(ctx, ["暂无详细数据"], 44, statsTop + 35, 20, 28, "#292e3a");
+      } else {
+        const cell = (width - 32) / rows.length;
+        for (const [i, { value, label }] of rows.entries()) {
+          const x = 44 + i * cell;
+          paintLines(ctx, [value], x, statsTop + 24, 34, 44, "#1e1f20");
+          paintLines(ctx, [label], x, statsTop + 66, 18, 24, "#626c73");
+        }
+      }
+    },
+  };
+}
+
+function sectionSkillLevels(card: RoleSkillCard, talents?: Record<string, unknown>) {
+  const levels = card.sectionLevels ?? card.levels ?? [];
+  if (!talents || !card.sectionParameters?.length) return levels;
+  const sources = Object.values(talents).map(object).filter(({ name }) => label(name) === card.name);
+  if (sources.length !== 1) return levels;
+  const oldRows = Object.values(object(sources[0]!.tables)).map(object);
+  const labels = new Map<string, string>();
+  for (const { label: row, values } of card.sectionParameters) {
+    const matches = oldRows.filter(({ values: old }) => Array.isArray(old) && values.every(({ level, value }) => {
+      const previous = old[level - 1];
+      return typeof previous === "number" && Math.abs(previous - value) <= 1e-8;
+    }));
+    const text = matches.length === 1 ? label(matches[0]!.name) : "";
+    if (text) labels.set(row, text);
+  }
+  return levels.map((level) => ({ ...level, details: level.details.map((item) =>
+    ({ ...item, label: item.label ? labels.get(item.label) ?? item.label : undefined })) }));
+}
+
 export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptions = {}, section?: RoleSection) {
-  const skillGroups = section === "ranks" ? [] : role.skills.filter(({ cards }) => cards.length);
+  const skillGroups = section === "ranks" ? [] : role.skills.flatMap(({ title, cards }) => {
+    const available = section ? cards.filter(({ omitFromSection }) => !omitFromSection) : cards;
+    return available.length ? [{ title, cards: available }] : [];
+  });
   const ranks = section === "skills" ? [] : role.ranks;
   const materials = section ? [] : role.materials.filter(({ items }) => items.length);
   if (section && !skillGroups.length && !ranks.length) return [];
@@ -498,7 +632,7 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
   const element = role.game === "gi" ? role.overview.element : undefined;
   const backdrop = element ?? backgrounds.find(([pattern]) => pattern.test(property?.value ?? ""))?.[1] ?? "sr";
-  const [images, background, texture, galleryPortrait, originalPortrait] = await Promise.all([
+  const [images, background, texture, galleryPortrait, originalPortrait, sectionArt, sectionBackdrop] = await Promise.all([
     galleryImages(role.game, [role.overview.icon, role.overview.iconFallback, role.overview.artwork,
       ...(role.overview.portraitFallbacks ?? []),
       ...skillGroups.flatMap(({ cards }) => cards.map(({ artwork }) => artwork)), ...ranks.map(({ artwork }) => artwork),
@@ -506,10 +640,11 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
     themeImage(`bg/bg-${backdrop}.webp`), themeImage("card-bg.png"),
     readCharacterGalleryPortrait(role.game, role.overview.traveler?.name ?? options.galleryName),
     originalGenshinPortrait(role),
+    section ? miaoSectionArtwork(role) : undefined, section ? themeImage(`bg/talent-${backdrop}.webp`) : undefined,
     themeFonts ??= loadThemeFonts(),
   ]);
   const image = (path?: string) => path === undefined ? undefined : images.get(path);
-  const layout = makeLayout(texture);
+  const layout = makeLayout(texture, sectionBackdrop);
   const { wrap, heading, text, statRow, material } = layout;
   const details = ({ label, text: value }: RoleText) => text(label ? `${label}　${value}` : value);
   const icon = image(role.overview.icon) ?? image(role.overview.iconFallback);
@@ -533,21 +668,25 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   const pages: Page[] = section ? [] : [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
   const skills = skillGroups.flatMap(({ title, cards }) => [
     [heading(title, undefined, true)],
-    ...cards.map((card) => [heading(card.name, image(card.artwork)), ...(card.description ? [text(card.description)] : []),
-      ...card.details.map(details), ...layout.levelBlocks(card.levels ?? [])]),
+    ...cards.map((card) => {
+      const description = section ? card.sectionDescription ?? card.description : card.description;
+      const levels = section ? sectionSkillLevels(card, sectionArt?.talents) : card.levels ?? [];
+      return [heading(card.name, image(card.artwork)), ...(description ? [text(description)] : []),
+        ...card.details.map(details), ...layout.levelBlocks(levels)];
+    }),
   ]);
   if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
   if (ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: ranks.map((rank) => [
     heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)),
     ...(rank.description ? [text(rank.description)] : []), ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });
-  if (section && overview.length) pages[0]?.panels.unshift(overview);
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
     ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
   ]) });
 
-  return renderAtlasPages(pages, title, role.game, role.version, icon, background, options, undefined, true);
+  const style = section ? roleSectionStyle(role, wrap, sectionArt?.card, portrait, sectionArt?.face ?? icon, background) : undefined;
+  return renderAtlasPages(pages, title, role.game, role.version, icon, background, options, undefined, true, style);
 }
 
 export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOptions = {}) {
@@ -922,12 +1061,12 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
 
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | undefined, version: string, icon: Image | undefined,
   background: Image | undefined, { mode = "auto", scale = 4, inlineImageByteLimit }: RoleRenderOptions, titleX = icon ? 152 : margin + 20,
-  allowPanelContinuation = false) {
+  allowPanelContinuation = false, style?: RoleSectionStyle) {
   if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
   const low = nativeImageRasterScale() === 1;
   const pageScale = low ? 1 : scale;
   const game = gameId ? gameNames[gameId] : "全部游戏";
-  const head = Math.max(header, 118 + title.length * 39);
+  const head = style?.headerHeight ?? Math.max(header, 118 + title.length * 39);
   const renderPage = ({ panels, trailingGap }: Page, section: string, page: string, zoom: number, allowHalfScale = false) => {
     const { heights, height } = measurePage(head, panels, trailingGap !== false);
     const paint = (ctx: Context) => {
@@ -937,31 +1076,36 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
       ctx.fillRect(0, 0, width, height);
       if (background) ctx.drawImage(background, 0, 0, width, height);
 
-      rounded(ctx, margin, 12, inner, head - 32, 12, "rgba(15,18,29,0.52)");
-      if (icon) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(84, 79, 51, 0, Math.PI * 2);
-        ctx.clip();
-        contain(ctx, icon, 33, 28, 102, 102);
-        ctx.restore();
-        ctx.strokeStyle = gold;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(84, 79, 52, 0, Math.PI * 2);
-        ctx.stroke();
+      if (style) {
+        style.paintHeader(ctx, section, page);
+      } else {
+        rounded(ctx, margin, 12, inner, head - 32, 12, "rgba(15,18,29,0.52)");
+        if (icon) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(84, 79, 51, 0, Math.PI * 2);
+          ctx.clip();
+          contain(ctx, icon, 33, 28, 102, 102);
+          ctx.restore();
+          ctx.strokeStyle = gold;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(84, 79, 52, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        paintLines(ctx, title, titleX, 30, 33, 39, white);
+        paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
+        paintLines(ctx, [version ? `资料版本 ${version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
       }
-      paintLines(ctx, title, titleX, 30, 33, 39, white);
-      paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
-      paintLines(ctx, [version ? `资料版本 ${version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
 
       let y = head;
       for (const [panel, blocks] of panels.entries()) {
         const panelHeight = heights[panel]!;
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(margin, y, inner, panelHeight, 10);
+        ctx.roundRect(margin, y, inner, panelHeight, style ? 23 : 10);
         ctx.clip();
+        if (style?.panelBackground) ctx.drawImage(style.panelBackground, margin, y, inner, panelHeight);
         ctx.fillStyle = "rgba(15,20,31,0.58)";
         ctx.fillRect(margin, y, inner, panelHeight);
         for (const block of blocks) {
