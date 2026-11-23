@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
 import { abyssMode, apocalypseMode, chaosMode, deadlyAssaultMode, fictionMode, shiyuMode, theaterMode } from "./challenges.ts";
-import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseRoleShortcut, traditionalAtlasEvent } from "./traditional.ts";
+import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseLegacyRoleShortcut, parseRoleShortcut, traditionalAtlasEvent } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -153,6 +153,34 @@ test("角色分项可省略前缀，带游戏前缀时仍须与分项一致", ()
     "*我的卡芙卡星魂", "#今日天赋", "#周一素材天赋"]) {
     expect(parseRoleShortcut(command)).toBeUndefined();
   }
+});
+
+test("旧角色资料词只取精确角色，现有装备和其他命令可继续匹配", async () => {
+  const calls: unknown[][] = [];
+  const replies: unknown[] = [];
+  const route = traditionalAtlasEvent(async (query, kind, game) => {
+    calls.push([query, kind, game]);
+    if (kind === "legacy-character" && ["芙芙", "卡芙卡"].includes(query)) return "角色图册";
+    if (kind === "shortcut" && query === "图书资料") return "其他图鉴";
+  }, async () => "挑战");
+  const commands = [
+    ["#芙芙资料", "芙芙", "gi"], ["芙芙技能", "芙芙", undefined], ["#芙芙命之座", "芙芙", "gi"],
+    ["*卡芙卡行迹", "卡芙卡", "hsr"], ["卡芙卡图鉴", "卡芙卡", undefined],
+  ] as const;
+  const run = (msg: string) => route.rule.run({ msg, reply: (value) => replies.push(value) });
+  for (const [msg, query, game] of commands) {
+    expect(route.rule.pattern.test(msg)).toBe(true);
+    expect(await run(msg)).toBe(true);
+    expect(calls.at(-1)).toEqual([query, "legacy-character", game]);
+  }
+  for (const msg of ["#角色资料", "#今日技能", "#我的资料", "#原神卡芙卡行迹", "*芙芙命之座"]) {
+    expect(parseLegacyRoleShortcut(msg)).toBeUndefined();
+  }
+  for (const msg of ["刷新技能", "#更新所有角色技能", "#星铁更新行迹", "#展板更新面板", "大家今天一起试试技能"]) {
+    expect(await run(msg)).toBe(false);
+  }
+  expect(await run("#图书资料图鉴")).toBe(true);
+  expect(replies).toEqual([...Array(commands.length).fill("角色图册"), "其他图鉴"]);
 });
 
 function page(...records: { id: string; name: string }[]) {

@@ -16,7 +16,9 @@ const operations = /^#?(?:图鉴(?:状态|帮助|更新|检查更新|全量更�
 const glued = /^#?图鉴(\S[^\r\n]*)$/u;
 const roleShortcut = /^(?:[#*%％][^\r\n]+|[^#*%％\s][^\r\n]+)(?:命座|星魂|影画|天赋)(?:图鉴)?$/u;
 const roleDetail = /^(.+?)(命座|星魂|影画|天赋)(?:图鉴)?$/u;
-const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${bareName.source}`, "u");
+const legacyRoleDetail = /^([^\r\n]{1,64}?)(命之座|行迹|技能|资料)(?:图鉴)?$/u;
+const bareRoleBook = /^([^#*%％\s][^\r\n]{1,63}?)图鉴$/u;
+const command = new RegExp(`${glued.source}|${shortcut.source}|${roleShortcut.source}|${legacyRoleDetail.source}|${bareRoleBook.source}|${bareName.source}`, "u");
 const challengePeriod = /^(?:(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?)?(本期|当期|上期|下期)([^\r\n]+?)(图鉴)?$/u;
 type ChallengePeriod = "本期" | "上期" | "下期";
 
@@ -93,24 +95,40 @@ export function parseBareNameShortcut(message: string): { game: Game; query: str
   return { game, query };
 }
 
+function validRoleQuery(query: string | undefined, prefix: string | undefined): query is string {
+  return !!query && (!!prefix || query.length >= 2) && !genericShortcut.test(query) && !reserved.test(query) &&
+    !reservedBare.test(query) && !/^(?:我的|个人|今日|今天|每日|明天|明日|周[1-7一二三四五六日](?:素材|材料)?$)/u.test(query);
+}
+
 export function parseRoleShortcut(message: string): { game?: Game; query: string } | undefined {
   const input = message.trim();
   const prefix = gamePrefix.exec(input)?.[0];
   const result = roleDetail.exec(input.slice(prefix?.length ?? 0));
   const query = result?.[1]?.trim();
   const suffix = result?.[2];
-  if (!query || (!prefix && query.length < 2) || genericShortcut.test(query) || reserved.test(query) ||
-      reservedBare.test(query) || /^(?:我的|个人|今日|今天|每日|明天|明日|周[1-7一二三四五六日](?:素材|材料)?$)/u.test(query)) return;
+  if (!validRoleQuery(query, prefix)) return;
   const game = prefix ? prefixes[prefix] : undefined;
   if (suffix === "天赋") return game ? { game, query } : { query };
   const suffixGame = suffix === "命座" ? "gi" : suffix === "星魂" ? "hsr" : "zzz";
   if (!game || game === suffixGame) return { game: suffixGame, query };
 }
 
+export function parseLegacyRoleShortcut(message: string): { game?: Game; query: string } | undefined {
+  const input = message.trim();
+  const prefix = gamePrefix.exec(input)?.[0];
+  const match = prefix ? legacyRoleDetail.exec(input.slice(prefix.length)) : legacyRoleDetail.exec(input) ?? bareRoleBook.exec(input);
+  const query = match?.[1]?.trim();
+  if (!validRoleQuery(query, prefix)) return;
+  const game = prefix ? prefixes[prefix] : undefined;
+  const part = match?.[2];
+  const suffixGame = part === "命之座" ? "gi" : part === "行迹" ? "hsr" : undefined;
+  if (!suffixGame || !game || game === suffixGame) return { game: suffixGame ?? game, query };
+}
+
 export type AtlasImage = { readonly type: "image"; readonly file: Uint8Array };
 type AtlasNode = string | AtlasImage;
 export type AtlasReply = AtlasNode | { readonly type: "forward"; readonly nodes: readonly AtlasNode[] } | BatchedImageForward;
-type Lookup = "glued" | "shortcut" | "bare" | "character";
+type Lookup = "glued" | "shortcut" | "bare" | "character" | "legacy-character";
 
 export interface AtlasDelivery {
   readonly inlineImageByteLimit?: number;
@@ -161,6 +179,11 @@ export function traditionalAtlasEvent(
         if (query) return send(event, await findReply(query, "glued", undefined, delivery));
         const role = parseRoleShortcut(event.msg);
         if (role) return send(event, await findReply(role.query, "character", role.game, delivery));
+        const legacyRole = parseLegacyRoleShortcut(event.msg);
+        if (legacyRole) {
+          const reply = await findReply(legacyRole.query, "legacy-character", legacyRole.game, delivery);
+          if (reply !== undefined) return send(event, reply);
+        }
         const challenge = parseChallengeShortcut(event.msg);
         if (challenge) return send(event, challenge.invalidDate
           ? invalidChallengeDate

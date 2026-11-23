@@ -288,18 +288,20 @@ async function lookupNotice(query: string, message: string, game: Game | undefin
 
 async function traditionalQuery(
   catalog: AtlasCatalog,
-  query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" = "search", delivery?: AtlasDelivery,
+  query: string, limit: number, game?: Game, mode: TraditionalLookup | "shortcut" | "legacy-character" = "search", delivery?: AtlasDelivery,
 ): Promise<AtlasReply | undefined> {
   const explicit = mode === "search" || mode === "shortcut" || mode === "character";
   try {
     const quickLookup = mode === "bare" || mode === "weapon";
     const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
-    let matches = findTraditionalEntries(result, query, game,
-      mode === "shortcut" ? "search" : mode === "character" ? "character-search" : mode);
+    const lookup = mode === "legacy-character" ? "character" : mode === "character" ? "character-search" :
+      mode === "shortcut" ? "search" : mode;
+    let matches = findTraditionalEntries(result, query, game, lookup);
     if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
     }
+    if (mode === "legacy-character" && matches.length !== 1) return;
     if ((mode === "search" || mode === "name") && matches.every(({ score }) => score < 3)) {
       const category = await traditionalAchievementCategory(catalog, query, result, game, delivery);
       if (category) return category;
