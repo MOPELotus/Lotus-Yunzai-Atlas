@@ -49,7 +49,7 @@ test("幽境危战识别六种难度的历史数据，活动期间之外仍按�
   expect(findChallengeMode("gi", "危战")).toBe(onslaughtMode);
   expect(findChallengeMode("gi", "地脉异常")).toBe(onslaughtMode);
   expect(findChallengeMode("hsr", "幽境")).toBeUndefined();
-  expect(hasChallengeRotation(onslaughtMode)).toBe(false);
+  expect(hasChallengeRotation(onslaughtMode)).toBe(true);
   const list = { begin: "2026-11-03 10:00:00", end: "2026-12-01 03:59:59" };
   const level = Object.fromEntries([39, 69, 89, 99, 104, 109].map((monster_level, index) => [101401 + index, { monster_level }]));
   expect(readChallengeFacts(onslaughtMode, { list, detail: { level } })).toMatchObject({
@@ -276,4 +276,20 @@ test("式舆只采用常规剧变节点，危局按已公布的不同长度窗�
   expect(await choose(assault, assaultRows, now)).toBe("690491");
   expect(await choose(assault, assaultRows, "2026-11-20T04:00:00+08:00")).toBe("690501");
   expect(await choose(assault, assaultRows, "2026-12-02T04:00:00+08:00")).toBeUndefined();
+});
+
+test("幽境本期和上期仅使用连续的实装窗口，导出中的预览不抢当期", async () => {
+  const rows = [
+    { id: "5269012", list: { live_begin: "2026-09-30 10:00:00", live_end: "2026-11-11 09:59:59" } },
+    { id: "5269013", list: { live_begin: "2026-11-11 10:00:00", live_end: "2026-12-23 09:59:59" } },
+    { id: "5269014", list: { begin: "2026-11-03 10:00:00", end: "2026-12-01 03:59:59" } },
+  ];
+  const read = async (row: typeof rows[number]) => readChallengeFacts(onslaughtMode, row);
+  const before = Date.parse("2026-11-11T09:59:59+08:00");
+  const boundary = before + 1000;
+  expect((await findCurrentChallenge(onslaughtMode, rows, read, before))?.entry.id).toBe("5269012");
+  expect((await findCurrentChallenge(onslaughtMode, rows, read, boundary))?.entry.id).toBe("5269013");
+  expect((await findPreviousChallenge(onslaughtMode, rows, read, boundary))?.entry.id).toBe("5269012");
+  expect(await findPreviousChallenge(onslaughtMode, rows.slice(1), read, boundary)).toBeUndefined();
+  expect(await findCurrentChallenge(onslaughtMode, rows, read, Date.parse("2026-12-23T10:00:00+08:00"))).toBeUndefined();
 });

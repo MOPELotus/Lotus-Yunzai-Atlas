@@ -37,7 +37,7 @@ interface ChallengeWindow {
   readonly from: "live" | "export";
 }
 
-const datedRotations = new Set<ChallengeMode["id"]>(["tower", "rolecombat", "maze", "maze_extra", "maze_boss", "shiyu", "boss"]);
+const datedRotations = new Set<ChallengeMode["id"]>(["tower", "leyline", "rolecombat", "maze", "maze_extra", "maze_boss", "shiyu", "boss"]);
 
 export function hasChallengeScheduleConflict(mode: ChallengeMode, id: string, window: ChallengeWindow | undefined) {
   // The official 7.2 notice places this blessing in the December 16 rotation.
@@ -145,7 +145,7 @@ export async function findAnnouncedChallengeNext<Entry extends { readonly id: st
 
 export async function findPreviousChallenge<Entry extends { readonly id: string }, Facts extends RotationFacts>(
   mode: typeof abyssMode | typeof apocalypseMode | typeof chaosMode | typeof deadlyAssaultMode |
-    typeof fictionMode | typeof shiyuMode | typeof theaterMode,
+    typeof fictionMode | typeof onslaughtMode | typeof shiyuMode | typeof theaterMode,
   entries: readonly Entry[],
   readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
 ) {

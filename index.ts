@@ -536,7 +536,8 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
   const displayCurrent = currentRequested && at === undefined;
   const previous = target === "上期" &&
     (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id ||
-      mode.id === deadlyAssaultMode.id || mode.id === fictionMode.id || mode.id === shiyuMode.id || mode.id === theaterMode.id);
+      mode.id === deadlyAssaultMode.id || mode.id === fictionMode.id || mode.id === onslaughtMode.id ||
+      mode.id === shiyuMode.id || mode.id === theaterMode.id);
   const forecast = target === "下期" &&
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id);
