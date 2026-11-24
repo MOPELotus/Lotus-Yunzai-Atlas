@@ -88,6 +88,7 @@ export interface MonsterDetails {
   readonly version: string;
   readonly description: string;
   readonly artwork?: string;
+  readonly sections?: ReferenceDetails["sections"];
 }
 
 interface AtlasPage {
@@ -566,10 +567,12 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     const item = await readItem(entry, "monster");
     const detail = object(item?.content.detail);
     if (!item || label(detail.name) !== entry.name) return;
-    const description = effectText(detail.desc);
+    const description = effectText(detail.desc) || effectText(detail.description);
     if (!description) return;
+    const { sections } = referenceContent(object(item.content.list), detail, object(item.meta.materialNames));
+    const additional = sections.filter(({ content }) => content !== description);
     return { game: entry.game, name: entry.name, version: entry.version, description,
-      artwork: galleryArtwork(item.meta.images, entry.game)() };
+      artwork: galleryArtwork(item.meta.images, entry.game)(), ...(additional.length ? { sections: additional } : {}) };
   }
 
   function relatedRecords(entry: AtlasEntry, catalog: Catalog, kind: "character" | "monster") {

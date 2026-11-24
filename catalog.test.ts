@@ -356,7 +356,10 @@ test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情"
         { fieldPath: "detail.monster_info.51.icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/original.webp" },
         { fieldPath: "icon", status: "downloaded", placeholder: false, localPath: "gallery/gi/later.webp" },
       ] },
-        content: { list: { desc: "English list fallback" }, detail: { name, desc: "简体中文<color=#AABBCC>敌人</color>。\\n后续。" } } }));
+        content: { list: { desc: "English list fallback" }, detail: {
+          name, desc: "简体中文<color=#AABBCC>敌人</color>。\\n后续。",
+          ...(gameId === "zzz" && { effect: "追加效果。", story: "简体中文敌人。\\n后续。" }),
+        } } }));
     await detail("gi", "gi", "51", "样例敌人");
     await detail("hsr", "hsr", "62", "样例敌人", "2");
     await detail("hsr-variant", "hsr", "63", "另一个条目");
@@ -376,6 +379,7 @@ test("敌人按游戏和 ID 索引，保留同名变体及身份匹配的详情"
     const noIcon = await catalog.monsterDetails(findMonsters(snapshot, "62", "zzz")[0]!);
     expect(noIcon?.description).toBe("简体中文敌人。\n后续。");
     expect(noIcon?.artwork).toBeUndefined();
+    expect(noIcon?.sections).toEqual([{ title: "效果", content: "追加效果。" }]);
     for (const id of ["62", "63"]) expect(await catalog.monsterDescription(findMonsters(snapshot, id, "hsr")[0]!)).toBe("");
   } finally {
     await rm(root, { recursive: true, force: true });

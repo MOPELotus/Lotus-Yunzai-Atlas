@@ -931,15 +931,15 @@ export async function renderReference(data: ReferenceDetails, options: RoleRende
 }
 
 export async function renderMonster(monster: MonsterDetails, options: RoleRenderOptions = {}) {
-  const { game, artwork, description, name, version } = monster;
+  const { game, artwork, description, name, version, sections = [] } = monster;
   const [images, background, texture] = await Promise.all([
     galleryImages(game, [artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
     themeFonts ??= loadThemeFonts(),
   ]);
   const { wrap, heading, text } = makeLayout(texture);
   const icon = artwork ? images.get(artwork) : undefined;
-  // The original generic item card shows its overview and repeats it below the introduction heading.
-  const panels = [[text(description), heading("简介"), text(description)]];
+  const panels = [[heading("简介"), text(description)],
+    ...sections.map(({ title, content }) => [heading(title), text(content)])];
   const [page] = await renderAtlasPages([{ section: "敌人", panels }], wrap(name, 620, 33), game, version, icon, background, options, 152);
   return page!;
 }

@@ -264,7 +264,8 @@ async function monsterReply(catalog: AtlasCatalog, entry: AtlasEntry, delivery?:
     const { png } = await renderMonster(monster, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
-    return `${title}\n${monster.description}`;
+    return [title, monster.description,
+      ...(monster.sections ?? []).map(({ title, content }) => `${title}：${content}`)].join("\n");
   }
 }
 
