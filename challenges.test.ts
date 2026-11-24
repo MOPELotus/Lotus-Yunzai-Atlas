@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { abyssMode, apocalypseMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
-  findChallengeMode, findCurrentChallenge, findPreviousChallenge, hasChallengeRotation, onslaughtMode, readChallengeFacts,
+  findChallengeMode, findCurrentChallenge, findNextOnslaught, findPreviousChallenge, hasChallengeRotation, onslaughtMode, readChallengeFacts,
   theaterMode, type ChallengeMode } from "./challenges.ts";
+import { createArbitrationLookup, selectArbitrationId } from "./versioned-challenges.ts";
 
 test("挑战模式先核对游戏，保留实装时间并区分导出窗口", () => {
   const mode = findChallengeMode("hsr", "混沌");
@@ -42,6 +43,48 @@ test("异相仲裁拆分骑士与王棋，危局按子模式保留敌人", () =>
     { label: "试炼", count: 2, items: ["试炼一", "试炼二"] },
     { label: "绝境", count: 1, items: ["绝境敌人"] },
   ]);
+});
+
+test("异相仲裁从正式游戏版本取一期，测试快照不能把下期提前变成本期", async () => {
+  const mapping = { "4.5": [9], "4.6": [10], "4.7": [11], unknown: [12] };
+  expect(selectArbitrationId("4.7.52", mapping, "current")).toBe("11");
+  expect(selectArbitrationId("4.7.52", mapping, "previous")).toBe("10");
+  expect(selectArbitrationId("4.7.52", mapping, "next")).toBe("12");
+  expect(selectArbitrationId("4.7", { ...mapping, unknown: [12, 13] }, "next")).toBeUndefined();
+  expect(selectArbitrationId("4.8", mapping, "current")).toBeUndefined();
+  expect(selectArbitrationId("5.0", { ...mapping, "5.0": [12] }, "previous")).toBe("11");
+  const lookup = createArbitrationLookup();
+  expect(await lookup("4.8.50", "current", Date.parse("2026-11-24T12:00:00+08:00"))).toBe("11");
+  expect(await lookup("4.7.52", "current", Date.parse("2026-11-10T12:00:00+08:00"))).toBe("10");
+  expect(await lookup("4.7.52", "current", Date.parse("2026-11-11T08:00:00+08:00"))).toBeUndefined();
+});
+
+test("异相仲裁换版本后读取正式版和本地快照对应的期次表", async () => {
+  let manifests = 0;
+  const urls: string[] = [];
+  const lookup = createArbitrationLookup(async () => {
+    manifests++;
+    return { hsr: { live: "5.0", latest: "5.1.52", available: ["5.0", "5.1.52"] } };
+  }, async url => {
+    urls.push(url);
+    return Response.json({ "4.7": [11], "5.0": [12], "5.1": [13] });
+  }, () => Date.parse("2027-01-08T00:00:00+08:00"));
+  expect(await Promise.all([lookup("5.1.52", "current"), lookup("5.1.52", "next")])).toEqual(["12", "13"]);
+  expect(manifests).toBe(1);
+  expect(urls).toEqual(["https://static.nanoka.cc/hsr/5.1.52/peak/version.json"]);
+  expect(await lookup("5.0", "previous")).toBe("11");
+  expect(urls.at(-1)).toBe("https://static.nanoka.cc/hsr/5.0/peak/version.json");
+});
+
+test("幽境危战下期只提供相邻编号的预览，导出窗口不能改变本期", async () => {
+  const current = row("5269013", "2026-11-11 10:00:00", "2026-12-23 09:59:59");
+  const preview = row("5269014");
+  const wrong = row("5269020");
+  const at = Date.parse("2026-11-24T12:00:00+08:00");
+  const facts = async (entry: typeof current) => readChallengeFacts(onslaughtMode, entry);
+  expect((await findNextOnslaught([wrong, preview, current], facts, at))?.entry.id).toBe("5269014");
+  expect(await findNextOnslaught([wrong, current], facts, at)).toBeUndefined();
+  expect((await findCurrentChallenge(onslaughtMode, [preview, current], facts, at))?.entry.id).toBe("5269013");
 });
 
 test("幽境危战识别六种难度的历史数据，活动期间之外仍按记录查询", () => {

@@ -105,6 +105,22 @@ export async function findNextShiyu<Entry extends { readonly id: string }, Facts
   return (await findAdjacentChallenge(shiyuMode, "next", entries, readFacts, now))?.adjacent;
 }
 
+export async function findNextOnslaught<Entry extends { readonly id: string }, Facts extends RotationFacts>(
+  entries: readonly Entry[], readFacts: (entry: Entry) => Promise<Facts>, now = Date.now(),
+) {
+  const scheduled = await findAdjacentChallenge(onslaughtMode, "next", entries, readFacts, now);
+  if (scheduled) return scheduled.adjacent;
+  const rotation = await findCurrentChallenge(onslaughtMode, entries, readFacts, now);
+  if (!rotation || !/^5269[0-9]{3}$/u.test(rotation.entry.id)) return;
+  // This source numbers successive Onslaught rounds in the 5269xxx series.
+  const nextId = String(Number(rotation.entry.id) + 1);
+  const matches = entries.filter(entry => entry.id === nextId);
+  const [entry] = matches;
+  if (matches.length !== 1 || !entry) return;
+  const facts = await readFacts(entry);
+  if (facts.rotationEligible && facts.window?.from === "export") return { entry, facts };
+}
+
 const announcedRotations = {
   // Star Rail 4.6 and 4.7. The source uses an exclusive end at the next minute.
   // https://hsr.hoyoverse.com/en-us/news/166468

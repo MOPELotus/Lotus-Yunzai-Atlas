@@ -6,8 +6,9 @@ import { AtlasSnapshotReset } from "./snapshot-pointer.ts";
 import { characterGalleryName, starRailTrailblazerName } from "./role-data.ts";
 import { fileURLToPath } from "node:url";
 import { abyssMode, apocalypseMode, arbitrationMode, challengeModes, chaosMode, deadlyAssaultMode, fictionMode, findAnnouncedChallengeNext,
-  findChallengeMode, findCurrentChallenge, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
+  findChallengeMode, findCurrentChallenge, findNextOnslaught, findNextShiyu, findPreviousChallenge, hasChallengeRotation, hasChallengeScheduleConflict,
   onslaughtMode, shiyuMode, theaterMode, type ChallengeMode } from "./challenges.ts";
+import { createArbitrationLookup } from "./versioned-challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
@@ -30,6 +31,7 @@ const games = new Map<string, Game>([
 ]);
 const atlasRoot = fileURLToPath(new URL("../../data/atlas/", import.meta.url));
 type AtlasCatalog = ReturnType<typeof createAtlasRuntimeCatalog>;
+const arbitrationRecord = createArbitrationLookup();
 
 function searchTerms(argument: string, fixedGame?: Game) {
   const words = argument.trim().split(/\s+/u);
@@ -212,7 +214,7 @@ async function challengeDetails(catalog: AtlasCatalog, entry: AtlasEntry, mode: 
   const lines = [challengeTitle(entry, mode), `快照版本 ${entry.version}`];
   if (current) lines.push("当前轮换 · 中国服（UTC+8）");
   if (window) {
-    const origin = forecast ? "快照预计（下期预览）"
+    const origin = forecast ? (window.from === "live" ? "快照预计（下期预览）" : "下期预览 · 导出时间")
       : hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
       : window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
     lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
@@ -228,12 +230,13 @@ async function challengeDetails(catalog: AtlasCatalog, entry: AtlasEntry, mode: 
   return lines;
 }
 
-async function onslaughtCard(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasImage | undefined> {
+async function onslaughtCard(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery, preview = false): Promise<AtlasImage | undefined> {
   const onslaught = await catalog.onslaughtDetails(entry);
   if (!onslaught) return;
   try {
     const { renderOnslaught } = await import("./role-render.ts");
-    const { png } = await renderOnslaught(onslaught, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
+    const card = preview ? { ...onslaught, name: `${onslaught.name}（下期预览）` } : onslaught;
+    const { png } = await renderOnslaught(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
     return undefined;
@@ -537,13 +540,13 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
   const previous = target === "上期" &&
     (mode.id === abyssMode.id || mode.id === apocalypseMode.id || mode.id === chaosMode.id ||
       mode.id === deadlyAssaultMode.id || mode.id === fictionMode.id || mode.id === onslaughtMode.id ||
-      mode.id === shiyuMode.id || mode.id === theaterMode.id);
+      mode.id === shiyuMode.id || mode.id === theaterMode.id || mode.id === arbitrationMode.id);
   const forecast = target === "下期" &&
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
-      mode.id === shiyuMode.id || mode.id === theaterMode.id);
+      mode.id === shiyuMode.id || mode.id === theaterMode.id || mode.id === arbitrationMode.id || mode.id === onslaughtMode.id);
   const relative = previous || forecast;
   const unverifiedRotation = `${mode.name}${currentRequested ? "本期" : target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
-  if (currentRequested && !hasChallengeRotation(mode)) return unverifiedRotation;
+  if (currentRequested && !hasChallengeRotation(mode) && mode.id !== arbitrationMode.id) return unverifiedRotation;
   if (!relative && /^(?:上期|下期)$/u.test(target)) return unverifiedRotation;
   if (/^第\s*\d+\s*期$/u.test(target)) {
     return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
@@ -574,13 +577,20 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
     if (currentRequested || relative) {
       if (result.stale || category.sampled) return unverifiedRotation;
       const readFacts = (item: AtlasEntry) => catalog.challengeFacts(item, mode);
-      const matched = forecast
-        ? await (mode.id === shiyuMode.id
-          ? findNextShiyu(category.entries, readFacts, at) : findAnnouncedChallengeNext(mode, category.entries, readFacts, at))
-        : previous ? await findPreviousChallenge(mode, category.entries, readFacts, at)
-        : await findCurrentChallenge(mode, category.entries, readFacts, at);
-      if (!matched) return unverifiedRotation;
-      ({ entry, facts } = matched);
+      if (mode.id === arbitrationMode.id) {
+        const id = await arbitrationRecord(category.version, forecast ? "next" : previous ? "previous" : "current", at);
+        entry = category.entries.find(item => item.id === id);
+        if (!entry) return unverifiedRotation;
+      } else {
+        const matched = forecast
+          ? await (mode.id === onslaughtMode.id ? findNextOnslaught(category.entries, readFacts, at)
+            : mode.id === shiyuMode.id ? findNextShiyu(category.entries, readFacts, at)
+            : findAnnouncedChallengeNext(mode, category.entries, readFacts, at))
+          : previous ? await findPreviousChallenge(mode, category.entries, readFacts, at)
+          : await findCurrentChallenge(mode, category.entries, readFacts, at);
+        if (!matched) return unverifiedRotation;
+        ({ entry, facts } = matched);
+      }
     } else {
       const key = compareKey(target);
       const recordId = target.normalize("NFKC");
@@ -598,7 +608,7 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
 
     if (!entry) return "未找到挑战记录。";
     if (mode.id === onslaughtMode.id) {
-      const image = await onslaughtCard(catalog, entry, delivery);
+      const image = await onslaughtCard(catalog, entry, delivery, forecast);
       if (image) return image;
     }
     if (mode.id === theaterMode.id) {
