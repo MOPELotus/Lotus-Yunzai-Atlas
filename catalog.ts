@@ -16,6 +16,7 @@ import { normalizeShiyu, type ShiyuPeriod } from "./shiyu-data.ts";
 import { normalizeDeadlyAssault } from "./deadly-assault-data.ts";
 import { genshinCardPage, normalizeGenshinCard } from "./gcg-data.ts";
 import { normalizeBangbooDetails } from "./bangboo-data.ts";
+import { referenceContent } from "./reference-data.ts";
 import { AtlasSnapshotReset, discoverAtlasDataDirectory } from "./snapshot-pointer.ts";
 import { discoverRuntimeAtlasDataDirectory, LegacyAtlasSourceConflict } from "./legacy-atlas-directory.ts";
 import { rebuildLegacyAtlasIndex } from "./rebuild-legacy-index.ts";
@@ -636,19 +637,9 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       const item = await readItem(entry, page.referenceId);
       if (!item) return;
       const { list, detail } = item.content;
-      const listing = object(list);
-      const data = object(detail);
-      const partner = object(data.partner_info);
-      const intro = [partner.profile_desc, data.desc, data.description, data.profile_desc, listing.desc, listing.description,
-        listing.effect, data.effect, data.story].map((value) => effectText(value)).find(Boolean) ?? "";
-      const effect = [data.effect, listing.effect, data.desc2, listing.desc2].map((value) => effectText(value)).find(Boolean);
-      const story = [data.story, data.background, object(partner.trust_lv)["3"]].map((value) => effectText(value)).find(Boolean);
-      const sections = [
-        { title: "效果", content: effect ?? "" },
-        { title: "故事", content: story ?? "" },
-      ].filter(({ content }) => content && content !== intro);
       return { game: entry.game, name: entry.name, version: entry.version, category: page.name,
-        artwork: galleryArtwork(item.meta.images, entry.game)(), intro, sections };
+        artwork: galleryArtwork(item.meta.images, entry.game)(),
+        ...referenceContent(object(list), object(detail), object(item.meta.materialNames)) };
     },
     async statusSource() {
       const root = snapshot?.root ?? await locate().then(({ root }) => root, () => configuredRoot);

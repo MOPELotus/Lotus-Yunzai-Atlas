@@ -466,7 +466,11 @@ test("查询已有导出的附属分类及详情，普通裸名称继续让行",
         { localPath: "gallery/gi/placeholder.webp", fieldPath: "detail.icon", status: "downloaded", placeholder: true },
         { localPath: "gallery/gi/UI_ItemIcon_114001.webp", fieldPath: "icon", status: "downloaded", placeholder: false },
       ] },
-      content: { list: {}, detail: { desc: "武器突破素材。", effect: "突破至下一阶。", story: "旧城中留下的一片碎瓦。" } },
+      content: { list: {}, detail: { desc: "武器突破素材。", effect: "突破至下一阶。", story: "旧城中留下的一片碎瓦。",
+        special_element_type: { desc: [{ name: "旧城", desc: "材料来源与旧城有关。" }] },
+        stats: { atk: 30, "防御": 12, unrecognized_internal_key: 999 },
+        materials: [{ mats: [{ name: "升级材料", count: 2 }, { id: 101010, count: 4 }, { title: "第二份材料", amount: "3" }] }],
+      } },
     }));
     await writeFile(join(items, "01.json"), JSON.stringify({
       meta: { pageId: "book", gameId: "hsr", recordId: book.id, version: "7.2" },
@@ -484,7 +488,9 @@ test("查询已有导出的附属分类及详情，普通裸名称继续让行",
     expect(data.stale).toBe(false);
     expect(await atlas.referenceDetails(material!.entry, data)).toEqual({
       game: "gi", category: "材料", name: gs.name, version: "7.2", artwork: "gallery/gi/UI_ItemIcon_114001.webp", intro: "武器突破素材。",
-      sections: [{ title: "效果", content: "突破至下一阶。" }, { title: "故事", content: "旧城中留下的一片碎瓦。" }],
+      sections: [{ title: "效果", content: "突破至下一阶。" },
+        { title: "专属信息", content: "旧城：材料来源与旧城有关。" }, { title: "数值", content: "攻击力：30 · 防御：12" },
+        { title: "故事", content: "旧城中留下的一片碎瓦。" }, { title: "培养材料", content: "升级材料 × 2\n第二份材料 × 3" }],
     });
     const [volume] = findTraditionalEntries(data, "北地见闻", "gi");
     expect(volume?.entry.name).toBe(book.name);
