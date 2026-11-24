@@ -67,15 +67,53 @@ async function recover(theme: string, target: string, bytes: Buffer, signal?: Ab
     const copy = join(stage, basename(target));
     await writeFile(copy, bytes, { mode: 0o600, signal });
     signal?.throwIfAborted();
-    await link(copy, target);
+    try { await link(copy, target); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return false; throw error; }
     return true;
   } finally {
     await rm(stage, { recursive: true, force: true });
   }
 }
 
+// Fetch the same fixed original assets used by the renderer; never pick a theme dynamically.
+async function downloadOriginal(asset: readonly [string, number, string], request: typeof fetch,
+  signal: AbortSignal | undefined, onProgress?: AtlasInitializationProgressCallback): Promise<Buffer | undefined> {
+  const [file, size, digest] = asset;
+  const source = file === "fonts/MiSans-VF.ttf" ? "fonts/MiSans-VF.ttf" : `miao-theme/${file}`;
+  const url = file === "fonts/tttgbnumber.ttf"
+    ? "https://raw.githubusercontent.com/yoimiya-kokomi/miao-plugin/28607618/resources/common/font/tttgbnumber.ttf"
+    : `https://raw.githubusercontent.com/MOPELotus/Lotus-ReFactor/278a607f564dc9e468e178918268c65ab2bfb51a/resources/${source}`;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    signal?.throwIfAborted();
+    const deadline = AbortSignal.timeout(60_000);
+    const active = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    await reportProgress(onProgress, { stage: "theme-download", message: `下载图鉴卡片素材 ${file}（${attempt}/2）`, completed: 0, total: size, unit: "bytes" }, signal);
+    try {
+      const response = await request(url, { redirect: "error", credentials: "omit", signal: active });
+      if (response.status !== 200 || response.redirected || !response.body || Number(response.headers.get("content-length")) > size) {
+        await response.body?.cancel().catch(() => undefined);
+        if (response.status === 408 || response.status === 429 || response.status >= 500) continue;
+        return;
+      }
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for await (const chunk of response.body) {
+        active.throwIfAborted();
+        received += chunk.byteLength;
+        if (received > size) return;
+        chunks.push(chunk);
+        await reportProgress(onProgress, { stage: "theme-download", message: `下载图鉴卡片素材 ${file}`, completed: received, total: size, unit: "bytes" }, signal);
+      }
+      const bytes = Buffer.concat(chunks);
+      if (received === size && createHash("sha256").update(bytes).digest("hex") === digest) return bytes;
+      return;
+    } catch { signal?.throwIfAborted(); }
+  }
+}
+
 export async function prepareAtlasTheme(checkout: URL, options: {
   readonly override?: string; readonly source?: string; readonly signal?: AbortSignal;
+  readonly download?: boolean | typeof fetch;
   readonly onProgress?: AtlasInitializationProgressCallback;
 } = {}) {
   const { override, source, signal, onProgress } = options;
@@ -88,7 +126,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
   const missing: string[] = [];
   const selected = [...assets, ...optionalSkillAssets];
   let checked = 0;
-  await reportProgress(onProgress, { stage: "theme", message: "核对图鉴主题资源", completed: checked, total: selected.length, unit: "个" }, signal);
+  await reportProgress(onProgress, { stage: "theme", message: "核对图鉴卡片背景与字体", completed: checked, total: selected.length, unit: "个" }, signal);
   for (const [asset, size, digest] of selected) {
     signal?.throwIfAborted();
     if (await available(theme, asset)) {
@@ -110,6 +148,11 @@ export async function prepareAtlasTheme(checkout: URL, options: {
           signal?.throwIfAborted();
         }
       }
+    }
+    if (!override?.trim() && options.download && !(await lstat(target).catch(() => undefined)) &&
+        !(await Promise.all(directories.map(directory => available(directory, asset)))).some(Boolean)) {
+      const bytes = await downloadOriginal([asset, size, digest], typeof options.download === "function" ? options.download : fetch, signal, onProgress);
+      if (bytes && await recover(theme, target, bytes, signal)) copied.push(asset);
     }
     if (assets.some(([required]) => required === asset) && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
       missing.push(asset);
