@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { createHash } from "node:crypto";
@@ -478,7 +479,7 @@ function imageReference(fieldPath: string, originalValue: unknown, icon: Awaited
 
 /** Fetch a complete verified page into a fresh source root suitable for candidate assembly. */
 export async function acquireAtlasSource(destination: string, requirements: readonly AtlasCandidatePage[],
-  signal?: AbortSignal, request: AtlasSourceFetch = fetch): Promise<AtlasAcquiredSource> {
+  signal?: AbortSignal, request: AtlasSourceFetch = fetch, onProgress?: AtlasInitializationProgressCallback): Promise<AtlasAcquiredSource> {
   const scope = requirements[0];
   const category = `${scope?.game}/${scope?.pageId}`;
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
@@ -504,6 +505,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const localeMode = localized ? "path" : "embedded";
     const sourcePath = `${version}/${localized ? locale + "/" : ""}${pageId}.json`;
     const sourceUrl = `${atlasSourceOrigin}/${game}/${sourcePath}`;
+    await reportProgress(onProgress, { stage: "source-index", message: `读取${folder}索引` }, active);
     const index = await sourceJson(sourceUrl, false, active, request, indexOnly ? maxLargeIndexBytes : maxJsonBytes);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
@@ -515,6 +517,8 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const records: Record<string, unknown> = {};
     const cardNames = category === "gi/gcg" ? new Map(entries.map(({ id, name }) => [`a${id}`, name])) : undefined;
     if (cardNames) {
+      let referenceTables = 0;
+      await reportProgress(onProgress, { stage: "gcg-references", message: "读取七圣召唤引用表", completed: 0, total: 3, unit: "份" }, active);
       for (const [prefix, table] of [["c", "card"], ["k", "keyword"], ["s", "skill"]] as const) {
         const rows = object(await sourceJson(`${atlasSourceOrigin}/gi/${version}/${locale}/gcg/${table}.json`,
           false, active, request, maxLargeIndexBytes));
@@ -523,15 +527,21 @@ export async function acquireAtlasSource(destination: string, requirements: read
           const name = label(object(value).name);
           if (/^[1-9]\d{0,9}$/u.test(id) && name) cardNames.set(`${prefix}${id}`, name);
         }
+        await reportProgress(onProgress, { stage: "gcg-references", message: `已读取七圣召唤 ${table} 引用表`, completed: ++referenceTables, total: 3, unit: "份" }, active);
       }
     }
+    let completed = 0;
     const images = new Map<string, Awaited<ReturnType<typeof readIcon>>>();
     const loadIcon = async (name: string, paths: readonly string[] = [name]) => {
-      if (!images.has(name)) images.set(name, await readIcon(name, paths, category, target, active, request));
+      if (!images.has(name)) {
+        images.set(name, await readIcon(name, paths, category, target, active, request));
+        await reportProgress(onProgress, { stage: "source-records", message: `${folder}，已处理原图 ${images.size} 张`, completed, total: entries.length, unit: "条" }, active);
+      }
       return images.get(name);
     };
     let usedPlaceholder = false;
     const legacyMissing = new Set<string>();
+    await reportProgress(onProgress, { stage: "source-records", message: `${folder}资料与原图`, completed, total: entries.length, unit: "条" }, active);
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
       const detailPage = isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).detailPath : pageId;
@@ -637,6 +647,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
         recordId: id, name, version, rarity, hasDetail, images: references },
         content: { list, detail: detail ?? null, ...(referencedNames && { references: referencedNames }) } });
       records[id] = { id, name, rarity, path, hasDetail, detailSourceUrl, imageCount: references.length };
+      await reportProgress(onProgress, { stage: "source-records", message: `${folder}：${name}`, completed: ++completed, total: entries.length, unit: "条" }, active);
     }
     if (usedPlaceholder) {
       await mkdir(join(target, "gallery", "_placeholder"), { recursive: true });
@@ -652,8 +663,9 @@ export async function acquireAtlasSource(destination: string, requirements: read
     });
     if (pageId === "character") {
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
-      await completeAtlasRoleMaterials(target, requirements, active, request);
+      await completeAtlasRoleMaterials(target, requirements, active, request, true, onProgress);
     }
+    await reportProgress(onProgress, { stage: "source-validate", message: `校验${folder}资料与资源引用` }, active);
     const validation = await validateAtlasCandidate(data, requirements, active);
     if (!validation.ok) throw new Error(`抓取的源快照未通过校验。${validation.issues[0] ?? ""}`);
     const imageCount = [...images.values()].filter((image) => image !== undefined).length;

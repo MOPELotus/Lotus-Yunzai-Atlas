@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
@@ -110,15 +111,16 @@ export async function pendingAtlasRoleMaterials<T extends AtlasCandidatePage>(da
 
 /** Join exact-version item data only to character records already checked by the source exporter. */
 export async function completeAtlasRoleMaterials(root: string, scope: readonly AtlasCandidatePage[],
-  signal?: AbortSignal, request: AtlasSourceFetch = fetch, includeArtwork = true) {
+  signal?: AbortSignal, request: AtlasSourceFetch = fetch, includeArtwork = true, onProgress?: AtlasInitializationProgressCallback) {
   const data = join(root, "data");
   const map = await Bun.file(await candidateFile(data, "map.json")).json();
+  await reportProgress(onProgress, { stage: "materials", message: "核对角色材料名称及图片" }, signal);
   const pending = await pendingAtlasRoleMaterials(data, scope, signal, includeArtwork);
   if (!pending.length) return [];
   const updated: AtlasCandidatePage[] = [];
   for (const { game, version, locale = defaultAtlasLocale } of pending) {
     try {
-      if (await completeGameMaterials(root, data, map, game, version, locale, request, signal, includeArtwork)) {
+      if (await completeGameMaterials(root, data, map, game, version, locale, request, signal, includeArtwork, onProgress)) {
         updated.push({ game, pageId: "character", version, ...(locale !== defaultAtlasLocale && { locale }) });
       }
     } catch (error) {
@@ -130,7 +132,7 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
 }
 
 async function completeGameMaterials(root: string, data: string, map: unknown, game: Game, version: string | undefined, locale: AtlasLocale,
-  request: AtlasSourceFetch, signal: AbortSignal | undefined, includeArtwork: boolean) {
+  request: AtlasSourceFetch, signal: AbortSignal | undefined, includeArtwork: boolean, onProgress?: AtlasInitializationProgressCallback) {
   if (!version || !materialVersion.test(version)) throw new Error("图鉴材料版本无效。");
   const rolePage = characterPage(map, game, locale);
   const roles = [];
@@ -155,6 +157,8 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
   const shared = new Map<string, ReturnType<typeof loadIcon>>();
   const icons = new Map<string, Awaited<ReturnType<typeof loadIcon>>>();
   const wanted = includeArtwork ? [...new Set(roles.flatMap(({ items }) => items.flatMap(({ id, artwork }) => artwork ? [] : [id!])))] : [];
+  let processed = 0;
+  await reportProgress(onProgress, { stage: "materials", message: `${game} 角色材料原图`, completed: 0, total: wanted.length, unit: "项" }, signal);
   for (let index = 0; index < wanted.length; index += 6) {
     const results = await Promise.allSettled(wanted.slice(index, index + 6).map(async (id) => {
       for (const name of sources.get(id)?.icons ?? []) {
@@ -164,11 +168,14 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
         icons.set(id, icon);
         break;
       }
+      await reportProgress(onProgress, { stage: "materials", message: `${game} 角色材料原图已处理`, completed: ++processed, total: wanted.length, unit: "项" }, signal);
     }));
     const failure = results.find((result) => result.status === "rejected");
     if (failure) throw failure.reason;
   }
   let changed = false;
+  let applied = 0;
+  await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 写入角色材料信息`, completed: 0, total: roles.length, unit: "位" }, signal);
   for (const { file, raw, items } of roles) {
     const names = Object.fromEntries(items.flatMap(({ id, name: existing }) => {
       const name = existing ? undefined : sources.get(id!)?.name;
@@ -179,7 +186,10 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
       const icon = icons.get(id);
       return icon ? [{ ...icon, fieldPath: `derived.material.${id}` }] : [];
     });
-    if (!Object.keys(names).length && !images.length) continue;
+    if (!Object.keys(names).length && !images.length) {
+      await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 角色材料信息已核对`, completed: ++applied, total: roles.length, unit: "位" }, signal);
+      continue;
+    }
     const record = evidenceObject(parseLegacyJsonEvidence(raw));
     const meta = evidenceObject(record.meta!);
     const additions = evidenceObject(parseLegacyJsonEvidence(JSON.stringify({ materialNames: names, images })));
@@ -188,6 +198,7 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
       images: [...Array.isArray(meta.images) ? meta.images : [], ...Array.isArray(additions.images) ? additions.images : []] } };
     await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
     changed = true;
+    await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 角色材料信息已写入`, completed: ++applied, total: roles.length, unit: "位" }, signal);
   }
   return changed;
 }

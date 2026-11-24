@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { nativeAtlasPageOrigin } from "./native-record-export.ts";
 import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
@@ -42,10 +43,13 @@ function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly A
 }
 
 export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
-  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[], locale = defaultAtlasLocale): Promise<readonly AtlasSourceIndex[]> {
+  request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[], locale = defaultAtlasLocale,
+  onProgress?: AtlasInitializationProgressCallback): Promise<readonly AtlasSourceIndex[]> {
   if (locale === "cht") throw new Error("原站导出不提供繁體中文，请使用自备图鉴目录。");
   const selected = selectedExporterPages(versions, scope, locale);
   const indexes: AtlasSourceIndex[] = [];
+  let completedIndexes = 0;
+  await reportProgress(onProgress, { stage: "indexes", message: "读取图鉴分类索引", completed: 0, total: selected.length, unit: "类" }, signal);
   for (let start = 0; start < selected.length; start += 4) {
     const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexUrl, indexShape }) => {
       const bytes = await readAtlasSourceBytes(indexUrl, "application/json",
@@ -55,6 +59,7 @@ export async function readSelectedExporterIndexes(versions: AtlasExportVersions,
       const entries = Object.entries(listing);
       if ((indexShape === "array" && !Array.isArray(listing)) || !entries.length ||
           entries.some(([, row]) => row !== evidenceObject(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
+      await reportProgress(onProgress, { stage: "indexes", message: `已读取 ${game}/${pageId} 索引`, completed: ++completedIndexes, total: selected.length, unit: "类" }, signal);
       return { game, pageId, version, ...(locale !== defaultAtlasLocale && { locale }), recordCount: entries.length,
         rows: new Map(entries.map(([id, row]) => [id, serializeLegacyJsonEvidence(row)])) };
     }));
@@ -209,7 +214,7 @@ export async function inspectExporterPages(root: string, signal?: AbortSignal, s
 
 async function downloadAtlasExport<T>(path: string, target: string, selected: () => Promise<readonly AtlasSourceIndex[]>,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  publishedBaseline?: string, request?: AtlasSourceFetch, refreshDetails = false): Promise<T> {
+  publishedBaseline?: string, request?: AtlasSourceFetch, refreshDetails = false, onProgress?: AtlasInitializationProgressCallback): Promise<T> {
   signal?.throwIfAborted();
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
@@ -228,6 +233,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       throw error;
     }
     const indexes = await selected();
+    await reportProgress(onProgress, { stage: "cache", message: "核对已有快照与可复用缓存" }, signal);
     const pages = indexes.map(({ rows: _rows, ...page }) => page);
     const legacy = join(workspace, "backend");
     const sources = [];
@@ -252,6 +258,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     let remaining = indexes;
     const reusable = [];
     // Fresh exports use prior snapshots only as verified artwork donors.
+    let checkedSeeds = 0;
     for (const seed of refreshDetails ? [] : sources) {
       const data = join(seed, "data");
       const changed = await changedAtlasSourceIndexes(data, remaining, signal).catch((error: unknown) => {
@@ -262,32 +269,37 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       const ready = remaining.filter(page => !changed.includes(page));
       if (ready.length) reusable.push({ seed, pages: ready });
       remaining = changed;
+      await reportProgress(onProgress, { stage: "cache", message: `已核对缓存，可复用 ${indexes.length - remaining.length} 类`, completed: ++checkedSeeds, total: sources.length, unit: "份" }, signal);
     }
 
     let source: string | undefined;
     if (remaining.length) {
       source = join(stage, "original");
-      await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal, refreshDetails });
+      await nativeAtlasExport({ destination: source, cache, indexes: remaining, sourceRoots: sources, request, signal, refreshDetails, onProgress });
     }
     const recovery = nativeAtlasImageRecovery(cache, sources, request);
     for (const [index, donor] of reusable.entries()) {
+      await reportProgress(onProgress, { stage: "assemble", message: "合并已核验的缓存分类", completed: index, total: reusable.length, unit: "份" }, signal);
       const destination = join(stage, `merge-${index}`);
       const combined = source ? await assembleAtlasCandidate(source, donor.seed, destination, donor.pages, signal, recovery)
         : await copyAtlasSelectedPages(donor.seed, destination, donor.pages, signal, recovery);
       source = combined.directory;
+      await reportProgress(onProgress, { stage: "assemble", message: "已合并缓存分类", completed: index + 1, total: reusable.length, unit: "份" }, signal);
     }
     if (!source) throw new Error("未选中图鉴下载分类。");
     const roles = indexes.filter(({ game, pageId }) => game === "gi" && pageId === "character");
     if (roles.length) {
       const { completeGenshinPortraits } = await import("./genshin-original-portraits.ts");
-      for (const { version, locale } of roles) await completeGenshinPortraits(source, version, signal, request, locale);
+      for (const { version, locale } of roles) await completeGenshinPortraits(source, version, signal, request, locale, onProgress);
     }
     if (indexes.some(({ pageId }) => pageId === "character")) {
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
-      await completeAtlasRoleMaterials(source, pages, signal, request);
+      await completeAtlasRoleMaterials(source, pages, signal, request, true, onProgress);
     }
+    await reportProgress(onProgress, { stage: "validate", message: "校验完整图鉴候选与资源引用" }, signal);
     const validated = await validateAtlasCandidate(join(source, "data"), pages, signal);
     if (!validated.ok) throw new Error(`公网图鉴候选未通过校验。${validated.issues[0] ?? ""}`);
+    await reportProgress(onProgress, { stage: "validate", message: "完整图鉴候选校验通过", completed: 1, total: 1, unit: "次" }, signal);
     return await consume(source, pages);
   } finally {
     try { if (stage) await rm(stage, { recursive: true, force: true }); }
@@ -297,36 +309,36 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
 
 /** Read the prior pinned public versions and retain the audited per-page counts. */
 export function downloadLegacyAtlas<T>(path: string, target: string, consume: (source: string) => Promise<T>,
-  signal?: AbortSignal): Promise<T> {
+  signal?: AbortSignal, onProgress?: AtlasInitializationProgressCallback): Promise<T> {
   const versions = Object.fromEntries(legacyAtlasSourcePages.map(({ game, version }) => [game, version]));
   return downloadAtlasExport(path, target, async () => {
-    const indexes = await readSelectedExporterIndexes(versions, signal);
+    const indexes = await readSelectedExporterIndexes(versions, signal, undefined, undefined, undefined, onProgress);
     if (indexes.some(({ recordCount }, index) => recordCount !== legacyAtlasSourcePages[index]?.recordCount)) {
       throw new Error("原站固定版本图鉴分类或条目数与旧资料记录不符。");
     }
     return indexes;
-  }, consume, signal);
+  }, consume, signal, undefined, undefined, false, onProgress);
 }
 
 /** Run all supported pages at the versions already selected from the original website manifest. */
 export function downloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string, locale = defaultAtlasLocale): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale), consume, signal,
-    publishedBaseline, request);
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], publishedBaseline?: string, locale = defaultAtlasLocale, onProgress?: AtlasInitializationProgressCallback): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale, onProgress), consume, signal,
+    publishedBaseline, request, false, onProgress);
 }
 
 /** Read fresh indexes and detail JSON. Prior snapshots and caches may only supply verified artwork. */
 export function redownloadAtlasVersion<T>(path: string, target: string, versions: AtlasExportVersions,
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], imageSeedBaseline?: string, locale = defaultAtlasLocale): Promise<T> {
-  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale), consume, signal,
-    imageSeedBaseline, request, true);
+  request?: AtlasSourceFetch, scope?: readonly AtlasExportPageSelection[], imageSeedBaseline?: string, locale = defaultAtlasLocale, onProgress?: AtlasInitializationProgressCallback): Promise<T> {
+  return downloadAtlasExport(path, target, () => readSelectedExporterIndexes(versions, signal, request, scope, locale, onProgress), consume, signal,
+    imageSeedBaseline, request, true, onProgress);
 }
 
 /** Use the same checked source indexes for discovery and for the downloaded candidate. */
 export function downloadAtlasVersionFromIndexes<T>(path: string, target: string, indexes: readonly AtlasSourceIndex[],
   consume: (source: string, pages: readonly ExportPage[]) => Promise<T>, signal?: AbortSignal,
-  publishedBaseline?: string, request?: AtlasSourceFetch): Promise<T> {
-  return downloadAtlasExport(path, target, async () => indexes, consume, signal, publishedBaseline, request);
+  publishedBaseline?: string, request?: AtlasSourceFetch, onProgress?: AtlasInitializationProgressCallback): Promise<T> {
+  return downloadAtlasExport(path, target, async () => indexes, consume, signal, publishedBaseline, request, false, onProgress);
 }

@@ -1,3 +1,5 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
+export type { AtlasInitializationProgress, AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
@@ -26,7 +28,8 @@ export async function initializeAtlas(root: string, source: string, signal?: Abo
 async function publishInitialAtlas(root: string, source: string, pages: readonly ValidatedAtlasCandidatePage[],
   counts: typeof legacyAtlasCounts | undefined, signal?: AbortSignal,
   extra?: { readonly source: string; readonly pages: readonly ValidatedAtlasCandidatePage[] },
-  materialRequest?: AtlasSourceFetch, emptyOnly = false, publication?: AtlasPublicationOptions): Promise<AtlasPublication> {
+  materialRequest?: AtlasSourceFetch, emptyOnly = false, publication?: AtlasPublicationOptions,
+  onProgress?: AtlasInitializationProgressCallback): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((path) => !path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path))) {
     throw new Error("请提供已有的本地图鉴目标目录和原导出目录。");
@@ -40,17 +43,21 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
   const stage = await mkdtemp(join(dirname(directory), atlasApplyStagingPrefix));
   let result: AtlasPublication | undefined;
   try {
+    await reportProgress(onProgress, { stage: "assemble", message: "组装完整图鉴快照" }, signal);
     const target = join(stage, "candidate");
     const prepared = extra
       ? await assembleAtlasCandidate(donor, extra.source, target, extra.pages, signal)
       : await copyAtlasCandidate(donor, target, pages, counts, signal);
     if (materialRequest) {
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
-      await completeAtlasRoleMaterials(prepared.directory, pages, signal, materialRequest);
+      await completeAtlasRoleMaterials(prepared.directory, pages, signal, materialRequest, true, onProgress);
     }
     const expected = extra ? [...pages, ...extra.pages] : pages;
+    await reportProgress(onProgress, { stage: "publish", message: "复核并发布图鉴快照" }, signal);
     result = await publishPreparedAtlasCandidate(directory, null, prepared.directory, expected, signal,
       emptyOnly ? "empty-only" : true, publication);
+    if (result.status === "published") await reportProgress(onProgress, { stage: "complete", message: "图鉴已准备完成", completed: 1, total: 1, unit: "次" }, signal);
+    else await reportProgress(onProgress, { stage: "publish", message: `图鉴发布结果：${result.status}` }, signal);
     return result;
   } finally {
     if (result?.status !== "published" && result?.status !== "prepared") await rm(stage, { recursive: true, force: true });
@@ -58,13 +65,14 @@ async function publishInitialAtlas(root: string, source: string, pages: readonly
 }
 
 export async function initializeAtlasFromPublic(root: string, workspace: string, signal?: AbortSignal,
-  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion, publication, locale = defaultAtlasLocale }: {
+  channel?: AtlasVersionChannel, { manifest = fetchAtlasManifest, request, emptyOnly, downloadVersion, publication, locale = defaultAtlasLocale, onProgress }: {
     readonly manifest?: typeof fetchAtlasManifest;
     readonly request?: AtlasSourceFetch;
     readonly emptyOnly?: boolean;
     readonly downloadVersion?: typeof DownloadAtlasVersion;
     readonly publication?: AtlasPublicationOptions;
     readonly locale?: AtlasLocale;
+    readonly onProgress?: AtlasInitializationProgressCallback;
   } = {}): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if (emptyOnly && (!channel || !await atlasRootIsEmpty(root))) {
@@ -75,6 +83,7 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
   if (await hasLegacyAtlasData(root)) return { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] };
   const { downloadLegacyAtlas, downloadAtlasVersion } = await import("./download-legacy-atlas.ts");
   if (channel) {
+    await reportProgress(onProgress, { stage: "manifest", message: "读取原站图鉴版本清单" }, signal);
     const listing = await manifest(signal);
     const gi = atlasManifestVersion(listing, "gi", channel);
     const hsr = atlasManifestVersion(listing, "hsr", channel);
@@ -88,18 +97,19 @@ export async function initializeAtlasFromPublic(root: string, workspace: string,
       }
       const stage = await mkdtemp(join(dirname(directory), ".atlas-first-gcg-"));
       try {
-        const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi, ...(locale !== defaultAtlasLocale && { locale }) }], signal, request);
+        await reportProgress(onProgress, { stage: "gcg", message: "准备七圣召唤资料与原图" }, signal);
+        const cards = await acquireAtlasSource(join(stage, "source"), [{ game: "gi", pageId: "gcg", version: gi, ...(locale !== defaultAtlasLocale && { locale }) }], signal, request, onProgress);
         return await publishInitialAtlas(directory, donor, pages, undefined, signal, { source: cards.directory, pages: cards.pages },
-          undefined, emptyOnly, publication);
+          undefined, emptyOnly, publication, onProgress);
       } finally {
         await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       }
-    }, signal, request, undefined, undefined, locale);
+    }, signal, request, undefined, undefined, locale, onProgress);
   }
   if (locale !== defaultAtlasLocale) throw new Error("本地图鉴初始化须选择来源版本。");
   return downloadLegacyAtlas(workspace, root,
     donor => publishInitialAtlas(root, donor, legacyAtlasSourcePages, legacyAtlasCounts, signal, undefined, request ?? fetch,
-      false, publication), signal);
+      false, publication, onProgress), signal, onProgress);
 }
 
 if (import.meta.main) {

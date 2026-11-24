@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { createHash } from "node:crypto";
 import { link, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -75,8 +76,9 @@ async function recover(theme: string, target: string, bytes: Buffer, signal?: Ab
 
 export async function prepareAtlasTheme(checkout: URL, options: {
   readonly override?: string; readonly source?: string; readonly signal?: AbortSignal;
+  readonly onProgress?: AtlasInitializationProgressCallback;
 } = {}) {
-  const { override, source, signal } = options;
+  const { override, source, signal, onProgress } = options;
   const module = new URL("plugins/atlas/theme-directories.ts", checkout);
   const directories = atlasThemeDirectories(module, override);
   const theme = directories[0]!;
@@ -84,9 +86,15 @@ export async function prepareAtlasTheme(checkout: URL, options: {
   const sources = override?.trim() ? [] : [...(donor ? [donor] : []), ...directories.slice(1)];
   const copied: string[] = [];
   const missing: string[] = [];
-  for (const [asset, size, digest] of [...assets, ...optionalSkillAssets]) {
+  const selected = [...assets, ...optionalSkillAssets];
+  let checked = 0;
+  await reportProgress(onProgress, { stage: "theme", message: "核对图鉴主题资源", completed: checked, total: selected.length, unit: "个" }, signal);
+  for (const [asset, size, digest] of selected) {
     signal?.throwIfAborted();
-    if (await available(theme, asset)) continue;
+    if (await available(theme, asset)) {
+      await reportProgress(onProgress, { stage: "theme", message: `已核对 ${asset}`, completed: ++checked, total: selected.length, unit: "个" }, signal);
+      continue;
+    }
     const target = join(theme, asset);
     for (const directory of sources) {
       if (await lstat(target).catch(() => undefined)) break;
@@ -106,6 +114,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
     if (assets.some(([required]) => required === asset) && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
       missing.push(asset);
     }
+    await reportProgress(onProgress, { stage: "theme", message: `${copied.includes(asset) ? "已复制" : "已核对"} ${asset}`, completed: ++checked, total: selected.length, unit: "个" }, signal);
   }
   return { copied, missing };
 }

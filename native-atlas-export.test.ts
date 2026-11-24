@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { downloadAtlasVersion, redownloadAtlasVersion } from "./download-legacy-atlas.ts";
 import { copyAtlasSelectedPages } from "./assemble-candidate.ts";
+import type { AtlasInitializationProgress } from "./initialization-progress.ts";
 import type { AtlasSourceFetch } from "./source-transport.ts";
 
 const webp = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
@@ -38,6 +39,7 @@ test("原 Bun 下载能从空目录续跑，复用已验证的同版详情和原
           pathname === "/assets/gi/UI_EquipIcon_Sword_Falcon.webp") return new Response(new Uint8Array(webp));
       throw new Error(pathname);
     };
+    const progress: AtlasInitializationProgress[] = [];
     const download = (copy: boolean) => downloadAtlasVersion(workspace, atlas, { gi: "7.2" }, async (source, pages) => {
       if (copy) await copyAtlasSelectedPages(source, seed, pages);
       const data = await Bun.file(join(source, "data", "map.json")).json();
@@ -45,15 +47,30 @@ test("原 Bun 下载能从空目录续跑，复用已验证的同版详情和原
       expect(entries["11401"].name).toBe("西风剑");
       expect(entries["11501"].rarity).toBe("五星");
       return pages;
-    }, undefined, request, [{ game: "gi", pageId: "weapon" }], copy ? undefined : join(seed, "data"));
+    }, undefined, request, [{ game: "gi", pageId: "weapon" }], copy ? undefined : join(seed, "data"), undefined, async event => {
+      progress.push(event);
+      // An unavailable log sink must not replace a transport error or break resume.
+      throw new Error("log sink unavailable");
+    });
     await expect(download(true)).rejects.toThrow("HTTP 503");
     expect(await Bun.file(join(atlas, "current")).exists()).toBeFalse();
     expect(urls).toContain("/assets/gi/UI_EquipIcon_Sword_Zephyrus.webp");
+    expect(progress.some(event => event.stage === "download" && event.completed === 1 && event.total === 2)).toBeTrue();
+    expect(progress.some(event => event.stage === "download" && event.completed === 2)).toBeFalse();
+    expect(progress.some(event => event.stage === "complete")).toBeFalse();
+    progress.length = 0;
     const failedAt = urls.length;
     restored = true;
     expect(await download(true)).toEqual([{ game: "gi", pageId: "weapon", version: "7.2", recordCount: 2 }]);
     expect(urls.slice(failedAt)).toEqual(["/gi/7.2/weapon.json", "/gi/7.2/zh/weapon/11501.json",
       "/assets/gi/UI_EquipIcon_Sword_Falcon.webp"]);
+    const downloads = progress.filter(event => event.stage === "download");
+    expect(downloads.length).toBeGreaterThan(2);
+    expect(downloads.map(event => event.completed)).toEqual(downloads.map(event => event.completed).toSorted((a, b) => a! - b!));
+    expect(downloads.at(-1)).toMatchObject({ completed: 2, total: 2, unit: "条" });
+    expect(progress.some(event => event.stage === "indexes" && event.completed === 1 && event.total === 1)).toBeTrue();
+    expect(progress.at(-1)).toMatchObject({ stage: "validate", completed: 1, total: 1 });
+    expect(progress.some(event => event.stage === "complete")).toBeFalse();
     const successfulAt = urls.length;
     expect(await download(false)).toHaveLength(1);
     expect(urls.slice(successfulAt)).toEqual(["/gi/7.2/weapon.json"]);

@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm } from "node:fs/promises";
@@ -23,6 +24,7 @@ interface NativeExportOptions {
   readonly refreshDetails?: boolean;
   readonly request?: AtlasSourceFetch;
   readonly signal?: AbortSignal;
+  readonly onProgress?: AtlasInitializationProgressCallback;
 }
 
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
@@ -136,7 +138,7 @@ type GameFolder = {
 
 /** Stages original indexes, details and artwork from Nanoka using Bun only. */
 export async function nativeAtlasExport({ destination, cache, indexes, sourceRoots, refreshDetails,
-  request = fetch, signal }: NativeExportOptions) {
+  request = fetch, signal, onProgress }: NativeExportOptions) {
   if (!indexes.length || new Set(indexes.map(({ game, pageId, locale = defaultAtlasLocale }) => `${game}/${locale}/${pageId}`)).size !== indexes.length) {
     throw new Error("选择已验证且互不重复的原图鉴分类。");
   }
@@ -146,7 +148,10 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
   const games: Record<string, GameFolder> = {};
   const locales = new Set<AtlasLocale>();
   const assets = new Map<string, Promise<ReturnType<typeof nativeAtlasAssetMetadata> | undefined>>();
+  await reportProgress(onProgress, { stage: "cache", message: "核对可复用的原图资源" }, signal);
   const seeds = await imageSeeds(sourceRoots, signal);
+  let completedRecords = 0, completedImages = 0;
+  const totalRecords = indexes.reduce((sum, page) => sum + page.recordCount, 0);
   for (const page of indexes) {
     signal?.throwIfAborted();
     const { game, pageId, version, rows, locale = defaultAtlasLocale } = page;
@@ -156,6 +161,9 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
     const origin = nativeAtlasPageOrigin(page);
     const records: Record<string, unknown> = Object.create(null);
     const input = [...rows];
+    const progress = () => reportProgress(onProgress, { stage: "download", message: `${nativeAtlasGameNames[game].game}/${pageId}，已处理图片 ${completedImages} 张`,
+      completed: completedRecords, total: totalRecords, unit: "条" }, signal);
+    await progress();
     const indexHash = sha256(JSON.stringify(input));
     const details: AtlasSourceFetch = refreshDetails ? request : async (url, init) => {
       const bytes = await digestCache(join(cache, "details"), url + "#" + indexHash,
@@ -183,7 +191,11 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
           const meta = nativeAtlasAssetMetadata(game, url, bytes);
           await atomic(join(destination, meta.localPath), bytes);
           return meta;
-        })();
+        })().then(async result => {
+          completedImages++;
+          await progress();
+          return result;
+        });
         assets.set(url, pending);
       }
       return pending;
@@ -199,6 +211,8 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
           list: parseLegacyJsonEvidence(list), detail: parseLegacyJsonEvidence(record.detailSource),
         } };
         await Bun.write(join(data, path), serializeLegacyJsonEvidence(exact) + "\n");
+        completedRecords++;
+        await progress();
         return { record, path };
       }));
       const failed = group.find(result => result.status === "rejected");
@@ -222,6 +236,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
   }
   await atomic(join(destination, "gallery", "_placeholder", "unknown.svg"), atlasSourcePlaceholder);
   await Bun.write(join(data, "map.json"), JSON.stringify({ meta: { source: "https://nanoka.cc/", locales: [...locales] }, games }) + "\n");
+  await reportProgress(onProgress, { stage: "validate", message: "校验下载的图鉴记录和图片" }, signal);
   const validation = await validateAtlasCandidate(data, indexes, signal);
   if (!validation.ok) throw new Error(`原图鉴候选未通过校验。${validation.issues[0] ?? ""}`);
   return validation;

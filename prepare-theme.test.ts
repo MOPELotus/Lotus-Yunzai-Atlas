@@ -3,6 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { AtlasInitializationProgress } from "./initialization-progress.ts";
 import { prepareAtlasTheme } from "./prepare-theme.ts";
 
 test("无原主题时可稍后重试，已有主题文件和自定义主题目录保持原样", async () => {
@@ -12,7 +13,15 @@ test("无原主题时可稍后重试，已有主题文件和自定义主题目�
     const persisted = join(root, "data/atlas/theme");
     const override = join(root, "custom");
     const donor = join(root, "plugins/Lotus-ReFactor/resources/miao-theme");
-    const initial = await prepareAtlasTheme(checkout);
+    const progress: AtlasInitializationProgress[] = [];
+    const initial = await prepareAtlasTheme(checkout, { async onProgress(event) {
+      progress.push(event);
+      throw new Error("observer unavailable");
+    } });
+    expect(progress).toHaveLength(23);
+    expect(progress[0]).toMatchObject({ stage: "theme", completed: 0, total: 22 });
+    expect(progress.map(event => event.completed)).toEqual(Array.from({ length: 23 }, (_, index) => index));
+    expect(progress.at(-1)).toMatchObject({ completed: 22, total: 22, unit: "个" });
     expect(initial.copied).toEqual([]);
     expect(initial.missing).toHaveLength(12);
     await expect(lstat(persisted)).rejects.toMatchObject({ code: "ENOENT" });

@@ -1,3 +1,4 @@
+import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, defaultAtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
@@ -77,25 +78,33 @@ export async function genshinOriginalPortraitStatus(data: string, version: strin
 }
 
 /** Supplement a locked public exporter workspace after its original role records have passed validation. */
-export async function completeGenshinPortraits(root: string, version: string, signal?: AbortSignal, request: AtlasSourceFetch = fetch, locale = defaultAtlasLocale) {
+export async function completeGenshinPortraits(root: string, version: string, signal?: AbortSignal, request: AtlasSourceFetch = fetch, locale = defaultAtlasLocale, onProgress?: AtlasInitializationProgressCallback) {
   const data = join(root, "data");
-  for await (const { file, raw, filename, localPath, size, sha256, attached, hasImage } of matchedGenshinPortraits(data, version, signal, locale)) {
-    const url = `${atlasSourceOrigin}/assets/gi/${filename}`;
-    if (!hasImage) {
-      const bytes = await readAtlasSourceBytes(url, "image/webp", size, true, signal, request).catch(() => undefined);
-      signal?.throwIfAborted();
-      if (!bytes || bytes.length !== size || !isAtlasSourceWebp(bytes) ||
-          createHash("sha256").update(bytes).digest("hex") !== sha256) continue;
-      await writeAtomic(join(root, localPath), bytes, signal);
+  await reportProgress(onProgress, { stage: "portraits", message: "核对原神补充立绘" }, signal);
+  const matched = [];
+  for await (const entry of matchedGenshinPortraits(data, version, signal, locale)) matched.push(entry);
+  let completed = 0;
+  for (const { file, raw, filename, localPath, size, sha256, attached, hasImage } of matched) {
+    try {
+      const url = `${atlasSourceOrigin}/assets/gi/${filename}`;
+      if (!hasImage) {
+        const bytes = await readAtlasSourceBytes(url, "image/webp", size, true, signal, request).catch(() => undefined);
+        signal?.throwIfAborted();
+        if (!bytes || bytes.length !== size || !isAtlasSourceWebp(bytes) ||
+            createHash("sha256").update(bytes).digest("hex") !== sha256) continue;
+        await writeAtomic(join(root, localPath), bytes, signal);
+      }
+      if (attached) continue;
+      const record = evidenceObject(parseLegacyJsonEvidence(raw));
+      const header = evidenceObject(record.meta!);
+      if (!Array.isArray(header.images)) continue;
+      const added = parseLegacyJsonEvidence(JSON.stringify({
+        fieldPath, status: "downloaded", placeholder: false, localPath, sha256, url, bytes: size,
+      }));
+      const next = { ...record, meta: { ...header, images: [...header.images, added] } };
+      await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
+    } finally {
+      await reportProgress(onProgress, { stage: "portraits", message: "原神补充立绘已检查", completed: ++completed, total: matched.length, unit: "张" }, signal);
     }
-    if (attached) continue;
-    const record = evidenceObject(parseLegacyJsonEvidence(raw));
-    const header = evidenceObject(record.meta!);
-    if (!Array.isArray(header.images)) continue;
-    const added = parseLegacyJsonEvidence(JSON.stringify({
-      fieldPath, status: "downloaded", placeholder: false, localPath, sha256, url, bytes: size,
-    }));
-    const next = { ...record, meta: { ...header, images: [...header.images, added] } };
-    await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
   }
 }

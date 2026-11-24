@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { atlasMaintenanceAliases, createAtlasMaintenance } from "./maintenance.ts";
+import { initializeAtlasFromPublic } from "./initialize-atlas.ts";
+import type { AtlasInitializationProgress } from "./initialization-progress.ts";
 import { validateAtlasCandidate } from "./validate-candidate.ts";
 
 const version = "7.2";
@@ -282,4 +284,36 @@ test("来源缺一个首装分类时保留空根和下载结果，下一次能�
   partial = false;
   expect(await job.atlasSchedule.version.run()).toContain("自动初始化完成");
   expect(await readlink(join(root, "current"))).toBe("snapshots/1/data");
+}));
+
+
+test("首装进度在真实发布后完成，异步观察者异常不阻断图鉴", () => fixture(async directory => {
+  const root = join(directory, "atlas");
+  const source = join(directory, "export");
+  await mkdir(root);
+  await exportAll(source);
+  const events: AtlasInitializationProgress[] = [];
+  let publishedAtCompletion = false;
+  const result = await initializeAtlasFromPublic(root, join(directory, "work"), undefined, "latest", {
+    manifest: async () => manifest,
+    request: cards,
+    async downloadVersion(_work, _root, _versions, consume, _signal, _request, _scope, _baseline, _locale, onProgress) {
+      expect(onProgress).toBeDefined();
+      return consume(source, pageList);
+    },
+    async onProgress(event) {
+      events.push(event);
+      if (event.stage === "complete") {
+        publishedAtCompletion = await readlink(join(root, "current")) === "snapshots/1/data";
+      }
+      throw new Error("日志输出暂不可用");
+    },
+  });
+  expect(result.status).toBe("published");
+  expect(publishedAtCompletion).toBeTrue();
+  expect(events[0]?.stage).toBe("manifest");
+  expect(events.some(event => event.stage === "source-records" && event.completed === 1 && event.total === 1)).toBeTrue();
+  expect(events.findIndex(event => event.stage === "assemble")).toBeLessThan(events.findIndex(event => event.stage === "publish"));
+  expect(events.at(-1)).toMatchObject({ stage: "complete", completed: 1, total: 1 });
+  expect(events.filter(event => event.stage === "complete")).toHaveLength(1);
 }));
