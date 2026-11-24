@@ -385,6 +385,21 @@ async function traditionalQuery(
       if (book) return book;
     }
     if (matches.length === 1 && first.kind === "gcg") return genshinCardReply(catalog, first.entry, delivery);
+    if (matches.length === 1 && first.kind === "reference") {
+      const details = await catalog.referenceDetails(first.entry, result);
+      if (!details) return lookupNotice(query, "图鉴条目详情不可用，请检查当前图鉴导出。", game, delivery);
+      try {
+        const { renderReference } = await import("./role-render.ts");
+        const book = await atlasBookReply(details.name, scale => renderReference(details, {
+          scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(first.entry),
+        }), delivery);
+        if (book) return book;
+      } catch {
+        // The source fields remain useful even when this gateway cannot deliver the image.
+      }
+      return [`${gameNames[details.game]} · ${details.category} · ${details.name}`, details.intro,
+        ...details.sections.map(({ title, content }) => `${title}：${content}`)].filter(Boolean).join("\n");
+    }
     if (matches.length === 1 && first.kind === "monster") {
       const reply = await monsterReply(catalog, first.entry, delivery);
       return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
@@ -405,6 +420,7 @@ async function traditionalQuery(
         case "monster": return monsterLine(entry);
         case "gcg": return `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
         case "challenge": return challengeTitle(entry, onslaughtMode);
+        case "reference": return `${gameNames[entry.game]} · ${entry.name} · ID ${entry.id}`;
       }
     }));
     if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");

@@ -18,6 +18,7 @@ interface Entry {
 }
 
 interface Page {
+  readonly folder: string;
   readonly version: string;
   readonly sourceUrl: string;
   readonly records: Map<string, Entry>;
@@ -84,8 +85,8 @@ export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = de
 
     const pages = games.get(gameId) ?? new Map<string, Page>();
     games.set(gameId, pages);
-    const page = pages.get(pageId) ?? { version, sourceUrl, records: new Map<string, Entry>() };
-    if (page.version !== version || page.sourceUrl !== sourceUrl || page.records.has(recordId)) throw invalid();
+    const page = pages.get(pageId) ?? { folder: pageFolder, version, sourceUrl, records: new Map<string, Entry>() };
+    if (page.folder !== pageFolder || page.version !== version || page.sourceUrl !== sourceUrl || page.records.has(recordId)) throw invalid();
     page.records.set(recordId, { id: recordId, name, rarity, path });
     pages.set(pageId, page);
   }
@@ -93,8 +94,8 @@ export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = de
   await visit(localeDirectory, []);
   if (!games.size) throw invalid();
   const indexedGames = [...games].map(([game, pages]) => {
-    const indexedPages = [...pages].map(([id, { records, version, sourceUrl }]) => [id, {
-      version, sourceUrl, recordCount: records.size, records: Object.fromEntries(records),
+    const indexedPages = [...pages].map(([id, { folder, records, version, sourceUrl }]) => [id, {
+      folder, version, sourceUrl, recordCount: records.size, records: Object.fromEntries(records),
     }] as const);
     return [game, { locales: { [requestedLocale]: { pages: Object.fromEntries(indexedPages) } } }] as const;
   });

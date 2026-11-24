@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ImageSizeLimitError, nativeImageRasterScale, renderPng } from "@lotus-yunzai/skia";
 import { Canvas, FontLibrary, loadImage, type CanvasRenderingContext2D as Context, type Image } from "skia-canvas";
-import { gameNames, type Game, type MonsterDetails } from "./catalog.ts";
+import { gameNames, type Game, type MonsterDetails, type ReferenceDetails } from "./catalog.ts";
 import { localPanelGalleryRoot, readSyncedPanelGalleryRoot } from "../../lib/panel-gallery-paths.ts";
 import type { AchievementCategory } from "./achievements.ts";
 import type { BangbooDetails } from "./bangboo-data.ts";
@@ -916,6 +916,18 @@ export async function renderGenshinCard(card: GenshinCardDetails, options: RoleR
   const [page] = await renderAtlasPages([{ section: "七圣召唤", panels }], wrap(card.name, 620, 33),
     "gi", card.version, art, background, options);
   return page!;
+}
+
+export async function renderReference(data: ReferenceDetails, options: RoleRenderOptions = {}) {
+  const { game, artwork, intro, sections, name, category, version } = data;
+  const [images, background, texture] = await Promise.all([
+    galleryImages(game, [artwork], options.assetRoot), themeImage("bg/bg-sr.webp"), themeImage("card-bg.png"),
+    themeFonts ??= loadThemeFonts(),
+  ]);
+  const { wrap, heading, text } = makeLayout(texture);
+  const icon = artwork ? images.get(artwork) : undefined;
+  const panels = [[text(intro || "本条目未提供详细说明。")], ...sections.map(({ title, content }) => [heading(title), text(content)])];
+  return renderAtlasPages([{ section: category, panels }], wrap(name, 620, 33), game, version, icon, background, options, 152, true);
 }
 
 export async function renderMonster(monster: MonsterDetails, options: RoleRenderOptions = {}) {

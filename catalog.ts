@@ -46,7 +46,7 @@ const achievementPage = { id: "achievement/achievement", name: "成就" } as con
 const bangbooPage = { id: "bangboo", name: "邦布" } as const;
 const kinds = ["character", "equipment", "set", "bangboo", "monster", "achievement", "gcg"] as const;
 type StandardKind = typeof kinds[number];
-type Kind = StandardKind | "challenge";
+type Kind = StandardKind | "challenge" | "reference";
 
 function pageFor(game: Game, kind: StandardKind): { id: string; name: string } | undefined {
   switch (kind) {
@@ -71,6 +71,16 @@ export interface AtlasEntry {
 
 export type Character = AtlasEntry;
 
+export interface ReferenceDetails {
+  readonly game: Game;
+  readonly name: string;
+  readonly version: string;
+  readonly category: string;
+  readonly artwork?: string;
+  readonly intro: string;
+  readonly sections: readonly { title: string; content: string }[];
+}
+
 export interface MonsterDetails {
   readonly game: Game;
   readonly name: string;
@@ -87,6 +97,7 @@ interface AtlasPage {
   readonly name: string;
   readonly entries: readonly AtlasEntry[];
   readonly challengeMode?: ChallengeMode;
+  readonly referenceId?: string;
   readonly sourceUrl?: string;
   readonly achievementCategories?: readonly AchievementCategory[];
 }
@@ -132,7 +143,12 @@ function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPa
 
 function score(entry: AtlasEntry, key: string, literal: string): number {
   const name = compareKey(entry.name);
-  if (entry.id === literal || entry.id === key || name === key) return 3;
+  if (entry.id === literal || entry.id === key) return 3;
+  return nameScore(name, key);
+}
+
+function nameScore(name: string, key: string): number {
+  if (name === key) return 3;
   if (name.startsWith(key)) return 2;
   return name.includes(key) ? 1 : 0;
 }
@@ -247,6 +263,10 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
       const matchedPro = pro && entry.id === pro.id && entry.name === pro.name;
       const exactProId = matchedPro && literal === entry.id;
       const direct = exact ? (exactName(entry.name) === key || exactProId ? 3 : 0) : score(entry, key, literal);
+      if (kind === "reference") {
+        const filename = basename(entry.path, ".json").replace(/__[a-z0-9_.+-]+$/iu, "");
+        return { kind, entry, score: Math.max(direct, nameScore(compareKey(filename), key)) };
+      }
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
       // A verified name ranks below an exact record name and above a partial match.
       const alias = (aliasTarget?.id === entry.id && aliasTarget.name === entry.name) ||
@@ -288,7 +308,10 @@ export function findTraditionalEntries(catalog: Catalog, query: string, game?: G
   const existing = findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"],
     query, game, mode === "name", mode === "search");
   const cards = findMatches(catalog, ["gcg"], query, game, mode === "name", mode === "search");
-  return cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
+  const matches = cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
+  if (mode !== "search" || (matches[0]?.score ?? 0) >= 2.5) return matches;
+  const references = findMatches(catalog, ["reference"], query, game, false, true);
+  return (references[0]?.score ?? 0) > (matches[0]?.score ?? 0) ? references : matches;
 }
 
 export function findCharacters(catalog: Catalog, query: string, game?: Game): Character[] {
@@ -416,6 +439,21 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
           });
           const challengePages = challengeModes.filter((mode) => mode.game === game)
             .map((mode) => ({ id: mode.id, name: mode.name, kind: "challenge" as const, challengeMode: mode }));
+          const knownIds = new Set([...standardPages, ...challengePages].map(({ id }) => id));
+          // An existing export can contain additional pages without changing the default download scope.
+          for (const [pageId, value] of Object.entries(rawPages)) {
+            if (knownIds.has(pageId) || !/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/iu.test(pageId)) continue;
+            const raw = object(value);
+            const name = label(raw.folder) || label(raw.title) || pageId;
+            if (name.length > 96 || /[\p{Cc}\p{Cf}]/u.test(name)) continue;
+            try {
+              const page = readPage(game, "reference", name, raw);
+              for (const entry of page.entries) entryRoots.set(entry, root);
+              pages.push({ ...page, referenceId: pageId });
+            } catch {
+              // Optional export pages do not invalidate the main categories.
+            }
+          }
           for (const { id: pageId, name, kind, challengeMode } of [...standardPages, ...challengePages]) {
             const previous = previousPages.find((page) =>
               page.game === game && page.kind === kind && page.challengeMode?.id === challengeMode?.id);
@@ -579,6 +617,26 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     },
     locale,
     findInDetails,
+    async referenceDetails(entry: AtlasEntry, result: Catalog): Promise<ReferenceDetails | undefined> {
+      const page = result.pages.find(({ kind, entries }) => kind === "reference" && entries.includes(entry));
+      if (!page?.referenceId) return;
+      const item = await readItem(entry, page.referenceId);
+      if (!item) return;
+      const { list, detail } = item.content;
+      const listing = object(list);
+      const data = object(detail);
+      const partner = object(data.partner_info);
+      const intro = [partner.profile_desc, data.desc, data.description, data.profile_desc, listing.desc, listing.description,
+        listing.effect, data.effect, data.story].map((value) => effectText(value)).find(Boolean) ?? "";
+      const effect = [data.effect, listing.effect, data.desc2, listing.desc2].map((value) => effectText(value)).find(Boolean);
+      const story = [data.story, data.background, object(partner.trust_lv)["3"]].map((value) => effectText(value)).find(Boolean);
+      const sections = [
+        { title: "效果", content: effect ?? "" },
+        { title: "故事", content: story ?? "" },
+      ].filter(({ content }) => content && content !== intro);
+      return { game: entry.game, name: entry.name, version: entry.version, category: page.name,
+        artwork: galleryArtwork(item.meta.images, entry.game)(), intro, sections };
+    },
     async statusSource() {
       const root = snapshot?.root ?? await locate().then(({ root }) => root, () => configuredRoot);
       const bases = basename(root) === "data" ? [root, dirname(root)] : [root];

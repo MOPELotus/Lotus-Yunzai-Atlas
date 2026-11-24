@@ -447,3 +447,49 @@ test("裸装备入口读取在原位覆写、原子替换和发布指针换代�
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("查询已有导出的附属分类及详情，普通裸名称继续让行", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-reference-"));
+  try {
+    const items = join(directory, "items");
+    await mkdir(items, { recursive: true });
+    const gs = { id: "114001", name: "高塔孤王的破瓦", rarity: "二星", path: "items/孤王残件__114001.json" };
+    const book = { id: "200001", name: "北地见闻·第一卷", rarity: "", path: "items/01.json" };
+    const wrong = { id: "200002", name: "无效位置", path: "items/../secret.json" };
+    await writeFile(join(directory, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: {
+      "item/material": { version: "7.2", folder: "材料", recordCount: 1, records: { [gs.id]: gs } },
+      book: { version: "7.2", folder: "书籍", recordCount: 1, records: { [book.id]: book } },
+      faulty: { version: "7.2", folder: "损坏分页", recordCount: 1, records: { [wrong.id]: wrong } },
+    } } } } } }));
+    await writeFile(join(items, "孤王残件__114001.json"), JSON.stringify({
+      meta: { pageId: "item/material", gameId: "gi", recordId: gs.id, version: "7.2", images: [
+        { localPath: "gallery/gi/placeholder.webp", fieldPath: "detail.icon", status: "downloaded", placeholder: true },
+        { localPath: "gallery/gi/UI_ItemIcon_114001.webp", fieldPath: "icon", status: "downloaded", placeholder: false },
+      ] },
+      content: { list: {}, detail: { desc: "武器突破素材。", effect: "突破至下一阶。", story: "旧城中留下的一片碎瓦。" } },
+    }));
+    await writeFile(join(items, "01.json"), JSON.stringify({
+      meta: { pageId: "book", gameId: "hsr", recordId: book.id, version: "7.2" },
+      content: { list: {}, detail: { desc: "异游戏内容不得回显。" } },
+    }));
+    const atlas = createAtlasCatalog(directory);
+    const data = await atlas.read();
+    const [material] = findTraditionalEntries(data, "高塔孤王的破瓦", "gi");
+    expect(material?.kind).toBe("reference");
+    expect(findTraditionalEntries(data, gs.id).map(({ entry }) => entry)).toEqual([material!.entry]);
+    expect(findTraditionalEntries(data, "孤王残件", "gi").map(({ entry }) => entry)).toEqual([material!.entry]);
+    expect(findTraditionalEntries(data, gs.name, "gi", "bare")).toEqual([]);
+    expect(findTraditionalEntries(data, gs.name, "zzz")).toEqual([]);
+    expect(findTraditionalEntries(data, wrong.name, "gi")).toEqual([]);
+    expect(data.stale).toBe(false);
+    expect(await atlas.referenceDetails(material!.entry, data)).toEqual({
+      game: "gi", category: "材料", name: gs.name, version: "7.2", artwork: "gallery/gi/UI_ItemIcon_114001.webp", intro: "武器突破素材。",
+      sections: [{ title: "效果", content: "突破至下一阶。" }, { title: "故事", content: "旧城中留下的一片碎瓦。" }],
+    });
+    const [volume] = findTraditionalEntries(data, "北地见闻", "gi");
+    expect(volume?.entry.name).toBe(book.name);
+    expect(await atlas.referenceDetails(volume!.entry, data)).toBeUndefined();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
