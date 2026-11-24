@@ -56,6 +56,7 @@ test("异相仲裁从正式游戏版本取一期，测试快照不能把下期�
   const lookup = createArbitrationLookup();
   expect(await lookup("4.8.50", "current", Date.parse("2026-11-24T12:00:00+08:00"))).toBe("11");
   expect(await lookup("4.7.52", "current", Date.parse("2026-11-10T12:00:00+08:00"))).toBe("10");
+  expect(await lookup("4.7.52", "current", Date.parse("2026-09-29T12:00:00+08:00"))).toBe("10");
   expect(await lookup("4.7.52", "current", Date.parse("2026-11-11T08:00:00+08:00"))).toBeUndefined();
 });
 

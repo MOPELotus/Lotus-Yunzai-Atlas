@@ -7,7 +7,7 @@ const knownArbitration = { "4.5": [9], "4.6": [10], "4.7": [11], unknown: [12] }
 
 function knownLiveVersion(at: number) {
   // Official 4.6 and 4.7 handovers. Leave the maintenance window unassigned.
-  if (Date.parse("2026-09-30T11:00:00+08:00") <= at && at < Date.parse("2026-11-11T06:00:00+08:00")) return "4.6";
+  if (Date.parse("2026-09-28T11:00:00+08:00") <= at && at < Date.parse("2026-11-11T06:00:00+08:00")) return "4.6";
   if (Date.parse("2026-11-11T11:00:00+08:00") <= at && at < Date.parse("2026-12-23T06:00:00+08:00")) return "4.7";
 }
 

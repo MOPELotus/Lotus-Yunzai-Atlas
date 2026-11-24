@@ -218,6 +218,8 @@ async function challengeDetails(catalog: AtlasCatalog, entry: AtlasEntry, mode: 
       : hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
       : window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
     lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
+  } else if (forecast && mode.id === arbitrationMode.id) {
+    lines.push("下期预览 · 快照暂无实装起止时间。");
   } else {
     lines.push("该条目缺少已知的起止时间。");
   }
