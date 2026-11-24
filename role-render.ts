@@ -23,6 +23,7 @@ import type { DeadlyAssaultDetails } from "./deadly-assault-data.ts";
 import type { ZzzChallengeRoom } from "./zzz-challenge-data.ts";
 import { isAtlasGalleryPath, label, object } from "./source-values.ts";
 import { atlasThemeDirectories } from "./theme-directories.ts";
+import { readBuiltinExtraEidolons } from "./extra-eidolon-data.ts";
 import type { RoleSection } from "./traditional.ts";
 
 export interface RoleRenderOptions {
@@ -762,7 +763,8 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   });
   const ranks = section === "skills" ? [] : role.ranks;
   const materials = section ? [] : role.materials.filter(({ items }) => items.length);
-  if (section && !skillGroups.length && !ranks.length) return [];
+  const extraEidolons = section === "skills" ? { entries: [] } : await readBuiltinExtraEidolons(role);
+  if (section && !skillGroups.length && !ranks.length && !extraEidolons.entries.length) return [];
 
   const property = role.overview.facts.find(({ label }) => label === "属性") ??
     role.overview.facts.find(({ label }) => label === "神之眼" || label === "元素");
@@ -849,6 +851,15 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       [heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)), ...(rank.description ? [text(rank.description)] : [])]),
     ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });
+  if (extraEidolons.entries.length) {
+    const artwork = extraEidolons.icon ? await artworkAsset(extraEidolons.icon) : undefined;
+    pages.push({ section: "奇缘星魂", panels: [
+      [heading("奇缘星魂", undefined, true)],
+      ...extraEidolons.entries.map(rank => rail
+        ? [railSkillText(rank.name, rank.description, artwork?.image)]
+        : [heading(rank.name, artwork?.image), ...(rank.description ? [text(rank.description)] : [])]),
+    ] });
+  }
   if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
     heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
     ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
