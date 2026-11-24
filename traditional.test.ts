@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAtlasCatalog, findTraditionalEntries, type Game, type TraditionalLookup } from "./catalog.ts";
 import { abyssMode, apocalypseMode, chaosMode, deadlyAssaultMode, fictionMode, shiyuMode, theaterMode } from "./challenges.ts";
-import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseGluedLookup, parseLegacyRoleShortcut, parseRoleShortcut, traditionalAtlasEvent } from "./traditional.ts";
+import { parseBareNameShortcut, parseChallengeShortcut, parseEquipmentShortcut, parseExplicitAtlasChallenge, parseGluedLookup, parseLegacyRoleShortcut, parseRoleShortcut, traditionalAtlasEvent } from "./traditional.ts";
 
 test("装备旧指令识别宿主标准化前后的游戏前缀，忽略分项与个人查询", () => {
   for (const [game, query, commands] of [
@@ -63,6 +63,15 @@ test("挑战日期别名沿用中国服中午，保留明确的游戏、所属�
     const at = Date.parse(`${date}T12:00:00+08:00`);
     for (const command of commands) expect(parseChallengeShortcut(command)).toEqual({ mode, period, at, invalidDate: false });
   }
+  for (const [target, mode] of [
+    ["#2026-11-16本期深渊", abyssMode], ["*2026-11-16本期末日", apocalypseMode],
+    ["％2026-11-16本期危局", deadlyAssaultMode],
+  ] as const) {
+    expect(parseExplicitAtlasChallenge(target)).toEqual({
+      mode, period: "本期", at: Date.parse("2026-11-16T12:00:00+08:00"), invalidDate: false,
+    });
+  }
+  expect(parseExplicitAtlasChallenge("*2026-11-16本期末日", "gi")).toBeUndefined();
   expect(parseChallengeShortcut("#2026年2月29日本期深渊")).toEqual({
     mode: abyssMode, period: "本期", at: undefined, invalidDate: true,
   });

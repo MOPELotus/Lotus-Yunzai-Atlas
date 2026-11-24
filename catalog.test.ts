@@ -496,10 +496,22 @@ test("查询已有导出的附属分类及详情，普通裸名称继续让行",
         { title: "专属信息", content: "旧城：材料来源与旧城有关。" }, { title: "数值", content: "攻击力：30 · 防御：12" },
         { title: "故事", content: "旧城中留下的一片碎瓦。" }, { title: "培养材料", content: "升级材料 × 2\n第二份材料 × 3" }],
     });
+    expect(findTraditionalEntries(data, "孤王残件__114001", "gi").map(({ entry }) => entry)).toEqual([material!.entry]);
     const [volume] = findTraditionalEntries(data, "北地见闻", "gi");
     expect(volume?.entry.name).toBe(book.name);
     expect(await atlas.referenceDetails(volume!.entry, data)).toBeUndefined();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("显式图鉴可按旧同名文件的完整名称和 ID 查到唯一标准分类", () => {
+  const common = { game: "gi", version: "7.2.52", rarity: "普通" } as const;
+  const first = { ...common, id: "26157101", name: "天使海兔", path: "items/天使海兔.json" };
+  const second = { ...common, id: "26157201", name: "天使海兔", path: "items/天使海兔__26157201.json" };
+  const data = { stale: false, pages: [{ ...common, kind: "monster", name: "敌人", sampled: false, entries: [first, second] }] } as const;
+  expect(findTraditionalEntries(data, "天使海兔").map(({ entry }) => entry)).toEqual([first, second]);
+  expect(findTraditionalEntries(data, "天使海兔__26157201").map(({ entry }) => entry)).toEqual([second]);
+  expect(findTraditionalEntries(data, "天使海兔__26157201", "gi", "bare")).toEqual([]);
+  expect(findTraditionalEntries(data, "天使海兔__26157201", "zzz")).toEqual([]);
 });

@@ -51,7 +51,7 @@ export function parseChallengeShortcut(message: string) {
 }
 
 export function parseExplicitAtlasChallenge(query: string, game?: Game) {
-  const text = query.replace(/\s+/gu, "");
+  const text = query.replace(/\s+/gu, "").replace(/^[#*%％]/u, "");
   const date = /\d{4}[./年-]\d{1,2}[./月-]\d{1,2}日?/u.exec(text)?.[0];
   const normalized = date ? date + text.replace(date, "") : text;
   const shortcut = normalized.endsWith("图鉴") ? normalized : normalized + "图鉴";

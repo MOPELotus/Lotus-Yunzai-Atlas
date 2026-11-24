@@ -264,10 +264,13 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     return (pro ? proEntries(page, pro) : page.entries).map((entry) => {
       const matchedPro = pro && entry.id === pro.id && entry.name === pro.name;
       const exactProId = matchedPro && literal === entry.id;
-      const direct = exact ? (exactName(entry.name) === key || exactProId ? 3 : 0) : score(entry, key, literal);
+      const named = exact ? (exactName(entry.name) === key || exactProId ? 3 : 0) : score(entry, key, literal);
+      const filename = includePartial ? basename(entry.path, ".json") : "";
+      const legacyFile = filename.endsWith(`__${entry.id}`) && compareKey(filename) === key;
+      const direct = legacyFile ? 3 : named;
       if (kind === "reference") {
-        const filename = basename(entry.path, ".json").replace(/__[a-z0-9_.+-]+$/iu, "");
-        return { kind, entry, score: Math.max(direct, nameScore(compareKey(filename), key)) };
+        const stem = filename.replace(/__[a-z0-9_.+-]+$/iu, "");
+        return { kind, entry, score: Math.max(direct, nameScore(compareKey(stem), key)) };
       }
       const trailblazer = kind === "character" ? starRailTrailblazerName(entry) : undefined;
       // A verified name ranks below an exact record name and above a partial match.
