@@ -399,6 +399,79 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     return { ...located, legacy: false };
   }
 
+  async function materializePages(map: Buffer, root: string, previousPages: readonly AtlasPage[] = []) {
+    const source = object(JSON.parse(map.toString("utf8")));
+    const pages: AtlasPage[] = [];
+    let stale = false;
+    for (const game of Object.keys(gameNames) as Game[]) {
+      const gameBlock = object(object(source.games)[game]);
+      const rawPages = object(atlasLocaleBlock(gameBlock, locale).pages);
+      const standardPages = kinds.flatMap((kind) => {
+        const page = pageFor(game, kind);
+        return page ? [{ ...page, kind, challengeMode: undefined }] : [];
+      });
+      const challengePages = challengeModes.filter((mode) => mode.game === game)
+        .map((mode) => ({ id: mode.id, name: mode.name, kind: "challenge" as const, challengeMode: mode }));
+      const knownIds = new Set([...standardPages, ...challengePages].map(({ id }) => id));
+      // An existing export can contain additional pages without changing the default download scope.
+      for (const [pageId, value] of Object.entries(rawPages)) {
+        if (knownIds.has(pageId) || !/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/iu.test(pageId)) continue;
+        const raw = object(value);
+        const name = label(raw.folder) || label(raw.title) || pageId;
+        if (name.length > 96 || /[\p{Cc}\p{Cf}]/u.test(name)) continue;
+        try {
+          const page = readPage(game, "reference", name, raw);
+          for (const entry of page.entries) entryRoots.set(entry, root);
+          pages.push({ ...page, referenceId: pageId });
+        } catch {
+          // Optional export pages do not invalidate the main categories.
+        }
+      }
+      for (const { id: pageId, name, kind, challengeMode } of [...standardPages, ...challengePages]) {
+        const previous = previousPages.find((page) =>
+          page.game === game && page.kind === kind && page.challengeMode?.id === challengeMode?.id);
+        const value = rawPages[pageId];
+        if (value === undefined && !previous) continue;
+
+        try {
+          const page = readPage(game, kind, name, value);
+          for (const entry of page.entries) entryRoots.set(entry, root);
+          if (kind === "set" && game === "gi") {
+            const entries: AtlasEntry[] = [];
+            for (const entry of page.entries) {
+              const name = artifactName(object((await readContent(entry, pageId)).list), locale);
+              if (!name) throw new Error("圣遗物套装名称缺失或不一致。");
+              const artifact = { ...entry, name };
+              entryRoots.set(artifact, root);
+              entries.push(artifact);
+            }
+            pages.push({ ...page, entries });
+          } else if (kind === "achievement") {
+            const sources = [];
+            for (const entry of page.entries) {
+              sources.push({ id: entry.id, name: entry.name,
+                list: (await readContent(entry, pageId)).list });
+            }
+            const achievementCategories = readAchievementCategories(game, {
+              version: page.version,
+              sourceUrl: label(object(value).sourceUrl),
+              sources,
+            });
+            pages.push({ ...page, achievementCategories });
+          } else if (challengeMode) {
+            pages.push({ ...page, challengeMode, sourceUrl: label(object(value).sourceUrl) });
+          } else {
+            pages.push(page);
+          }
+        } catch {
+          stale = true;
+          if (previous) pages.push(previous);
+        }
+      }
+    }
+    return { pages, stale };
+  }
+
   async function read(shortcut = false): Promise<Catalog> {
     try {
       const { root, version, legacy } = await locate();
@@ -425,77 +498,9 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       if (!info) rebuiltAt = Date.now();
       if (!snapshot || snapshot.stale || root !== snapshot.root || version !== snapshot.version ||
           legacy !== snapshot.legacy || (!info) !== (snapshot.rebuilt === true) || !map.equals(snapshot.map)) {
-        const source = object(JSON.parse(map.toString("utf8")));
-        const pages: AtlasPage[] = [];
         const previousPages = info && snapshot?.legacy === legacy && !snapshot.rebuilt && (!legacy || snapshot.root === root)
           ? snapshot.pages : [];
-        let stale = false;
-        for (const game of Object.keys(gameNames) as Game[]) {
-          const gameBlock = object(object(source.games)[game]);
-          const rawPages = object(atlasLocaleBlock(gameBlock, locale).pages);
-          const standardPages = kinds.flatMap((kind) => {
-            const page = pageFor(game, kind);
-            return page ? [{ ...page, kind, challengeMode: undefined }] : [];
-          });
-          const challengePages = challengeModes.filter((mode) => mode.game === game)
-            .map((mode) => ({ id: mode.id, name: mode.name, kind: "challenge" as const, challengeMode: mode }));
-          const knownIds = new Set([...standardPages, ...challengePages].map(({ id }) => id));
-          // An existing export can contain additional pages without changing the default download scope.
-          for (const [pageId, value] of Object.entries(rawPages)) {
-            if (knownIds.has(pageId) || !/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/iu.test(pageId)) continue;
-            const raw = object(value);
-            const name = label(raw.folder) || label(raw.title) || pageId;
-            if (name.length > 96 || /[\p{Cc}\p{Cf}]/u.test(name)) continue;
-            try {
-              const page = readPage(game, "reference", name, raw);
-              for (const entry of page.entries) entryRoots.set(entry, root);
-              pages.push({ ...page, referenceId: pageId });
-            } catch {
-              // Optional export pages do not invalidate the main categories.
-            }
-          }
-          for (const { id: pageId, name, kind, challengeMode } of [...standardPages, ...challengePages]) {
-            const previous = previousPages.find((page) =>
-              page.game === game && page.kind === kind && page.challengeMode?.id === challengeMode?.id);
-            const value = rawPages[pageId];
-            if (value === undefined && !previous) continue;
-
-            try {
-              const page = readPage(game, kind, name, value);
-              for (const entry of page.entries) entryRoots.set(entry, root);
-              if (kind === "set" && game === "gi") {
-                const entries: AtlasEntry[] = [];
-                for (const entry of page.entries) {
-                  const name = artifactName(object((await readContent(entry, pageId)).list), locale);
-                  if (!name) throw new Error("圣遗物套装名称缺失或不一致。");
-                  const artifact = { ...entry, name };
-                  entryRoots.set(artifact, root);
-                  entries.push(artifact);
-                }
-                pages.push({ ...page, entries });
-              } else if (kind === "achievement") {
-                const sources = [];
-                for (const entry of page.entries) {
-                  sources.push({ id: entry.id, name: entry.name,
-                    list: (await readContent(entry, pageId)).list });
-                }
-                const achievementCategories = readAchievementCategories(game, {
-                  version: page.version,
-                  sourceUrl: label(object(value).sourceUrl),
-                  sources,
-                });
-                pages.push({ ...page, achievementCategories });
-              } else if (challengeMode) {
-                pages.push({ ...page, challengeMode, sourceUrl: label(object(value).sourceUrl) });
-              } else {
-                pages.push(page);
-              }
-            } catch {
-              stale = true;
-              if (previous) pages.push(previous);
-            }
-          }
-        }
+        const { pages, stale } = await materializePages(map, root, previousPages);
         if (!pages.length || ((version !== null || !info) && stale)) throw new Error("图鉴索引缺少可用分类。");
         snapshot = { map, mapIdentity, root, version, legacy, pages, stale, ...(!info && { rebuilt: true }) };
       } else if (mapIdentity !== snapshot.mapIdentity) {
@@ -617,6 +622,14 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     },
     locale,
     findInDetails,
+    async findUnindexedLegacy(catalog: Catalog, query: string, game?: Game): Promise<Catalog | undefined> {
+      const active = snapshot;
+      if (!active || active.pages !== catalog.pages || active.version !== null || active.rebuilt || active.stale || !compareKey(query)) return;
+      const map = await rebuildLegacyAtlasIndex(active.root, locale, { query, game }).catch(() => undefined);
+      if (!map) return;
+      const result = await materializePages(map, active.root);
+      if (result.pages.length) return result;
+    },
     async referenceDetails(entry: AtlasEntry, result: Catalog): Promise<ReferenceDetails | undefined> {
       const page = result.pages.find(({ kind, entries }) => kind === "reference" && entries.includes(entry));
       if (!page?.referenceId) return;

@@ -320,7 +320,7 @@ async function traditionalQuery(
   const explicit = mode === "search" || mode === "shortcut" || mode === "character";
   try {
     const quickLookup = mode === "bare" || mode === "weapon";
-    const result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
+    let result = quickLookup ? await catalog.readForEquipmentShortcut() : await catalog.read();
     const lookup = mode === "legacy-character" ? "character" : mode === "character" ? "character-search" :
       mode === "shortcut" ? "search" : mode;
     let matches: ReturnType<typeof findTraditionalEntries>[number][] = findTraditionalEntries(result, query, game, lookup);
@@ -351,6 +351,13 @@ async function traditionalQuery(
       const roleOnly = mode === "character";
       if (roleOnly && findTraditionalEntries(result, query, game, "name").length) return;
       matches = await catalog.findInDetails(result, query, game, roleOnly, limit);
+    }
+    if (!matches.length && mode === "search") {
+      const files = await catalog.findUnindexedLegacy(result, query, game);
+      if (files) {
+        matches = findTraditionalEntries(files, query, game, "search");
+        if (matches.length) result = { ...result, pages: [...result.pages, ...files.pages] };
+      }
     }
     const available = matches.filter(({ kind, entry }) => kind !== "character" || roleQueriesEnabled(roleSettings, entry.game, section));
     if (matches.length && !available.length) return mode === "search" ? "所查询的角色资料已关闭。" : undefined;

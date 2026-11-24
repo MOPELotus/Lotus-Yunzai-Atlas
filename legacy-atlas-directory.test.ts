@@ -94,6 +94,17 @@ test("旧版缺索引时重建已验证的实体条目，实体快照或坏索�
     expect(await Bun.file(join(old, "map.json")).exists()).toBe(false);
     expect(await rebuildLegacyAtlasIndex(old)).toEqual(await rebuildLegacyAtlasIndex(old));
 
+    const partialMap = JSON.stringify({ games: { gi: { locales: { zh: { pages: {
+      weapon: { version, recordCount: 1, records: { "99": { id: "99", name: "另一件武器", path: "items/99.json" } } },
+    } } } } } });
+    await writeFile(join(old, "map.json"), partialMap);
+    const indexed = await catalog.read();
+    expect(findEquipment(indexed, "西风")).toEqual([]);
+    const restored = await catalog.findUnindexedLegacy(indexed, "西风", "gi");
+    expect(findEquipment(restored!, "西风").map(({ id }) => id)).toEqual(["11401", "11402"]);
+    expect(await catalog.findUnindexedLegacy(indexed, "西风", "zzz")).toBeUndefined();
+    expect(await Bun.file(join(old, "map.json")).text()).toBe(partialMap);
+
     await writeFile(join(old, "map.json"), "{ broken");
     await expect(catalog.read()).rejects.toThrow();
     await rm(join(old, "map.json"));
@@ -111,5 +122,8 @@ test("旧版缺索引时重建已验证的实体条目，实体快照或坏索�
     await writeFile(join(publishedFolder, "西风剑.json"), item("11401", "西风剑"));
     await symlink("snapshots/1/data", join(primary, "current"), "dir");
     await expect(catalog.read()).rejects.toThrow();
+    await writeFile(join(published, "map.json"), partialMap);
+    const publishedIndex = await catalog.read();
+    expect(await catalog.findUnindexedLegacy(publishedIndex, "西风", "gi")).toBeUndefined();
   } finally { await rm(host, { recursive: true, force: true }); }
 });

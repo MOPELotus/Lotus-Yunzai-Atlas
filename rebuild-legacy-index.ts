@@ -1,9 +1,9 @@
 import { atlasLocales, defaultAtlasLocale } from "./locale.ts";
 import { readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { candidateJson } from "./validate-candidate.ts";
 import { atlasSourceOrigin } from "./source-transport.ts";
-import { object } from "./source-values.ts";
+import { compareKey, object } from "./source-values.ts";
 
 const gameFolders = new Map([["gi", "原神"], ["hsr", "星铁"], ["zzz", "绝区零"]]);
 const maxEntries = 20_000;
@@ -42,10 +42,14 @@ function invalid() {
 }
 
 // The fixed old exporter used 语言/游戏/分类/稀有度/展示名.json. The native exporter uses game/page/id.json.
-export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = defaultAtlasLocale): Promise<Buffer> {
+export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = defaultAtlasLocale,
+  lookup?: { readonly query: string; readonly game?: string }): Promise<Buffer> {
   const localeDirectory = `items/${atlasLocales[requestedLocale].folder}`;
   const games = new Map<string, Map<string, Page>>();
   let entries = 0;
+  const query = compareKey(lookup?.query ?? "");
+  const game = lookup?.game;
+  const folder = game && gameFolders.get(game);
 
   async function visit(relative: string, parts: readonly string[]) {
     const directory = join(root, relative);
@@ -54,11 +58,13 @@ export async function rebuildLegacyAtlasIndex(root: string, requestedLocale = de
     contents.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const file of contents) {
       if (file.isSymbolicLink() || /[\\\p{Cc}]/u.test(file.name)) throw invalid();
-      if (!parts.length && file.isDirectory() && (file.name === "异环" || file.name === "nte")) continue;
+      if (!parts.length && file.isDirectory() && (file.name === "异环" || file.name === "nte" ||
+          (folder && file.name !== folder && file.name !== game))) continue;
       const path = `${relative}/${file.name}`;
       if (file.isDirectory()) await visit(path, [...parts, file.name]);
       else if (file.name.endsWith(".json")) {
         if (!file.isFile() || ++entries > maxEntries) throw invalid();
+        if (lookup && !compareKey(basename(file.name, ".json")).includes(query)) continue;
         addItem(await candidateJson(root, path), path, parts, file.name);
       }
     }
