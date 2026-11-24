@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { parseAtlasUpdatePolicy } from "./update-policy.ts";
 
-test("明确的旧图鉴配置沿用两种周期，新部署只启用手动", () => {
+test("初始化写入图鉴配置后默认每日01:30和13:30更新，无配置不启用", () => {
   const unconfigured = parseAtlasUpdatePolicy(undefined);
   expect(unconfigured.version.cron).toBeUndefined();
   expect(unconfigured.challenge.cron).toBeUndefined();
   expect(unconfigured.version.selections).toHaveLength(30);
   const legacy = parseAtlasUpdatePolicy({});
-  expect(legacy.version.cron).toBe("0 0 */6 * * *");
-  expect(legacy.challenge.cron).toBe("0 15 */2 * * *");
+  expect(legacy.version.cron).toBe("0 30 1,13 * * *");
+  expect(legacy.challenge.cron).toBe("0 30 1,13 * * *");
   expect(legacy.challenge.selections).toEqual([
     "gi/monster", "gi/leyline", "gi/rolecombat", "gi/tower", "hsr/monster",
     "hsr/maze_boss", "hsr/maze", "hsr/maze_peak", "hsr/maze_extra", "hsr/monstervalue",
@@ -43,7 +43,7 @@ test("不能等价转换的 cron、旧外部命令和版本或样本选项不会
   expect(jobs.challenge.cron).toBeUndefined();
   expect(parseAtlasUpdatePolicy({ auto_update: { check_cron: "0 0 9 ? * MON-FRI *" } }).version.cron).toBe("0 0 9 * * MON-FRI");
   expect(parseAtlasUpdatePolicy({ auto_update: { check_cron: "0 0 9 ? * 1-5 *" } }).version.cron).toBeUndefined();
-  for (const check_cron of ["60 0 */6 * * ? *", "0 0 9 */0 * *", "0 0 9 ? MAYBE MON *"]) {
+  for (const check_cron of ["60 30 1,13 * * ? *", "0 0 9 */0 * *", "0 0 9 ? MAYBE MON *"]) {
     expect(parseAtlasUpdatePolicy({ auto_update: { check_cron } }).version).toMatchObject({ issue: expect.stringContaining("check_cron") });
   }
   for (const update_args of [["--version", "zzz=3.4.4"], ["--sample"], ["--mode=full"],

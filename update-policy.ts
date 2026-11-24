@@ -19,8 +19,8 @@ interface AtlasSchedulePolicy {
 }
 
 const defaults: Readonly<Record<AtlasScheduleKind, string>> = {
-  version: "0 0 */6 * * ? *",
-  challenge: "0 15 */2 * * ? *",
+  version: "0 30 1,13 * * ? *",
+  challenge: "0 30 1,13 * * ? *",
 };
 
 const cronBounds = [[0, 59], [0, 59], [0, 23], [1, 31], [1, 12], [0, 7]] as const;

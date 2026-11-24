@@ -68,7 +68,7 @@ test.each(["latest", "live"] as const)("同版挑战在 %s 只核对轮换索引
   const run = await fixture(version_channel);
   try {
     const maintenance = createAtlasMaintenance(run.root, { updateConfig: { version_channel }, manifest: async () => listings, request: run.request });
-    expect(maintenance.atlasSchedule.challenge.cron).toBe("0 15 */2 * * *");
+    expect(maintenance.atlasSchedule.challenge.cron).toBe("0 30 1,13 * * *");
     const checked = await maintenance.atlasSchedule.version.run();
     expect(checked).toContain(`七圣召唤 · 已是同一版本 ${listings.gi[version_channel]}`);
     expect(checked).toContain("本地所选 29 类版本均为目标版本");
@@ -134,4 +134,23 @@ test("同版轮换缺页或移除已收录条目时保留现用快照", async ()
   } finally {
     await rm(run.workspace, { recursive: true, force: true });
   }
+});
+
+test("图鉴两个默认任务同刻触发时顺序执行，不因工作区忙而跳过", async () => {
+  const run = await fixture("latest");
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  let manifests = 0;
+  try {
+    const maintenance = createAtlasMaintenance(run.root, { updateConfig: { version_channel: "latest" }, request: run.request,
+      manifest: async () => { if (++manifests === 1) { entered.resolve(); await release.promise; } return listings; } });
+    const first = maintenance.atlasSchedule.version.run();
+    await entered.promise;
+    const second = maintenance.atlasSchedule.challenge.run();
+    await Bun.sleep(10);
+    expect(manifests).toBe(1);
+    release.resolve();
+    const summaries = await Promise.all([first, second]);
+    expect(manifests).toBe(2);
+    expect(summaries[1]).toContain("来源索引与现用资料一致");
+  } finally { release.resolve(); await rm(run.workspace, { recursive: true, force: true }); }
 });

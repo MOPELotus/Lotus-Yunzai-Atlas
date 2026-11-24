@@ -439,9 +439,15 @@ export function createAtlasMaintenance(root: string, options: AtlasMaintenanceOp
     }
   }
 
+  // Version and rotation schedules may share a slot; serialize them so neither loses the workspace lock.
+  let scheduledQueue = Promise.resolve();
   function scheduled(kind: AtlasScheduleKind) {
     const { cron, issue, selections } = policy[kind];
-    return { cron, issue, run: () => cron ? run("update", selections, kind) : Promise.resolve("图鉴自动更新未启用。") };
+    return { cron, issue, run: () => {
+      const pending = scheduledQueue.then(() => cron ? run("update", selections, kind) : "图鉴自动更新未启用。");
+      scheduledQueue = pending.then(() => undefined, () => undefined);
+      return pending;
+    } };
   }
 
   return {
