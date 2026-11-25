@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 
 class SourceNumber {
@@ -11,7 +14,7 @@ const parseWithSource = JSON.parse as (source: string, revive: (key: string, val
 export function parseLegacyJsonEvidence(source: string): Json {
   return parseWithSource(source, (_key, value, context) => {
     if (typeof value !== "number") return value;
-    if (context?.source === undefined) throw new Error("当前运行时无法保留图鉴 JSON 原数字。");
+    if (context?.source === undefined) throw new Error($t("legacy-json-evidence.text_fb7f38a962"));
     return new SourceNumber(context.source);
   }) as Json;
 }
@@ -50,7 +53,7 @@ function decimal(value: string) {
   const [, sign, integer, fraction = "", exponent = "0"] = match;
   const digits = `${integer}${fraction}`.replace(/^0+/u, "");
   if (!digits) return "0";
-  if (exponent.length > 128) throw new Error("图鉴 JSON 数字指数超出可比较范围。");
+  if (exponent.length > 128) throw new Error($t("legacy-json-evidence.text_415632bcd5"));
   let end = digits.length;
   while (digits[end - 1] === "0") end--;
   return `${sign}${digits.slice(0, end)}e${BigInt(exponent) + BigInt(digits.length - end - fraction.length)}`;

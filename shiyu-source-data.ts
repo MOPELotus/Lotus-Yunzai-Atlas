@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { label, object } from "./source-values.ts";
 import { natural } from "./zzz-challenge-data.ts";
@@ -24,7 +27,7 @@ interface ShiyuSourceImage {
 
 export function shiyuSourceIndex(value: unknown, maxRecords: number): PublishedShiyuRow[] {
   const rows = Object.entries(object(value));
-  if (!rows.length || rows.length > maxRecords) throw new Error("式舆来源索引条目数无效。");
+  if (!rows.length || rows.length > maxRecords) throw new Error($t("shiyu-source-data.text_52a5d7fffd"));
   const entries = rows.map(([id, value]): PublishedShiyuRow => {
     const list = object(value);
     const priority = natural(list.sort) ?? 0;
@@ -34,14 +37,14 @@ export function shiyuSourceIndex(value: unknown, maxRecords: number): PublishedS
       ? [list.begin, list.end, list.live_begin, list.live_end].every((date) => date === undefined)
       : window?.from === "live" && window.begin === list.begin && window.end === list.end && window.end.endsWith(":59");
     if (!challengeRecordId.test(id) || !name || name !== list.zh || !validWindow) {
-      throw new Error(`式舆来源缺少一致的实装窗口或节点身份（${id}）。`);
+      throw new Error($t("shiyu-source-data.text_efa3dc5028", { "id": id }));
     }
     return { id, list, name, priority, window, rarity: "未分类" };
   });
   const rotations = entries.flatMap(({ priority, window }) => priority === 1 && window ? [window] : [])
     .sort((first, second) => first.begin.localeCompare(second.begin));
   if (rotations.some((entry, index) => index > 0 && rotations[index - 1]!.end >= entry.begin)) {
-    throw new Error("式舆剧变节点实装窗口重叠。");
+    throw new Error($t("shiyu-source-data.text_59920fccdd"));
   }
   return entries;
 }
@@ -65,7 +68,7 @@ function validGoals(zone: Record<string, unknown>): boolean {
 }
 
 export function shiyuSourceImages(value: unknown, entry: PublishedShiyuRow): ShiyuSourceImage[] {
-  const fail = (): never => { throw new Error(`式舆来源详情缺少防线、评级或原图，或与实装窗口不符（${entry.id}）。`); };
+  const fail = (): never => { throw new Error($t("shiyu-source-data.text_895a079dba", { "id": entry.id })); };
   const detail = object(value);
   const zones = new Map(Object.entries(object(detail.zone)).map(([id, zone]) => [id, object(zone)]));
   if (detail.id !== Number(entry.id) || detail.name !== entry.name || detail.priority !== entry.priority ||

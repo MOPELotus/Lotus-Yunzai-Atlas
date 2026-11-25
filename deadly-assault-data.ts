@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry } from "./catalog.ts";
 import { deadlyAssaultMode, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
@@ -29,7 +32,7 @@ export interface DeadlyAssaultDetails {
 function sourceText(value: unknown): string {
   return effectText(label(value)
     .replace(/<IconMap:[a-z0-9_]+>/giu, "")
-    .replace(/<Term:\d+>([^<>]*)<\/Term>/giu, (_, name: string) => name || "〔术语待核对〕"));
+    .replace(/<Term:\d+>([^<>]*)<\/Term>/giu, (_, name: string) => name || $t("deadly-assault-data.text_f39c9be50a")));
 }
 
 function effects(value: unknown): DeadlyAssaultEffect[] {
@@ -48,7 +51,7 @@ export async function normalizeDeadlyAssault(entry: AtlasEntry, content: Record<
   if (String(natural(detail.id)) !== entry.id || !Array.isArray(detail.modes)) return;
   const modes = detail.modes.map(object);
   const artwork = galleryArtwork(images, "zzz");
-  const divisions = await Promise.all(([[1001, "试炼"], [1002, "绝境"]] as const).map(async ([zoneType, name]) => {
+  const divisions = await Promise.all(([[1001, $t("deadly-assault-data.text_5629e20a86")], [1002, $t("deadly-assault-data.text_88d514ca0b")]] as const).map(async ([zoneType, name]) => {
     const encounters = await Promise.all(modes.flatMap((mode, position) => {
       if (mode.zone_type !== zoneType) return [];
       return Object.entries(object(mode.zone)).flatMap(([id, row]) => {
@@ -56,8 +59,8 @@ export async function normalizeDeadlyAssault(entry: AtlasEntry, content: Record<
         const zone = object(row);
         const path = `detail.modes.${position}.zone.${id}`;
         return [zzzChallengeRooms(zone, path, { artwork, enemyLookup },
-          (roomId, count) => count === 1 ? "" : `房间 ID ${roomId}`).then((rooms): DeadlyAssaultEncounter => ({
-          name: sourceText(zone.name) || `关卡 ID ${id}（待核对）`,
+          (roomId, count) => count === 1 ? "" : $t("deadly-assault-data.text_fdd4893d17", { "roomId": roomId })).then((rooms): DeadlyAssaultEncounter => ({
+          name: sourceText(zone.name) || $t("deadly-assault-data.text_3b6942b7e9", { "id": id }),
           level: natural(zone.monster_level) || undefined,
           goals: zzzChallengeGoals(zone),
           mechanics: effects(zone.layer_buff),
@@ -74,7 +77,7 @@ export async function normalizeDeadlyAssault(entry: AtlasEntry, content: Record<
   const [first = []] = optional;
   const commonOptional = optional.every((buffs) => JSON.stringify(buffs) === JSON.stringify(first)) ? first : [];
   return {
-    name: current ? "当期危局强袭战" : `${deadlyAssaultMode.name} · 记录 ID ${entry.id}`,
+    name: current ? $t("deadly-assault-data.text_0aef3b8c0c") : $t("deadly-assault-data.text_7bdacec67a", { "name": deadlyAssaultMode.name, "id": entry.id }),
     artwork: artwork(),
     version: entry.version,
     window: readChallengeFacts(deadlyAssaultMode, content).window,

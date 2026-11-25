@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { matchesLegacyAtlasIndex, maxLegacyAtlasIndexBytes } from "./audit-legacy-source.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import { openAtlasPinnedCache } from "./pinned-source-cache.ts";
@@ -18,7 +21,7 @@ export async function acquireLegacyAtlasIndexes(workspace: string, {
 } = {}) {
   signal?.throwIfAborted();
   if (!Number.isSafeInteger(maxRequests) || maxRequests < 0 || maxRequests > legacyAtlasSourcePages.length) {
-    throw new Error(`图鉴索引请求次数须在 0 到 ${legacyAtlasSourcePages.length} 之间。`);
+    throw new Error($t("acquire-legacy-indexes.text_1be4f6ac73", { "length": legacyAtlasSourcePages.length }));
   }
   const cache = await openAtlasPinnedCache(workspace);
   let requests = 0;
@@ -59,7 +62,7 @@ export async function acquireLegacyAtlasIndexes(workspace: string, {
 if (import.meta.main) {
   const [workspace, option, value, ...extra] = Bun.argv.slice(2);
   if (!workspace || extra.length || (option !== undefined && (option !== "--max-requests" || !value || !/^\d+$/u.test(value)))) {
-    console.error("用法：bun acquire-legacy-indexes.ts <独立本地目录> [--max-requests 0至29]");
+    console.error($t("acquire-legacy-indexes.text_33b521568b"));
     process.exitCode = 2;
   } else {
     try {
@@ -67,7 +70,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(report, null, 2));
       if (report.status !== "indexes-ready") process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "图鉴固定索引准备失败。");
+      console.error(error instanceof Error ? error.message : $t("acquire-legacy-indexes.text_16e02a3e8f"));
       process.exitCode = 1;
     }
   }

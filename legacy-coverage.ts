@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { acquireLegacyAtlasIndexes } from "./acquire-legacy-indexes.ts";
@@ -59,7 +62,7 @@ function directArtwork(value: unknown, game: string): ArtworkReference {
       typeof remoteUrl !== "string" || !remoteUrl.startsWith(`${atlasSourceOrigin}/assets/${game}/`) || /[#?\\\p{Cc}]/u.test(remoteUrl) ||
       typeof sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(sha256) || typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes <= 0 ||
       typeof fieldPath !== "string" || !fieldPath || typeof originalValue !== "string") {
-    throw new Error("旧导出含无效原图引用。");
+    throw new Error($t("legacy-coverage.text_2bb22f4f27"));
   }
   return { path: localPath, url: remoteUrl, sha256, bytes, fieldPath, originalValue };
 }
@@ -68,7 +71,7 @@ export async function readLegacyExportInventory(root: string, signal?: AbortSign
   const data = await realpath(join(root, "data"));
   const validation = await validateAtlasCandidate(data, legacyAtlasSourcePages, signal);
   if (!validation.ok || validation.pages.length !== legacyAtlasSourcePages.length) {
-    throw new Error(`旧导出与核实的 29 类目录不同。${validation.issues[0] ?? ""}`);
+    throw new Error($t("legacy-coverage.text_d2735a1a84", { "value1": validation.issues[0] ?? "" }));
   }
   const index = object(JSON.parse(await readFile(await candidateFile(data, "map.json"), "utf8")));
   const expectedFiles = new Map<string, DirectArtwork>();
@@ -77,20 +80,20 @@ export async function readLegacyExportInventory(root: string, signal?: AbortSign
   for (const { game, pageId, version, indexPath } of legacyAtlasSourcePages) {
     const locale = object(object(object(object(index.games)[game]).locales).zh);
     const page = object(object(locale.pages)[pageId]);
-    if (page.sourceUrl !== `${atlasSourceOrigin}${indexPath}`) throw new Error(`旧导出索引来源不同（${game}/${pageId}）。`);
+    if (page.sourceUrl !== `${atlasSourceOrigin}${indexPath}`) throw new Error($t("legacy-coverage.text_fc78d0c62d", { "game": game, "pageId": pageId }));
     const records = new Map<string, ExportRecord>();
     for (const [id, row] of Object.entries(object(page.records))) {
       signal?.throwIfAborted();
       const { path, name } = object(row);
       if (typeof name !== "string" || typeof path !== "string" || !path.startsWith("items/")) {
-        throw new Error(`旧导出条目路径无效（${game}/${pageId}/${id}）。`);
+        throw new Error($t("legacy-coverage.text_b62ae1d00c", { "game": game, "pageId": pageId, "id": id }));
       }
       const item = object(JSON.parse(await readFile(await candidateFile(data, path), "utf8")));
       const meta = object(item.meta);
       const detailDir = game === "hsr" ? hsrDetailDirs[pageId] ?? pageId : pageId;
       const detailUrl = meta.hasDetail === true ? `${atlasSourceOrigin}/${game}/${version}/zh/${detailDir}/${id}.json` : undefined;
-      if (detailUrl && meta.detailSourceUrl !== detailUrl) throw new Error(`旧导出详情来源不同（${game}/${pageId}/${id}）。`);
-      if (!Array.isArray(meta.images)) throw new Error(`旧导出缺少原图引用清单（${game}/${pageId}/${id}）。`);
+      if (detailUrl && meta.detailSourceUrl !== detailUrl) throw new Error($t("legacy-coverage.text_76ce939c70", { "game": game, "pageId": pageId, "id": id }));
+      if (!Array.isArray(meta.images)) throw new Error($t("legacy-coverage.text_8ef7bf9f0f", { "game": game, "pageId": pageId, "id": id }));
       const artwork: ArtworkReference[] = [];
       let placeholderReferences = 0;
       for (const entry of meta.images) {
@@ -98,14 +101,14 @@ export async function readLegacyExportInventory(root: string, signal?: AbortSign
         if (row.placeholder === true) {
           if (row.status !== "placeholder" || row.localPath !== placeholderPath || row.remoteUrl !== null ||
               row.sha256 !== legacyPlaceholderSha256) {
-            throw new Error("旧导出含无效占位图引用。");
+            throw new Error($t("legacy-coverage.text_80f126a0ac"));
           }
           placeholderReferences++;
           continue;
         }
         const art = directArtwork(row, game);
         const existing = expectedFiles.get(art.path) ?? expectedByUrl.get(art.url);
-        if (existing && !matchLegacyArtwork(existing, art)) throw new Error(`旧导出原图身份冲突（${art.path}）。`);
+        if (existing && !matchLegacyArtwork(existing, art)) throw new Error($t("legacy-coverage.text_3bd0da63bd", { "path": art.path }));
         expectedFiles.set(art.path, art);
         expectedByUrl.set(art.url, art);
         artwork.push(art);
@@ -119,13 +122,13 @@ export async function readLegacyExportInventory(root: string, signal?: AbortSign
   const details = records.filter(({ detailUrl }) => detailUrl !== undefined).length;
   const placeholders = records.reduce((sum, record) => sum + record.placeholderReferences, 0);
   if (details !== legacyAtlasCounts.detailCount || placeholders !== legacyPlaceholderReferences ||
-      expectedFiles.size + 1 !== legacyAtlasCounts.imageCount) throw new Error("旧导出的详情或图库引用总数与核实版本不同。");
+      expectedFiles.size + 1 !== legacyAtlasCounts.imageCount) throw new Error($t("legacy-coverage.text_c809914da2"));
   return { pages, details, placeholders, expectedFiles };
 }
 
 export async function reportLegacyAtlasCoverage(exportRoot: string, cache: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的原响应检查点目录。");
+  if (!(await lstat(cache)).isDirectory()) throw new Error($t("legacy-coverage.text_d702da97bb"));
   const inventory = await readLegacyExportInventory(exportRoot, signal);
   const indexes = await acquireLegacyAtlasIndexes(cache, { maxRequests: 0, signal });
   const pinnedDetails = new Set<string>();
@@ -143,7 +146,7 @@ export async function reportLegacyAtlasCoverage(exportRoot: string, cache: strin
     const { game, pageId, recordId, detail: [detailPath, detailSha256, bytes], artwork } = record;
     const expected = inventory.pages.get(`${game}/${pageId}`)?.get(recordId);
     const detailUrl = `${atlasSourceOrigin}${detailPath}`;
-    if (expected?.detailUrl !== detailUrl) throw new Error(`旧条目与固定详情不符（${key}）。`);
+    if (expected?.detailUrl !== detailUrl) throw new Error($t("legacy-coverage.text_880f10b843", { "key": key }));
     const original = new Set(expected.artwork.map(({ path }) => path));
     const capture = await acquireLegacyAtlasRecord(cache, key, { maxRequests: 0, signal });
     const cached = new Set(capture.files.filter(({ state }) => state === "cached").map(({ sourcePath }) => sourcePath));
@@ -153,7 +156,7 @@ export async function reportLegacyAtlasCoverage(exportRoot: string, cache: strin
       const image = { path: galleryPath, url: `${atlasSourceOrigin}${path}`, sha256, bytes };
       const originalImage = inventory.expectedFiles.get(galleryPath);
       if (!original.has(galleryPath) || !originalImage || !matchLegacyArtwork(image, originalImage)) {
-        throw new Error(`旧原图引用与固定来源不同（${key}/${galleryPath}）。`);
+        throw new Error($t("legacy-coverage.text_e190c71e7f", { "key": key, "galleryPath": galleryPath }));
       }
       const verified = cached.has(path);
       pinnedArtwork.add(galleryPath);
@@ -197,13 +200,13 @@ export async function reportLegacyAtlasCoverage(exportRoot: string, cache: strin
 if (import.meta.main) {
   const [source, cache, ...extra] = Bun.argv.slice(2);
   if (!source || !cache || extra.length) {
-    console.error("用法：bun legacy-coverage.ts <原本地导出根目录> <已有原响应检查点目录>");
+    console.error($t("legacy-coverage.text_3d110cd8ca"));
     process.exitCode = 2;
   } else {
     try {
       console.log(JSON.stringify(await reportLegacyAtlasCoverage(source, cache), null, 2));
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法核对图鉴准备覆盖范围。");
+      console.error(error instanceof Error ? error.message : $t("legacy-coverage.text_e1dc5ba60d"));
       process.exitCode = 1;
     }
   }

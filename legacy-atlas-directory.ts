@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -15,7 +18,7 @@ async function lstatIfPresent(path: string) {
 
 export class LegacyAtlasSourceConflict extends Error {
   constructor() {
-    super("检测到两个不同的旧图鉴导出。请设置 LOTUS_ATLAS_DATA_DIR，或在初始化时指定来源目录。");
+    super($t("legacy-atlas-directory.text_46622f1071"));
   }
 }
 
@@ -31,10 +34,10 @@ export async function findLegacyAtlasExport(atlasRoot: string, includeUnindexed 
       const directories = await Promise.all(languages.map(({ folder }) => lstatIfPresent(join(exportRoot, "data", "items", folder))));
       if (!directories.some(info => info?.isDirectory())) continue;
     }
-    if (index && !index.isFile()) throw new Error("旧图鉴 map.json 须为实体文件。");
+    if (index && !index.isFile()) throw new Error($t("legacy-atlas-directory.text_1055dc7a7a"));
     const directory = await realpath(exportRoot);
     const data = join(directory, "data");
-    if (await realpath(data) !== data) throw new Error("旧图鉴 data 须为原导出目录下的实体目录。");
+    if (await realpath(data) !== data) throw new Error($t("legacy-atlas-directory.text_249fbc657f"));
     sources.add(directory);
   }
   if (sources.size > 1) throw new LegacyAtlasSourceConflict();

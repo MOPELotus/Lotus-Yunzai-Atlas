@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { dirname, join } from "node:path";
 import { realpath } from "node:fs/promises";
 import { candidateFile, candidateImageReference, hashCandidateFile } from "./candidate-gallery.ts";
@@ -45,7 +48,7 @@ export function inspectFullAtlasImages(data: string, signal?: AbortSignal, issue
         if (digest) {
           if (!fields.has(field)) fields.set(field, digest);
         } else if (issues) {
-          issues.push(`${game}/${pageId} ${id} 的已下载图标 ${field} 缺少可验证原图。`);
+          issues.push($t("full-candidate-gallery.text_bfd63a47cb", { "game": game, "pageId": pageId, "id": id, "field": field }));
         }
       }
       return fields;
@@ -63,7 +66,7 @@ export async function inspectFullAtlasArtwork(before: string, after: string, iss
   for (const [path, expected] of challengeArtworkDigests) {
     if (await hasBefore(path, expected, fallbacks)) continue;
     const [previous, next] = await Promise.all([hasBefore(path, expected), hasAfter(path, expected)]);
-    if (previous && !next) issues.push(`缺少已校验挑战补图 ${path}。`);
+    if (previous && !next) issues.push($t("full-candidate-gallery.text_06f63e4b7d", { "path": path }));
     changed ||= previous !== next;
   }
   return changed;

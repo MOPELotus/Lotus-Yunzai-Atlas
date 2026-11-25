@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { deadlyAssaultMode, readChallengeFacts } from "./challenges.ts";
 import { label, object } from "./source-values.ts";
 
@@ -26,19 +29,19 @@ interface BossImage {
 
 export function bossSourceIndex(value: unknown, maxRecords: number): PublishedBossRow[] {
   const entries = Object.entries(object(value));
-  if (!entries.length || entries.length > maxRecords) throw new Error("危局来源索引条目数无效。");
+  if (!entries.length || entries.length > maxRecords) throw new Error($t("boss-source-data.text_71a00bce6c"));
   const rows = entries.map(([id, value]): PublishedBossRow => {
     const list = object(value);
     const { window } = readChallengeFacts(deadlyAssaultMode, { list });
     if (!recordId.test(id) || list.sort !== 9 || list.zh !== "试炼" || (list.zone_type !== 1001 && list.zone_type !== 1002) ||
         window?.from !== "live" || window.begin !== list.begin || window.end !== list.end || !window.end.endsWith(":59")) {
-      throw new Error(`危局来源缺少一致的实装窗口或记录身份（${id}）。`);
+      throw new Error($t("boss-source-data.text_18da30c2cc", { "id": id }));
     }
     return { id, list, name: list.zh, rarity: "未分类", begin: window.begin, end: window.end };
   });
   const sorted = [...rows].sort((a, b) => a.begin.localeCompare(b.begin));
   if (sorted.some((entry, index) => index > 0 && sorted[index - 1]!.end >= entry.begin)) {
-    throw new Error("危局来源实装窗口重叠。");
+    throw new Error($t("boss-source-data.text_2b4c27c8b5"));
   }
   return rows;
 }
@@ -60,7 +63,7 @@ function bossEffects(value: unknown, path: string, optional: boolean, images: Bo
 }
 
 export function bossSourceImages(value: unknown, entry: PublishedBossRow): BossImage[] {
-  const fail = (): never => { throw new Error(`危局来源详情缺少层级、评分或原图，或与实装窗口不符（${entry.id}）。`); };
+  const fail = (): never => { throw new Error($t("boss-source-data.text_dd4d7ab95e", { "id": entry.id })); };
   const detail = object(value);
   if (detail.id !== Number(entry.id) || detail.name !== entry.name || detail.zone_type !== entry.list.zone_type ||
     detail.begin_time !== entry.begin || detail.end_time !== entry.end || !Array.isArray(detail.modes)) fail();

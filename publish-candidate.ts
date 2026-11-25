@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasPageKey } from "./locale.ts";
 import { Database } from "bun:sqlite";
 import { lstat, mkdir, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink } from "node:fs/promises";
@@ -46,7 +49,7 @@ export async function readAtlasSnapshotVersion(root: string): Promise<Version> {
 
 async function lockPublication(path: string, signal?: AbortSignal): Promise<Database | undefined> {
   try {
-    if (!(await lstat(path)).isFile()) throw new Error("图鉴发布锁须为实体文件。");
+    if (!(await lstat(path)).isFile()) throw new Error($t("publish-candidate.text_0829ad6eb5"));
   } catch (error) {
     if (errorCode(error) !== "ENOENT") throw error;
   }
@@ -122,7 +125,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
   options?: AtlasPublicationOptions): Promise<AtlasPublication> {
   const { preparation, retainGallery } = options ?? {};
   signal?.throwIfAborted();
-  if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error("图鉴发布版本须为正整数。");
+  if (expected !== null && !isAtlasSnapshotVersion(expected)) throw new Error($t("publish-candidate.text_d804e47d07"));
   const directory = await realpath(root);
   const database = await lockPublication(join(directory, ".publication.sqlite"), signal);
   if (!database) return { status: "busy" };
@@ -138,13 +141,13 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     if (current !== null && version <= current) return { status: "stale", current };
     const candidateRoot = await realpath(candidate).catch(() => undefined);
     if (candidateRoot !== candidate || !(await lstat(candidate).catch(() => undefined))?.isDirectory()) {
-      return { status: "invalid", issues: ["发布候选 data 须为发布根内的实体目录。"] };
+      return { status: "invalid", issues: [$t("publish-candidate.text_fc535c7ff3")] };
     }
     const validation = await validateAtlasCandidate(candidate, expectedPages, signal);
     if (!validation.ok) return { status: "invalid", issues: validation.issues };
     const expectedKeys = new Set(expectedPages.map(atlasPageKey));
     if (expectedKeys.size !== expectedPages.length || validation.pages.length !== expectedKeys.size) {
-      return { status: "invalid", issues: ["发布候选与预期完整分类清单不一致。"] };
+      return { status: "invalid", issues: [$t("publish-candidate.text_7ebd0a02a0")] };
     }
     try {
       await verifyGallery(candidate, validation.pages, signal);
@@ -159,8 +162,8 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
       }
     } catch (error) {
       signal?.throwIfAborted();
-      const issue = errorCode(error) ? "发布候选引用的图库文件缺失或不可读。" :
-        error instanceof Error ? error.message : "发布候选图库校验失败。";
+      const issue = errorCode(error) ? $t("publish-candidate.text_314d461167") :
+        error instanceof Error ? error.message : $t("publish-candidate.text_b3d0b59a93");
       return { status: "invalid", issues: [issue] };
     }
 
@@ -173,7 +176,7 @@ async function publish(root: string, expected: Version, expectedPages: AtlasCand
     if (preparation) {
       // The private candidate advances without modifying the generation of the live branch.
       preparation.baseline = { version: current, root: path };
-      await prunePrepared(target, version).catch(() => console.warn("[atlas] 未能清理旧图鉴候选。"));
+      await prunePrepared(target, version).catch(() => console.warn($t("publish-candidate.text_09f1469a96")));
       return { status: "prepared", version, directory: path };
     }
     return { status: "published", version, directory: path };
@@ -192,8 +195,8 @@ async function prunePrepared(root: string, keep: number) {
   }
 }
 
-const occupiedAtlasData = { status: "invalid", issues: ["图鉴受管目录已有数据，未自动初始化。"] } as const;
-const existingLegacyData = { status: "invalid", issues: ["图鉴已有旧版 data，首版初始化未执行。"] } as const;
+const occupiedAtlasData = { status: "invalid", issues: [$t("publish-candidate.text_f9f3f8cdc6")] } as const;
+const existingLegacyData = { status: "invalid", issues: [$t("publish-candidate.text_4aba396577")] } as const;
 
 export async function hasLegacyAtlasData(root: string): Promise<boolean> {
   if (await readAtlasPublicationPointer(join(root, "current")) === "reset") return false;
@@ -208,7 +211,7 @@ export async function hasLegacyAtlasData(root: string): Promise<boolean> {
 
 export async function publishAtlasCandidate(root: string, expected: Version, version: number,
   expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal): Promise<AtlasPublication> {
-  if (!isAtlasSnapshotVersion(version)) throw new Error("图鉴发布版本须为正整数。");
+  if (!isAtlasSnapshotVersion(version)) throw new Error($t("publish-candidate.text_d804e47d07"));
   return publish(root, expected, expectedPages, async (directory) => ({
     data: join(directory, atlasSnapshotTarget(version)), version,
   }), signal);
@@ -218,18 +221,18 @@ export async function publishAtlasCandidate(root: string, expected: Version, ver
 export async function publishPreparedAtlasCandidate(root: string, expected: Version, prepared: string,
   expectedPages: AtlasCandidateValidation["pages"], signal?: AbortSignal, initialize: Initialization = false,
   options?: AtlasPublicationOptions): Promise<AtlasPublication> {
-  if (initialize && expected !== null) throw new Error("首版图鉴初始化要求没有现用指针。");
+  if (initialize && expected !== null) throw new Error($t("publish-candidate.text_91718baacd"));
   return publish(root, expected, expectedPages, async (directory) => {
     const stagedRoot = dirname(prepared);
     if (dirname(stagedRoot) !== dirname(directory) || !basename(stagedRoot).startsWith(atlasApplyStagingPrefix) ||
-        basename(prepared) !== "candidate") throw new Error("图鉴发布只接收相邻私有暂存中的合成候选。");
+        basename(prepared) !== "candidate") throw new Error($t("publish-candidate.text_76e28bf95f"));
     const target = options?.preparation ? join(directory, ".prepared") : directory;
     if (options?.preparation) {
       await mkdir(target, { mode: 0o700 }).catch((error) => {
         if (errorCode(error) !== "EEXIST") throw error;
       });
       if (await realpath(target) !== target || !(await lstat(target)).isDirectory()) {
-        throw new Error("图鉴候选库须为发布根内的实体目录。");
+        throw new Error($t("publish-candidate.text_1c1a348d03"));
       }
     }
     const snapshots = join(target, "snapshots");
@@ -237,10 +240,10 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
       if (errorCode(error) !== "EEXIST") throw error;
     });
     if (await realpath(snapshots) !== snapshots || !(await lstat(snapshots)).isDirectory()) {
-      throw new Error("图鉴版本库须为发布根内的实体目录。");
+      throw new Error($t("publish-candidate.text_f675720333"));
     }
     if ((await stat(prepared)).dev !== (await stat(snapshots)).dev) {
-      throw new Error("图鉴候选暂存与版本库须位于同一文件系统。");
+      throw new Error($t("publish-candidate.text_4ac3811b2b"));
     }
     let highest = expected ?? 0;
     for (const name of await readdir(snapshots)) {
@@ -248,7 +251,7 @@ export async function publishPreparedAtlasCandidate(root: string, expected: Vers
       if (isAtlasSnapshotVersion(version) && String(version) === name) highest = Math.max(highest, version);
     }
     const version = highest + 1;
-    if (!isAtlasSnapshotVersion(version)) throw new Error("图鉴发布版本已用尽。");
+    if (!isAtlasSnapshotVersion(version)) throw new Error($t("publish-candidate.text_87a9206a79"));
     const destination = dirname(join(target, atlasSnapshotTarget(version)));
     return {
       data: join(prepared, "data"), version, target,

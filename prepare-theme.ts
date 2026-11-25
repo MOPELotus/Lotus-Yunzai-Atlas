@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { createHash } from "node:crypto";
 import { link, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -87,7 +90,7 @@ async function downloadOriginal(asset: readonly [string, number, string], reques
     signal?.throwIfAborted();
     const deadline = AbortSignal.timeout(60_000);
     const active = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    await reportProgress(onProgress, { stage: "theme-download", message: `下载图鉴卡片素材 ${file}（${attempt}/2）`, completed: 0, total: size, unit: "bytes" }, signal);
+    await reportProgress(onProgress, { stage: "theme-download", message: $t("prepare-theme.text_6b71a2d8a1", { "file": file, "attempt": attempt }), completed: 0, total: size, unit: "bytes" }, signal);
     try {
       const response = await request(url, { redirect: "error", credentials: "omit", signal: active });
       if (response.status !== 200 || response.redirected || !response.body || Number(response.headers.get("content-length")) > size) {
@@ -102,7 +105,7 @@ async function downloadOriginal(asset: readonly [string, number, string], reques
         received += chunk.byteLength;
         if (received > size) return;
         chunks.push(chunk);
-        await reportProgress(onProgress, { stage: "theme-download", message: `下载图鉴卡片素材 ${file}`, completed: received, total: size, unit: "bytes" }, signal);
+        await reportProgress(onProgress, { stage: "theme-download", message: $t("prepare-theme.text_ff45401325", { "file": file }), completed: received, total: size, unit: "bytes" }, signal);
       }
       const bytes = Buffer.concat(chunks);
       if (received === size && createHash("sha256").update(bytes).digest("hex") === digest) return bytes;
@@ -126,11 +129,11 @@ export async function prepareAtlasTheme(checkout: URL, options: {
   const missing: string[] = [];
   const selected = [...assets, ...optionalSkillAssets];
   let checked = 0;
-  await reportProgress(onProgress, { stage: "theme", message: "核对图鉴卡片背景与字体", completed: checked, total: selected.length, unit: "个" }, signal);
+  await reportProgress(onProgress, { stage: "theme", message: $t("prepare-theme.text_70ef84a6dc"), completed: checked, total: selected.length, unit: $t("prepare-theme.text_3a116815bc") }, signal);
   for (const [asset, size, digest] of selected) {
     signal?.throwIfAborted();
     if (await available(theme, asset)) {
-      await reportProgress(onProgress, { stage: "theme", message: `已核对 ${asset}`, completed: ++checked, total: selected.length, unit: "个" }, signal);
+      await reportProgress(onProgress, { stage: "theme", message: $t("prepare-theme.text_4b94f19b9d", { "asset": asset }), completed: ++checked, total: selected.length, unit: $t("prepare-theme.text_3a116815bc") }, signal);
       continue;
     }
     const target = join(theme, asset);
@@ -157,7 +160,7 @@ export async function prepareAtlasTheme(checkout: URL, options: {
     if (assets.some(([required]) => required === asset) && !(await Promise.all(directories.map((directory) => available(directory, asset)))).some(Boolean)) {
       missing.push(asset);
     }
-    await reportProgress(onProgress, { stage: "theme", message: `${copied.includes(asset) ? "已复制" : "已核对"} ${asset}`, completed: ++checked, total: selected.length, unit: "个" }, signal);
+    await reportProgress(onProgress, { stage: "theme", message: `${copied.includes(asset) ? $t("prepare-theme.text_8f6f8d979c") : $t("prepare-theme.text_b69f0137d3")} ${asset}`, completed: ++checked, total: selected.length, unit: $t("prepare-theme.text_3a116815bc") }, signal);
   }
   return { copied, missing };
 }

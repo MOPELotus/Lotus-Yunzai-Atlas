@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { lstat } from "node:fs/promises";
 import { matchesLegacyAtlasIndex, maxLegacyAtlasIndexBytes } from "./audit-legacy-source.ts";
 import { readLegacyExportInventory } from "./legacy-coverage.ts";
@@ -23,12 +26,12 @@ export interface LegacyDetailQueueEntry {
 /** Require all fixed indexes and compare every original record key before deriving network work. */
 export async function planLegacyDetailQueue(exportRoot: string, cache: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的图鉴索引检查点目录。");
+  if (!(await lstat(cache)).isDirectory()) throw new Error($t("legacy-detail-queue.text_a744932eae"));
   const checkpoints = await openAtlasPinnedCache(cache);
   const sources = new Map<string, Record<string, unknown>>();
   for (const page of legacyAtlasSourcePages) {
     const bytes = await checkpoints.read(page.indexSha256, maxLegacyAtlasIndexBytes, signal);
-    if (!bytes || !matchesLegacyAtlasIndex(page, bytes)) throw new Error(`图鉴索引未验证（${page.game}/${page.pageId}）。`);
+    if (!bytes || !matchesLegacyAtlasIndex(page, bytes)) throw new Error($t("legacy-detail-queue.text_c9d434139a", { "game": page.game, "pageId": page.pageId }));
     sources.set(`${page.game}/${page.pageId}`, JSON.parse(utf8.decode(bytes)) as Record<string, unknown>);
   }
   const inventory = await readLegacyExportInventory(exportRoot, signal);
@@ -38,7 +41,7 @@ export async function planLegacyDetailQueue(exportRoot: string, cache: string, s
     const original = inventory.pages.get(prefix)!;
     const source = sources.get(prefix)!;
     if (Object.keys(source).length !== original.size || [...original.keys()].some((id) => !Object.hasOwn(source, id))) {
-      throw new Error(`旧导出记录 ID 与固定索引不同（${prefix}）。`);
+      throw new Error($t("legacy-detail-queue.text_182bde1819", { "prefix": prefix }));
     }
     for (const [id, { detailUrl, itemPath, name, exactDetailIdentity }] of original) {
       signal?.throwIfAborted();
@@ -47,7 +50,7 @@ export async function planLegacyDetailQueue(exportRoot: string, cache: string, s
       let state: LegacyDetailQueueEntry["state"] = "identity-review";
       const pinned = bytePinned.get(key);
       if (pinned) {
-        if (`${atlasSourceOrigin}${pinned.detail[0]}` !== detailUrl) throw new Error(`旧导出详情来源与固定字节清单不同（${key}）。`);
+        if (`${atlasSourceOrigin}${pinned.detail[0]}` !== detailUrl) throw new Error($t("legacy-detail-queue.text_ff9d8ab1b4", { "key": key }));
         state = "byte-pinned";
       }
       else if (prefix === "hsr/maze_boss" && exactDetailIdentity && object(source[id]).zh === name) state = "eligible-candidate";
@@ -68,13 +71,13 @@ export async function planLegacyDetailQueue(exportRoot: string, cache: string, s
 if (import.meta.main) {
   const [source, cache, ...extra] = Bun.argv.slice(2);
   if (!source || !cache || extra.length) {
-    console.error("用法：bun legacy-detail-queue.ts <原本地导出根目录> <已有原索引检查点目录>");
+    console.error($t("legacy-detail-queue.text_96cb0352de"));
     process.exitCode = 2;
   } else {
     try {
       console.log(JSON.stringify(await planLegacyDetailQueue(source, cache), null, 2));
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法生成图鉴详情队列。");
+      console.error(error instanceof Error ? error.message : $t("legacy-detail-queue.text_0fbdf0211c"));
       process.exitCode = 1;
     }
   }

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
@@ -44,7 +47,7 @@ async function atomic(path: string, bytes: string | Buffer) {
 
 async function readFileIfExists(path: string) {
   try {
-    if (!(await lstat(path)).isFile()) throw new Error("图鉴工作文件须为实体文件。");
+    if (!(await lstat(path)).isFile()) throw new Error($t("native-atlas-export.text_5ede3d0b52"));
     return await readFile(path);
   } catch (error) {
     if (!missingFile(error)) throw error;
@@ -57,7 +60,7 @@ async function digestCache(root: string, url: string, make: () => Promise<Buffer
   const base = join(root, key.slice(0, 2), key);
   const parent = dirname(base);
   await mkdir(parent, { recursive: true });
-  if (await realpath(parent) !== parent) throw new Error("图鉴缓存目录须为工作区内的实体目录。");
+  if (await realpath(parent) !== parent) throw new Error($t("native-atlas-export.text_ffef18dfb7"));
   const expected = (await readFileIfExists(base + ".sha256"))?.toString("utf8");
   if (expected) {
     const bytes = await readFileIfExists(base);
@@ -65,7 +68,7 @@ async function digestCache(root: string, url: string, make: () => Promise<Buffer
   }
   const bytes = await make();
   if (!bytes) return;
-  if (!valid(bytes)) throw new Error("图鉴原资源字节校验失败。");
+  if (!valid(bytes)) throw new Error($t("native-atlas-export.text_c5dd96efcb"));
   await atomic(base, bytes);
   await atomic(base + ".sha256", sha256(bytes));
   return bytes;
@@ -140,7 +143,7 @@ type GameFolder = {
 export async function nativeAtlasExport({ destination, cache, indexes, sourceRoots, refreshDetails,
   request = fetch, signal, onProgress }: NativeExportOptions) {
   if (!indexes.length || new Set(indexes.map(({ game, pageId, locale = defaultAtlasLocale }) => `${game}/${locale}/${pageId}`)).size !== indexes.length) {
-    throw new Error("选择已验证且互不重复的原图鉴分类。");
+    throw new Error($t("native-atlas-export.text_91bdf9f289"));
   }
   await mkdir(destination, { mode: 0o700 });
   const data = join(destination, "data");
@@ -148,7 +151,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
   const games: Record<string, GameFolder> = {};
   const locales = new Set<AtlasLocale>();
   const assets = new Map<string, Promise<ReturnType<typeof nativeAtlasAssetMetadata> | undefined>>();
-  await reportProgress(onProgress, { stage: "cache", message: "核对可复用的原图资源" }, signal);
+  await reportProgress(onProgress, { stage: "cache", message: $t("native-atlas-export.text_2de581cec9") }, signal);
   const seeds = await imageSeeds(sourceRoots, signal);
   let completedRecords = 0, completedImages = 0;
   const totalRecords = indexes.reduce((sum, page) => sum + page.recordCount, 0);
@@ -157,12 +160,12 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
     const { game, pageId, version, rows, locale = defaultAtlasLocale } = page;
     const language = atlasLocales[locale];
     locales.add(locale);
-    if (rows.size !== page.recordCount) throw new Error("图鉴来源索引条目与所选版本不符。");
+    if (rows.size !== page.recordCount) throw new Error($t("native-atlas-export.text_09b7101a65"));
     const origin = nativeAtlasPageOrigin(page);
     const records: Record<string, unknown> = Object.create(null);
     const input = [...rows];
-    const progress = () => reportProgress(onProgress, { stage: "download", message: `${nativeAtlasGameNames[game].game}/${pageId}，已处理图片 ${completedImages} 张`,
-      completed: completedRecords, total: totalRecords, unit: "条" }, signal);
+    const progress = () => reportProgress(onProgress, { stage: "download", message: $t("native-atlas-export.text_ea255c4f36", { "game": nativeAtlasGameNames[game].game, "pageId": pageId, "completedImages": completedImages }),
+      completed: completedRecords, total: totalRecords, unit: $t("native-atlas-export.text_f004f1d84c") }, signal);
     await progress();
     const indexHash = sha256(JSON.stringify(input));
     const details: AtlasSourceFetch = refreshDetails ? request : async (url, init) => {
@@ -204,7 +207,7 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
     await mkdir(base, { recursive: true });
     for (let offset = 0; offset < input.length; offset += 6) {
       const group = await Promise.allSettled(input.slice(offset, offset + 6).map(async ([id, list]) => {
-        if (!recordId.test(id)) throw new Error("图鉴来源编号无效。");
+        if (!recordId.test(id)) throw new Error($t("native-atlas-export.text_9f9a32e6c8"));
         const record = await readNativeAtlasRecord(page, id, JSON.parse(list), image, signal, details);
         const path = `items/${language.folder}/${game}/${pageId}/${id}.json`;
         const exact = { meta: parseLegacyJsonEvidence(JSON.stringify(record.meta)), content: {
@@ -229,15 +232,15 @@ export async function nativeAtlasExport({ destination, cache, indexes, sourceRoo
       game: { id: game, name: identity.game, folder: identity.folder, versions: [version], requestedVersion: version },
       locales: {},
     };
-    if (target.game.requestedVersion !== version) throw new Error("同一游戏的下载版本须一致。");
+    if (target.game.requestedVersion !== version) throw new Error($t("native-atlas-export.text_61c701da05"));
     const localized = target.locales[locale] ??= { id: locale, ...language, pages: {} };
     localized.pages[pageId] = { id: pageId, ...origin, version,
       recordCount: rows.size, totalRecordCount: rows.size, sampled: false, records };
   }
   await atomic(join(destination, "gallery", "_placeholder", "unknown.svg"), atlasSourcePlaceholder);
   await Bun.write(join(data, "map.json"), JSON.stringify({ meta: { source: "https://nanoka.cc/", locales: [...locales] }, games }) + "\n");
-  await reportProgress(onProgress, { stage: "validate", message: "校验下载的图鉴记录和图片" }, signal);
+  await reportProgress(onProgress, { stage: "validate", message: $t("native-atlas-export.text_4f7683d5ac") }, signal);
   const validation = await validateAtlasCandidate(data, indexes, signal);
-  if (!validation.ok) throw new Error(`原图鉴候选未通过校验。${validation.issues[0] ?? ""}`);
+  if (!validation.ok) throw new Error($t("native-atlas-export.text_01ca88f080", { "value1": validation.issues[0] ?? "" }));
   return validation;
 }

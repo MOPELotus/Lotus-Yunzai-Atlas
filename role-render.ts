@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash, randomInt } from "node:crypto";
 import { constants } from "node:fs";
 import { open, readdir, realpath } from "node:fs/promises";
@@ -220,7 +223,7 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
       const x = 169;
       rounded(ctx, x, top, 106, 30, 5, "rgba(50,50,50,0.40)");
       rounded(ctx, x, top, 80, 30, 5, "rgba(0,0,0,0.40)");
-      paintLines(ctx, ["能量恢复"], x + 8, top + 3, 16, 24, gold, "left", railFont, true);
+      paintLines(ctx, [$t("role-render.text_2d4589477f")], x + 8, top + 3, 16, 24, gold, "left", railFont, true);
       paintLines(ctx, [String(value)], x + 93, top + 3, 16, 24, white, "center", railFont);
     } };
   }
@@ -299,7 +302,7 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
   function levelBlocks(levels: NonNullable<RoleSkillCard["levels"]>, rail = false): Block[] {
     const result: Block[] = [];
     const titles = levels.map(({ level, sourceId }, _, all) => {
-      const title = rail ? `Lv${level}` : `等级 ${level}`;
+      const title = rail ? `Lv${level}` : $t("role-render.text_d6960d887e", { "level": level });
       return all.filter((entry) => entry.level === level).length > 1 && sourceId ? `${title} · ${sourceId}` : title;
     });
     const descriptions = new Map<string, { index: number; parts: string[] }[]>();
@@ -320,7 +323,7 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
       result.push(text(matches.map(({ index }) => titles[index]!).join(" / "), gold, 17));
       result.push(text(first.parts.map((part, index) => {
         if (matches.every((entry) => entry.parts[index] === part)) return part;
-        const label = `数值 ${++variable}`;
+        const label = $t("role-render.text_5963f77bf6", { "value1": ++variable });
         for (const entry of matches) valuesByLevel[entry.index]!.push({ label, text: entry.parts[index]! });
         return `〔${label}〕`;
       }).join("")));
@@ -334,13 +337,13 @@ function makeLayout(texture?: Image, sectionIcon?: Image) {
       const labelWidth = rail ? 174 : 280;
       const tableWidth = rail ? width - 30 : contentWidth;
       const widths = [labelWidth, ...group.map(() => (tableWidth - labelWidth) / group.length)];
-      const headerCells = [rail ? "" : "等级数值", ...titles.slice(start, start + group.length)];
+      const headerCells = [rail ? "" : $t("role-render.text_c9b2243536"), ...titles.slice(start, start + group.length)];
       result.push(rail ? railTableRow(headerCells, widths, 0) : row(headerCells, widths, true));
       const details = new Map<string, { label: string; values: string[] }>();
       for (const [column, level] of group.entries()) {
         const occurrences = new Map<string, number>();
         for (const entry of [...extras[column]!, ...level.details]) {
-          const label = entry.label || "说明";
+          const label = entry.label || $t("role-render.text_4262c45dc7");
           const index = (occurrences.get(label) ?? 0) + 1;
           occurrences.set(label, index);
           const key = JSON.stringify([label, index]);
@@ -442,8 +445,8 @@ async function characterGalleryPortrait(game: Game, name: string | readonly stri
 
 // The original Miao archive declares each of these base portraits valid across elements (`elem: "multi"`).
 const travelerPortraits = {
-  "10000005": { name: "空", digest: "a8755943c92d8027637b5b9bef17090daf89e838cf544c8307671f8c98ed20b6" },
-  "10000007": { name: "荧", digest: "4be7278c87656f59c5860263d6f8b8483a147bd5d04b840b0b7e76ad7b938a54" },
+  "10000005": { name: $t("role-render.text_2f8267a89a"), digest: "a8755943c92d8027637b5b9bef17090daf89e838cf544c8307671f8c98ed20b6" },
+  "10000007": { name: $t("role-render.text_7182722358"), digest: "4be7278c87656f59c5860263d6f8b8483a147bd5d04b840b0b7e76ad7b938a54" },
 } as const;
 
 async function indexedGenshinPortrait(id: string, maxBytes: number, digest?: string): Promise<ArtworkAsset | undefined> {
@@ -643,7 +646,7 @@ export async function renderLookupNotice(query: string, message: string, game: G
   const [background] = await Promise.all([themeImage("bg/bg-sr.webp"), themeFonts ??= loadThemeFonts()]);
   const { wrap, text } = makeLayout();
   const title = wrap(query, 620, 33);
-  const [page] = await renderAtlasPages([{ section: "图鉴资料", panels: [[text(message)]] }], title,
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_8edef1168f"), panels: [[text(message)]] }], title,
     game, "", undefined, background, options, 152);
   return page!;
 }
@@ -715,12 +718,12 @@ function roleSectionStyle(role: RoleDetails, wrap: ReturnType<typeof makeLayout>
       if (!rail) paintLines(ctx, [`${gameNames[role.game]} · ${section} · ${page}`], 225, statsTop - 41, 16, 22, gold);
       rounded(ctx, rail ? 15 : 16, statsTop, width - (rail ? 30 : 32), rail ? 117 : 104, 15,
         rail ? "rgba(245,245,245,0.8)" : "rgba(245,245,245,0.87)");
-      const statTitle = sectionStats ? `${sectionStats.level}级基础数据` : "基础数据";
+      const statTitle = sectionStats ? $t("role-render.text_f5e218433b", { "level": sectionStats.level }) : $t("role-render.text_fd80ea1baa");
       rounded(ctx, rail ? 35 : 30, statsTop - 19, rail ? 170 : 172, 32, 8, "#272f43");
       paintLines(ctx, [statTitle], rail ? 55 : 44, statsTop - 14, 19, 24, white, "left", headerFont);
       const rows = sectionStats?.rows;
       if (!rows?.length) {
-        paintLines(ctx, ["暂无详细数据"], 44, statsTop + 35, 20, 28, "#292e3a");
+        paintLines(ctx, [$t("role-render.text_27665dc0f5")], 44, statsTop + 35, 20, 28, "#292e3a");
       } else {
         const cell = (width - (rail ? 60 : 32)) / rows.length;
         for (const [i, { value, label }] of rows.entries()) {
@@ -801,14 +804,14 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
   if (portrait) overview.push({ height: 300, paint: (ctx, top) => contain(ctx, portrait, margin + 20, top + 8, contentWidth, 284) });
   if (role.overview.description) overview.push(text(role.overview.description));
   const facts = role.overview.facts.map(({ label, value }) => `${label}：${value}`);
-  if (role.overview.rarity) facts.unshift(`稀有度：${role.overview.rarity}`);
+  if (role.overview.rarity) facts.unshift($t("role-render.text_5733a97f5a", { "rarity": role.overview.rarity }));
   if (facts.length) overview.push(text(facts.join(" · "), gold));
   const stats = role.overview.stats ?? [];
   for (let start = 0; start < stats.length; start += 3) {
     overview.push(statRow(stats.slice(start, start + 3)));
   }
 
-  const pages: Page[] = section ? [] : [{ section: "角色总览", panels: overview.length ? [overview] : [] }];
+  const pages: Page[] = section ? [] : [{ section: $t("role-render.text_fc318671fd"), panels: overview.length ? [overview] : [] }];
   const skills = skillGroups.flatMap(({ title, cards }) => [
     ...(rail && title === "技能" ? [] : [[heading(title, undefined, true)]]),
     ...cards.flatMap((card) => {
@@ -845,24 +848,24 @@ export async function renderRoleBook(role: RoleDetails, options: RoleRenderOptio
       return [main, ...effects];
     }),
   ]);
-  if (skills.length) pages.push({ section: { gi: "技能与天赋", hsr: "技能与行迹", zzz: "技能与核心能力" }[role.game], panels: skills });
-  if (ranks.length) pages.push({ section: { gi: "命座", hsr: "星魂", zzz: "影画" }[role.game], panels: ranks.map((rank) => [
+  if (skills.length) pages.push({ section: { gi: $t("role-render.text_8d9c113abc"), hsr: $t("role-render.text_e0008ce9ed"), zzz: $t("role-render.text_4ba431a75f") }[role.game], panels: skills });
+  if (ranks.length) pages.push({ section: { gi: $t("role-render.text_5da80321f0"), hsr: $t("role-render.text_9bd2d5af77"), zzz: $t("role-render.text_e66da4b1b0") }[role.game], panels: ranks.map((rank) => [
     ...(rail ? [railSkillText(`${rank.rank} · ${rank.name}`, rank.description, sectionArt?.ranks?.get(rank.rank) ?? image(rank.artwork))] :
       [heading(`${rank.rank} · ${rank.name}`, image(rank.artwork)), ...(rank.description ? [text(rank.description)] : [])]),
     ...(rank.story ? [text(rank.story, muted, 17)] : []),
   ]) });
   if (extraEidolons.entries.length) {
     const artwork = extraEidolons.icon ? await artworkAsset(extraEidolons.icon) : undefined;
-    pages.push({ section: "奇缘星魂", panels: [
-      [heading("奇缘星魂", undefined, true)],
+    pages.push({ section: $t("role-render.text_fdbab35a55"), panels: [
+      [heading($t("role-render.text_fdbab35a55"), undefined, true)],
       ...extraEidolons.entries.map(rank => rail
         ? [railSkillText(rank.name, rank.description, artwork?.image)]
         : [heading(rank.name, artwork?.image), ...(rank.description ? [text(rank.description)] : [])]),
     ] });
   }
-  if (materials.length) pages.push({ section: "养成材料", panels: materials.map(({ title, items, cost }) => [
-    heading(title, undefined, true), ...(cost === undefined ? [] : [text(`消耗　${cost}`, gold)]),
-    ...items.map((item) => material(item.name ?? (item.id ? `待核对材料（${item.id}）` : "材料"), item.count, image(item.artwork))),
+  if (materials.length) pages.push({ section: $t("role-render.text_87e02c9700"), panels: materials.map(({ title, items, cost }) => [
+    heading(title, undefined, true), ...(cost === undefined ? [] : [text($t("role-render.text_6d73e79621", { "cost": cost }), gold)]),
+    ...items.map((item) => material(item.name ?? (item.id ? $t("role-render.text_69c8843c44", { "id": item.id }) : $t("role-render.text_e140c977bf")), item.count, image(item.artwork))),
   ]) });
 
   const style = section ? roleSectionStyle(role, wrap, sectionArt?.card, portrait, sectionArt?.face ?? icon, background, texture) : undefined;
@@ -882,14 +885,14 @@ export async function renderWeapon(weapon: WeaponDetails, options: RoleRenderOpt
   for (let start = 0; start < weapon.stats.length; start += 3) {
     overview.push(statRow(weapon.stats.slice(start, start + 3)));
   }
-  const section = { gi: "武器", hsr: "光锥", zzz: "音擎" }[game];
-  const grade = { gi: "精", hsr: "叠影", zzz: "改装等级 " }[game];
+  const section = { gi: $t("role-render.text_4fe131173e"), hsr: $t("role-render.text_e733238b28"), zzz: $t("role-render.text_2ce0392ca1") }[game];
+  const grade = { gi: $t("role-render.text_29724f74bb"), hsr: $t("role-render.text_31126cd1e7"), zzz: $t("role-render.text_5926f5bd20") }[game];
   const cards = weapon.refinements.map(({ rank, name, description }) => [
     heading(name ? `${grade}${rank} · ${name}` : `${grade}${rank}`), ...(description ? [text(description)] : []),
   ]);
   // The original equipment card joins its first refinement to the overview, then rounds each remaining card.
   const panels = [[...overview, ...(cards.shift() ?? [])], ...cards].filter((panel) => panel.length);
-  if (weapon.story) panels.push([heading("武器故事"), text(weapon.story)]);
+  if (weapon.story) panels.push([heading($t("role-render.text_4bcc60d36d")), text(weapon.story)]);
   const [page] = await renderAtlasPages([{ section, panels }], title, game, weapon.version, icon, background, options);
   return page!;
 }
@@ -902,7 +905,7 @@ export async function renderAchievementCategory(category: AchievementCategory, a
   ]);
   const icon = artwork ? images.get(artwork) : undefined;
   const { wrap, text } = makeLayout();
-  const [page] = await renderAtlasPages([{ section: "成就", panels: [[text("")]], trailingGap: false }],
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_52b0e1703d"), panels: [[text("")]], trailingGap: false }],
     wrap(name, 620, 33), game, version, icon, background, options, 152);
   return page!;
 }
@@ -917,14 +920,14 @@ export async function renderGenshinCard(card: GenshinCardDetails, options: RoleR
   ]);
   const { wrap, heading, text } = makeLayout(texture);
   const art = card.artwork ? images.get(card.artwork) : undefined;
-  const meta = [`ID ${card.id}`, card.type, card.hp === undefined ? "" : `生命 ${card.hp}`, card.cost && `费用 ${card.cost}`, ...card.tags].filter(Boolean);
+  const meta = [`ID ${card.id}`, card.type, card.hp === undefined ? "" : $t("role-render.text_481fcedd4b", { "hp": card.hp }), card.cost && $t("role-render.text_f21629e751", { "cost": card.cost }), ...card.tags].filter(Boolean);
   const panels: Block[][] = [[text(meta.join(" · "))]];
-  if (card.description) panels[0]!.push(heading("简介"), text(card.description));
-  if (card.source) panels[0]!.push(heading("获得方式"), text(card.source));
+  if (card.description) panels[0]!.push(heading($t("role-render.text_8131eafd02")), text(card.description));
+  if (card.source) panels[0]!.push(heading($t("role-render.text_527c9d78d0")), text(card.source));
   for (const skill of card.skills) {
     panels.push([heading(skill.name), ...(skill.cost ? [text(skill.cost)] : []), text(skill.description)]);
   }
-  const [page] = await renderAtlasPages([{ section: "七圣召唤", panels }], wrap(card.name, 620, 33),
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_8c8df27f6c"), panels }], wrap(card.name, 620, 33),
     "gi", card.version, art, background, options);
   return page!;
 }
@@ -937,7 +940,7 @@ export async function renderReference(data: ReferenceDetails, options: RoleRende
   ]);
   const { wrap, heading, text } = makeLayout(texture);
   const icon = artwork ? images.get(artwork) : undefined;
-  const panels = [[text(intro || "本条目未提供详细说明。")], ...sections.map(({ title, content }) => [heading(title), text(content)])];
+  const panels = [[text(intro || $t("role-render.text_be01b769f0"))], ...sections.map(({ title, content }) => [heading(title), text(content)])];
   return renderAtlasPages([{ section: category, panels }], wrap(name, 620, 33), game, version, icon, background, options, 152, true);
 }
 
@@ -949,9 +952,9 @@ export async function renderMonster(monster: MonsterDetails, options: RoleRender
   ]);
   const { wrap, heading, text } = makeLayout(texture);
   const icon = artwork ? images.get(artwork) : undefined;
-  const panels = [[heading("简介"), text(description)],
+  const panels = [[heading($t("role-render.text_8131eafd02")), text(description)],
     ...sections.map(({ title, content }) => [heading(title), text(content)])];
-  const [page] = await renderAtlasPages([{ section: "敌人", panels }], wrap(name, 620, 33), game, version, icon, background, options, 152);
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_40a2cbbcce"), panels }], wrap(name, 620, 33), game, version, icon, background, options, 152);
   return page!;
 }
 
@@ -964,8 +967,8 @@ export async function renderOnslaught(onslaught: OnslaughtDetails, options: Role
   const { wrap, text, heading } = makeLayout(texture);
   const icon = artwork ? images.get(artwork) : undefined;
   const period = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const title = [`${version.split(".", 2).join(".")} 幽境危战 N5/6`.trim(), period,
-    window?.from === "export" ? "导出时间（轮换待核对）" : ""].filter(Boolean).join(" · ");
+  const title = [$t("role-render.text_9cdb90f0f1", { "value1": version.split(".", 2).join(".") }).trim(), period,
+    window?.from === "export" ? $t("role-render.text_b5375d65dc") : ""].filter(Boolean).join(" · ");
   const blocks = [text(title), ...rules.flatMap(({ difficulty, description }) => [heading(difficulty), text(description)])];
   for (const enemy of enemies) {
     const [first] = enemy.variants;
@@ -973,11 +976,11 @@ export async function renderOnslaught(onslaught: OnslaughtDetails, options: Role
     blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined), text(`Lv${first.level}`));
     blocks.push(text(enemy.variants.map(({ difficulty, level }) => `${difficulty}：Lv${level}`).join(" · ")));
     for (const { difficulty, description } of enemy.variants) {
-      if (description) blocks.push(heading(`${difficulty}说明`), text(description));
+      if (description) blocks.push(heading($t("role-render.text_e5bbfc16a5", { "difficulty": difficulty })), text(description));
     }
     if (enemy.mechanics) blocks.push(text(enemy.mechanics));
   }
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "gi", version, icon, background, options, 152);
   return page!;
 }
@@ -991,10 +994,10 @@ export async function renderTheater(theater: TheaterDetails, options: RoleRender
   ]);
   const { wrap, text, heading } = makeLayout(texture);
   const period = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const provenance = window?.from === "export" ? "导出时间（轮换待核对）" : window ? "" : "轮换时间待核对";
+  const provenance = window?.from === "export" ? $t("role-render.text_b5375d65dc") : window ? "" : $t("role-render.text_73ee4adf7e");
   const overview = [version.split(".", 2).join("."), difficulty, period, provenance,
-    minLevel ? `最低角色等级 Lv${minLevel}` : "最低角色等级待核对",
-    maxAct ? `首领最大幕次 ${maxAct}` : "首领最大幕次待核对"].filter(Boolean).join(" · ");
+    minLevel ? $t("role-render.text_c4278b64e4", { "minLevel": minLevel }) : $t("role-render.text_ceaac5a9cc"),
+    maxAct ? $t("role-render.text_c568f76b1b", { "maxAct": maxAct }) : $t("role-render.text_a87440b261")].filter(Boolean).join(" · ");
   const blocks = [text(overview)];
   const addCards = (items: readonly (typeof cards)[number][]) => {
     for (const { name, artwork, description } of items) {
@@ -1003,7 +1006,7 @@ export async function renderTheater(theater: TheaterDetails, options: RoleRender
     }
   };
   if (elements.length) {
-    blocks.push(heading("限定元素"));
+    blocks.push(heading($t("role-render.text_23308e2908")));
     addCards(elements);
   }
   for (const group of groups) {
@@ -1017,7 +1020,7 @@ export async function renderTheater(theater: TheaterDetails, options: RoleRender
     addCards(act.enemies);
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "gi", version, icon, background, options, 152);
   return page!;
 }
@@ -1031,27 +1034,27 @@ export async function renderAbyss(abyss: AbyssDetails, options: RoleRenderOption
   ]);
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const period = scheduleConflict ? `快照时间 ${range}（与实装公告冲突，待核对）`
-    : window?.from === "export" ? `导出时间 ${range}（轮换待核对）`
-      : range || "轮换时间待核对";
-  const blocks = [text(period), heading("环境与全局效果")];
+  const period = scheduleConflict ? $t("role-render.text_1992c0745f", { "range": range })
+    : window?.from === "export" ? $t("role-render.text_aa37ae4078", { "range": range })
+      : range || $t("role-render.text_73ee4adf7e");
+  const blocks = [text(period), heading($t("role-render.text_1858f14ac1"))];
   for (const { title, description } of effects) blocks.push(heading(title), text(description));
   const hpFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
   for (const room of rooms) {
     blocks.push(heading(room.name), text([room.level ? `Lv${room.level}` : "", room.goal].filter(Boolean).join(" · ")));
     for (const side of room.sides) {
       blocks.push(heading(side.name));
-      if (!side.enemies.length) blocks.push(text("阵容待核对"));
+      if (!side.enemies.length) blocks.push(text($t("role-render.text_cee3478603")));
       for (const enemy of side.enemies) {
         const name = enemy.count && enemy.count > 1 ? `${enemy.name} ×${enemy.count}` : enemy.name;
         blocks.push(heading(name, enemy.artwork ? images.get(enemy.artwork) : undefined));
-        if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
+        if (enemy.hp) blocks.push(text($t("role-render.text_7f3d2cf101", { "value1": hpFormat.format(enemy.hp) })));
         if (enemy.description) blocks.push(text(enemy.description));
       }
     }
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "gi", version, icon, background, options, 152);
   return page!;
 }
@@ -1065,34 +1068,34 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
   ]);
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
+  const period = window?.from === "export" ? $t("role-render.text_aa37ae4078", { "range": range }) : range || $t("role-render.text_73ee4adf7e");
   const intro = [text(period)];
   if (effects.length || rooms.every(({ description }) => !description)) {
-    intro.push(heading("环境与全局效果"));
-    if (!effects.length) intro.push(text("增益说明待核对"));
+    intro.push(heading($t("role-render.text_1858f14ac1")));
+    if (!effects.length) intro.push(text($t("role-render.text_802e7a16fe")));
     for (const effect of effects) {
       if (effect.name) intro.push(heading(effect.name));
-      intro.push(text(effect.description || "增益说明待核对"));
+      intro.push(text(effect.description || $t("role-render.text_802e7a16fe")));
     }
   }
   const addOptional = (blocks: Block[], buffs: typeof optional) => {
     if (!buffs.length) return;
-    blocks.push(heading("可选增益"));
-    for (const buff of buffs) blocks.push(heading(buff.name), text(buff.description || "增益说明待核对"));
+    blocks.push(heading($t("role-render.text_c2bbe82672")));
+    for (const buff of buffs) blocks.push(heading(buff.name), text(buff.description || $t("role-render.text_802e7a16fe")));
   };
   addOptional(intro, optional);
   const continuation = [intro];
   for (const room of rooms) {
     const blocks: Block[] = [];
     const weaknesses = room.sides.flatMap((side) => side.weaknesses.length
-      ? [`${side.name === "星启模式" || side.name === "敌人" ? "" : side.name}弱点 ${side.weaknesses.join(" / ")}`] : []);
+      ? [$t("role-render.text_7b9fca11ef", { "value1": side.name === "星启模式" || side.name === "敌人" ? "" : side.name, "value2": side.weaknesses.join(" / ") })] : []);
     blocks.push(heading(room.name));
     if (weaknesses.length || room.goals.length) blocks.push(text([...weaknesses, ...room.goals].join(" · ")));
     if (room.description) blocks.push(text(room.description));
     if (room.optional) addOptional(blocks, room.optional);
     for (const side of room.sides) {
       blocks.push(heading(side.name));
-      if (!side.enemies.length) blocks.push(text("阵容待核对"));
+      if (!side.enemies.length) blocks.push(text($t("role-render.text_cee3478603")));
       for (const enemy of side.enemies) {
         blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
         if (enemy.level) blocks.push(text(`Lv${enemy.level}`));
@@ -1102,7 +1105,7 @@ export async function renderStarrailChallenge(challenge: StarrailChallengeDetail
     continuation.push(blocks);
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  return renderAtlasPages([{ section: "挑战图鉴", panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
+  return renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
     "hsr", version, icon, background, options, 152);
 }
 
@@ -1116,24 +1119,24 @@ export async function renderShiyu(shiyu: ShiyuDetails, options: RoleRenderOption
   ]);
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const period = forecast ? `快照预计 · ${range}`
-    : window?.from === "export" ? `导出时间 ${range}（轮换待核对）`
-      : range || "起止时间待核对";
+  const period = forecast ? $t("role-render.text_94367bf611", { "range": range })
+    : window?.from === "export" ? $t("role-render.text_aa37ae4078", { "range": range })
+      : range || $t("role-render.text_e3eb56def0");
   const intro = [text(period)];
   if (effects.length) {
-    intro.push(heading("环境与全局效果"));
+    intro.push(heading($t("role-render.text_1858f14ac1")));
     for (const effect of effects) intro.push(heading(effect.name), text(effect.description));
   }
   const continuation = [intro];
   for (const line of lines) {
     const effects = line.rooms.length && line.effects.length ? line.effects.join(" / ") : "";
     const blocks = [heading(line.name), text([line.level ? `Lv${line.level}` : "", line.goals, effects].filter(Boolean).join(" · "))];
-    if (!line.rooms.length && !line.challenges.length) blocks.push(text("阵容待核对"));
+    if (!line.rooms.length && !line.challenges.length) blocks.push(text($t("role-render.text_cee3478603")));
     blocks.push(...zzzRoomBlocks(line.rooms, { heading, text }, images));
     continuation.push(blocks);
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  return renderAtlasPages([{ section: "挑战图鉴", panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
+  return renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [continuation.flat()], trailingGap: false, continuation }], wrap(name, 620, 33),
     "zzz", version, icon, background, options, 152);
 }
 
@@ -1144,13 +1147,13 @@ function zzzRoomBlocks(rooms: readonly ZzzChallengeRoom[],
   for (const room of rooms) {
     if (room.name) blocks.push(heading(room.name));
     const facts = [room.level ? `Lv${room.level}` : "",
-      room.weaknesses.length ? `弱点 ${room.weaknesses.join(" / ")}` : "",
-      room.resistances.length ? `抗性 ${room.resistances.join(" / ")}` : ""].filter(Boolean);
+      room.weaknesses.length ? $t("role-render.text_909ee3bae1", { "value1": room.weaknesses.join(" / ") }) : "",
+      room.resistances.length ? $t("role-render.text_aca7c4e5d8", { "value1": room.resistances.join(" / ") }) : ""].filter(Boolean);
     if (facts.length) blocks.push(text(facts.join(" · ")));
-    if (!room.enemies.length) blocks.push(text("阵容待核对"));
+    if (!room.enemies.length) blocks.push(text($t("role-render.text_cee3478603")));
     for (const enemy of room.enemies) {
       blocks.push(heading(enemy.name, enemy.artwork ? images.get(enemy.artwork) : undefined));
-      if (enemy.hp) blocks.push(text(`快照生命值 ${hpFormat.format(enemy.hp)}`));
+      if (enemy.hp) blocks.push(text($t("role-render.text_7f3d2cf101", { "value1": hpFormat.format(enemy.hp) })));
       if (enemy.description) blocks.push(text(enemy.description));
     }
   }
@@ -1167,11 +1170,11 @@ export async function renderDeadlyAssault(assault: DeadlyAssaultDetails, options
   ]);
   const { wrap, text, heading } = makeLayout(texture);
   const range = window ? `${window.begin.slice(0, 10)} - ${window.end.slice(0, 10)}` : "";
-  const period = window?.from === "export" ? `导出时间 ${range}（轮换待核对）` : range || "轮换时间待核对";
+  const period = window?.from === "export" ? $t("role-render.text_aa37ae4078", { "range": range }) : range || $t("role-render.text_73ee4adf7e");
   const blocks = [text(period)];
   const addOptional = (effects: typeof commonOptional) => {
     if (!effects.length) return;
-    blocks.push(heading("可选增益"));
+    blocks.push(heading($t("role-render.text_c2bbe82672")));
     for (const { name, description } of effects) {
       if (name) blocks.push(heading(name));
       blocks.push(text(description));
@@ -1188,12 +1191,12 @@ export async function renderDeadlyAssault(assault: DeadlyAssaultDetails, options
         blocks.push(text(description));
       }
       if (!commonOptional.length) addOptional(encounter.optional);
-      if (!encounter.rooms.length) blocks.push(text("阵容待核对"));
+      if (!encounter.rooms.length) blocks.push(text($t("role-render.text_cee3478603")));
       blocks.push(...zzzRoomBlocks(encounter.rooms, { heading, text }, images));
     }
   }
   const icon = artwork ? images.get(artwork) : undefined;
-  const [page] = await renderAtlasPages([{ section: "挑战图鉴", panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
+  const [page] = await renderAtlasPages([{ section: $t("role-render.text_6fef084848"), panels: [blocks], trailingGap: false }], wrap(name, 620, 33),
     "zzz", version, icon, background, options, 152);
   return page!;
 }
@@ -1208,10 +1211,10 @@ export async function renderSet(set: SetDetails, options: RoleRenderOptions = {}
   const icon = set.artwork ? images.get(set.artwork) : undefined;
   const title = wrap(set.name, icon ? 620 : contentWidth, 33);
   const pages: Page[] = [];
-  if (set.effects.length) pages.push({ section: "套装效果", panels: set.effects.map((effect) => [heading(effect.title), text(effect.text)]) });
-  if (set.parts.length) pages.push({ section: "套装部件", trailingGap: false, panels: [set.parts.map((part) =>
+  if (set.effects.length) pages.push({ section: $t("role-render.text_985ed4784c"), panels: set.effects.map((effect) => [heading(effect.title), text(effect.text)]) });
+  if (set.parts.length) pages.push({ section: $t("role-render.text_5ee1f7830b"), trailingGap: false, panels: [set.parts.map((part) =>
     material(part.name, undefined, (part.artwork ? images.get(part.artwork) : undefined) ?? themed?.get(part.id)))] });
-  if (set.story) pages.push({ section: "套装故事", panels: [[text(set.story)]], trailingGap: false });
+  if (set.story) pages.push({ section: $t("role-render.text_2edbe7b74a"), panels: [[text(set.story)]], trailingGap: false });
   return renderAtlasPages(pages, title, set.game, set.version, icon, background, options);
 }
 
@@ -1227,18 +1230,18 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
   for (let start = 0; start < bangboo.stats.length; start += 3) {
     overview.push(statRow(bangboo.stats.slice(start, start + 3)));
   }
-  const pages: Page[] = [{ section: "邦布总览", panels: [overview], trailingGap: false }];
+  const pages: Page[] = [{ section: $t("role-render.text_89bcd4b4ad"), panels: [overview], trailingGap: false }];
   if (bangboo.skills.length) {
     const panels = bangboo.skills.map(({ name, type, description, artwork, levels, rows }) => {
       const panel = [heading(name, artwork ? images.get(artwork) : undefined, false, type)];
       if (description) panel.push(text(description));
       if (!rows.length) return panel;
-      panel.push(text("等级数值", gold, 17, 29));
+      panel.push(text($t("role-render.text_c9b2243536"), gold, 17, 29));
       for (let start = 0; start < levels.length; start += 4) {
         const columns = levels.slice(start, start + 4).map((level) => `Lv${level}`);
         const labelWidth = 280;
         const widths = [labelWidth, ...columns.map(() => (contentWidth - labelWidth) / columns.length)];
-        panel.push(row(["项目", ...columns], widths, true));
+        panel.push(row([$t("role-render.text_79f326be44"), ...columns], widths, true));
         for (const item of rows) {
           panel.push(row([item.label, ...item.values.slice(start, start + columns.length)], widths));
         }
@@ -1246,7 +1249,7 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
       }
       return panel;
     });
-    pages.push({ section: "邦布技能", panels });
+    pages.push({ section: $t("role-render.text_f14ca77cb1"), panels });
   }
   return renderAtlasPages(pages, title, "zzz", bangboo.version, icon, background, options, 152);
 }
@@ -1254,10 +1257,10 @@ export async function renderBangboo(bangboo: BangbooDetails, options: RoleRender
 async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | undefined, version: string, icon: Image | undefined,
   background: Image | undefined, { mode = "auto", scale = 4, inlineImageByteLimit }: RoleRenderOptions, titleX = icon ? 152 : margin + 20,
   allowPanelContinuation = false, style?: RoleSectionStyle) {
-  if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError("图鉴缩放比例须在 1 至 4 之间。");
+  if (!Number.isFinite(scale) || scale < 1 || scale > 4) throw new RangeError($t("role-render.text_4846c3467f"));
   const low = nativeImageRasterScale() === 1;
   const pageScale = low ? 1 : scale;
-  const game = gameId ? gameNames[gameId] : "全部游戏";
+  const game = gameId ? gameNames[gameId] : $t("role-render.text_b8eb5f068c");
   const head = style?.headerHeight ?? Math.max(header, 118 + title.length * 39);
   const frame = style?.skillFrame;
   const panelMargin = frame?.margin ?? margin;
@@ -1296,7 +1299,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
         }
         paintLines(ctx, title, titleX, 30, 33, 39, white);
         paintLines(ctx, [`${game} · ${section} · ${page}`], titleX + 2, 35 + title.length * 39, 18, 29, gold);
-        paintLines(ctx, [version ? `资料版本 ${version}` : "角色与装备资料"], titleX + 2, 69 + title.length * 39, 14, 29, muted);
+        paintLines(ctx, [version ? $t("role-render.text_9f837531a3", { "version": version }) : $t("role-render.text_13c626828a")], titleX + 2, 69 + title.length * 39, 14, 29, muted);
       }
 
       let y = head;
@@ -1319,7 +1322,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
         ctx.restore();
         y += panelGap;
       }
-      paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, "#fff");
+      paintLines(ctx, [$t("role-render.text_d51b2d2768", { "page": page })], margin, height - 37, 14, 21, "#fff");
     };
     return renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
       ctx.scale(zoom, zoom);
@@ -1340,26 +1343,26 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
     if (!(image instanceof ImageSizeLimitError) && !fits(image) && pageScale === 4 && image.reducedScaleReason === undefined) {
       const smaller = await renderWithinCodec(layout, section, pageNumber, 2);
       image = smaller instanceof ImageSizeLimitError ? smaller :
-        { ...smaller, reducedScaleReason: "四倍图超过当前聊天的单图大小上限。" };
+        { ...smaller, reducedScaleReason: $t("role-render.text_8396e0dee6") };
     }
     if (!(image instanceof ImageSizeLimitError) && fits(image)) {
       output.push({ section, ...image });
       continue;
     }
     const groups = continuation ?? (allowPanelContinuation ? layout.panels : []);
-    const sizeError = new RangeError(`图鉴「${section}」超过当前聊天的单图大小上限。`);
+    const sizeError = new RangeError($t("role-render.text_d64a756a57", { "section": section }));
     const failure = image instanceof ImageSizeLimitError ? image : sizeError;
     if ((!low && pageScale !== 4 && pageScale !== 2) || groups.length < 2) throw failure;
     // Keep each room or section intact at the smallest scale of the active preset.
     const continuationScale = low ? 1 : 2;
-    const reason = low ? "低配整图超限，按原分项续页。" : "二倍整图超限，按原分项续页。";
+    const reason = low ? $t("role-render.text_af6902cff7") : $t("role-render.text_60c7509992");
     const renderContinuation = async (start: number, end: number): Promise<void> => {
       const selected = groups.slice(start, end);
       const range = end === start + 1 ? String(end) : `${start + 1}–${end}`;
       const part = `${range}/${groups.length}`;
       const partSection = `${section}（${part}）`;
       const panels = continuation ? [selected.flat()] : selected;
-      const next = await renderWithinCodec({ ...layout, panels }, section, `${pageNumber} · 原分项 ${part}`, continuationScale);
+      const next = await renderWithinCodec({ ...layout, panels }, section, $t("role-render.text_04b9449280", { "pageNumber": pageNumber, "part": part }), continuationScale);
       if (!(next instanceof ImageSizeLimitError) && fits(next)) {
         output.push({ section: partSection, ...next, reducedScaleReason: reason + failure.message });
         return;

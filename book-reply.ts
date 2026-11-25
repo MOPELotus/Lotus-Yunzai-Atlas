@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { nativeImageRasterScale } from "@lotus-yunzai/skia";
 import { batchInlineImagePages } from "@lotus-yunzai/skia/forward-images";
 import type { AtlasDelivery, AtlasReply } from "./traditional.ts";
@@ -5,7 +8,7 @@ import type { AtlasDelivery, AtlasReply } from "./traditional.ts";
 type BookPage = { readonly section: string; readonly png: Uint8Array };
 
 export async function atlasBookReply(name: string, render: (scale: 4 | 2 | 1) => Promise<readonly BookPage[]>,
-  delivery?: AtlasDelivery, singleAsForward = false, titleSuffix = "完整图鉴"): Promise<AtlasReply | undefined> {
+  delivery?: AtlasDelivery, singleAsForward = false, titleSuffix = $t("book-reply.text_8aed944862")): Promise<AtlasReply | undefined> {
   const budget = delivery?.inlineImageByteLimit;
   const scale = nativeImageRasterScale();
   let pages = await render(scale);
@@ -16,13 +19,13 @@ export async function atlasBookReply(name: string, render: (scale: 4 | 2 | 1) =>
     pages = await render(2);
   }
   const batches = batchInlineImagePages(pages, budget, bytes);
-  if (!batches?.length) throw new RangeError("图鉴单页超过当前聊天的图片大小上限。");
+  if (!batches?.length) throw new RangeError($t("book-reply.text_9373fc6746"));
 
   const sections = [...new Set(pages.map(({ section }) => section))].join(" → ");
-  const title = `${name}${titleSuffix}\n${sections}\n共 ${pages.length} 页`;
+  const title = $t("book-reply.text_b34e40b621", { "name": name, "titleSuffix": titleSuffix, "sections": sections, "length": pages.length });
   const image = ({ png }: BookPage) => ({ type: "image" as const, file: png });
   if (batches.length === 1) return { type: "forward", nodes: [title, ...pages.map(image)] };
   return { type: "forward-image-batches", batches: batches.map((group, index) => [
-    `${title}（第 ${index + 1}/${batches.length} 段）`, ...group.map(image),
+    $t("book-reply.text_11d4132897", { "title": title, "value2": index + 1, "length": batches.length }), ...group.map(image),
   ]) };
 }

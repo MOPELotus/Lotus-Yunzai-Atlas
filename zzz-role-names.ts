@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 type VerifiedRoleName = readonly [id: string, name: string, fullName: string, alternateNames?: readonly string[]];
 
 // Each entry matches the published character ID, the old command result, and the old card title.

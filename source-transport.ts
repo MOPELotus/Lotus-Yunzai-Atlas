@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 export const atlasSourceOrigin = "https://static.nanoka.cc";
 export type AtlasSourceFetch = (url: string, options: RequestInit) => Promise<Response>;
 
@@ -38,7 +41,7 @@ async function readResponse(url: string, accept: string, limit: number, optional
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => {});
     if (optional && response.status === 404) return;
-    const detail = `图鉴来源读取失败（HTTP ${response.status}）。`;
+    const detail = $t("source-transport.text_1fa380ca04", { "status": response.status });
     throw retryableStatus.has(response.status) ? new Error(detail) : new AtlasReadFailure(detail);
   }
   const reader = response.body.getReader();
@@ -51,7 +54,7 @@ async function readResponse(url: string, accept: string, limit: number, optional
       signal.throwIfAborted();
       if (done) break;
       size += value.byteLength;
-      if (size > limit) throw new AtlasReadFailure("图鉴来源文件超出大小上限。");
+      if (size > limit) throw new AtlasReadFailure($t("source-transport.text_19273d93e7"));
       chunks.push(value);
     }
     return Buffer.concat(chunks, size);

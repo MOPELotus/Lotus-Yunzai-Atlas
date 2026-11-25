@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -11,14 +14,14 @@ const exporterPages = new Set(legacyAtlasSourcePages.map(({ game, pageId }) => `
 /** Prepare the already-private exporter tree from the portions of a published snapshot owned by this exporter. */
 export async function seedExporterFromPublished(data: string, backend: string, signal?: AbortSignal) {
   const validation = await validateAtlasCandidate(data, [], signal);
-  if (!validation.ok) throw new Error(`现用图鉴无法用作下载种子。${validation.issues[0] ?? ""}`);
+  if (!validation.ok) throw new Error($t("export-workspace-seed.text_22187683e1", { "value1": validation.issues[0] ?? "" }));
   const target = join(backend, "data");
   const snapshotRoot = dirname(data);
   const map = await candidateFile(data, "map.json");
   const listing = object(JSON.parse(await readFile(map, "utf8")));
   const games = object(listing.games);
   const pages = validation.pages.filter(({ game, pageId }) => exporterPages.has(`${game}/${pageId}`));
-  if (!pages.length) throw new Error("现用图鉴没有旧导出器支持的分类。");
+  if (!pages.length) throw new Error($t("export-workspace-seed.text_560ac069c0"));
   const selectedPages: Record<string, string[]> = {};
   for (const { game, pageId } of pages) {
     const selected = selectedPages[game] ??= [];
@@ -51,7 +54,7 @@ export async function seedExporterFromPublished(data: string, backend: string, s
     for (const [recordId, value] of Object.entries(object(page.records))) {
       signal?.throwIfAborted();
       const { path } = object(value);
-      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("种子条目路径无效。");
+      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error($t("export-workspace-seed.text_4c46130bac"));
       const source = await candidateFile(data, path);
       const entry = join(target, path);
       await copyCandidateFile(source, entry);
@@ -66,6 +69,6 @@ export async function seedExporterFromPublished(data: string, backend: string, s
     }
   }
   const verified = await validateAtlasCandidate(target, pages, signal);
-  if (!verified.ok || verified.pages.length !== pages.length) throw new Error("种子图鉴在准备时发生变化。");
+  if (!verified.ok || verified.pages.length !== pages.length) throw new Error($t("export-workspace-seed.text_e63116b817"));
   await writeFile(join(target, "gallery-index.json"), JSON.stringify({ images }) + "\n", { flag: "wx", signal });
 }

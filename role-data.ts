@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { Character, Game } from "./catalog.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 import { zzzFullNames } from "./zzz-role-names.ts";
@@ -99,18 +102,18 @@ function genshinElement(list: RecordValue, detail: RecordValue): GenshinElement 
 }
 
 const starRailPaths: Readonly<Record<string, string>> = {
-  Warrior: "毁灭", Rogue: "巡猎", Mage: "智识", Warlock: "虚无", Shaman: "同谐", Knight: "存护", Priest: "丰饶", Memory: "记忆", Elation: "欢愉",
+  Warrior: $t("role-data.text_85a5719200"), Rogue: $t("role-data.text_89ae343575"), Mage: $t("role-data.text_4807b62b3a"), Warlock: $t("role-data.text_135fd7b0a1"), Shaman: $t("role-data.text_b28b5f46a0"), Knight: $t("role-data.text_d55d4d5989"), Priest: $t("role-data.text_18db236249"), Memory: $t("role-data.text_7a6335b379"), Elation: $t("role-data.text_17f4b35418"),
 };
 const starRailElements: Readonly<Record<string, string>> = {
-  Physical: "物理", Fire: "火", Ice: "冰", Thunder: "雷", Wind: "风", Quantum: "量子", Imaginary: "虚数",
+  Physical: $t("role-data.text_a454f17872"), Fire: $t("role-data.text_d4cfe8c82c"), Ice: $t("role-data.text_ce1b850700"), Thunder: $t("role-data.text_5de1b913e7"), Wind: $t("role-data.text_be65bd5518"), Quantum: $t("role-data.text_14ed0de6a1"), Imaginary: $t("role-data.text_8908281fc3"),
 };
 const zenlessSkills: Readonly<Record<string, string>> = {
-  basic: "普通攻击", dodge: "闪避", special: "特殊技", chain: "连携技与终结技", assist: "支援技",
+  basic: $t("role-data.text_d90c73f75a"), dodge: $t("role-data.text_3b89502eed"), special: $t("role-data.text_fb6d88911b"), chain: $t("role-data.text_e0dd8a8c6d"), assist: $t("role-data.text_f3a96442e9"),
 };
 const zenlessButtons: Readonly<Record<string, string>> = {
-  Icon_Normal: "普通攻击", Icon_Evade: "闪避", Icon_Evaded: "闪避反击", Icon_Special: "特殊技",
-  Icon_SpecialReady: "强化特殊技", Icon_SpecialReady_Rp: "强化特殊技", Icon_UltimateReady: "终结技",
-  Icon_Switch: "切换", Icon_QTE: "快速支援", Icon_Chain: "连携技", Icon_Assist: "支援技", Icon_CoreSkill: "核心技",
+  Icon_Normal: $t("role-data.text_d90c73f75a"), Icon_Evade: $t("role-data.text_3b89502eed"), Icon_Evaded: $t("role-data.text_c74ede8277"), Icon_Special: $t("role-data.text_fb6d88911b"),
+  Icon_SpecialReady: $t("role-data.text_85ebf039c1"), Icon_SpecialReady_Rp: $t("role-data.text_85ebf039c1"), Icon_UltimateReady: $t("role-data.text_a985bc32b7"),
+  Icon_Switch: $t("role-data.text_eff514b8b8"), Icon_QTE: $t("role-data.text_40e2ef812f"), Icon_Chain: $t("role-data.text_c601aa644a"), Icon_Assist: $t("role-data.text_f3a96442e9"), Icon_CoreSkill: $t("role-data.text_f1739fc27c"),
 };
 export const genshinRolePortraitFields = ["derived.avatarGacha", "detail.derived.avatarGacha", "derived.avatarBust", "detail.derived.avatarBust",
     "derived.avatarDrawCard", "detail.derived.avatarDrawCard", "detail.gacha", "gacha", "detail.bust", "bust",
@@ -200,7 +203,7 @@ function genshinSkills(detail: RecordValue, artwork: Artwork): RoleSkillGroup[] 
     const name = text(echo.name);
     return name ? [{ name, description: text(echo.desc), details: [], artwork: artwork(`detail.chara_info.trace_effect.${key}.icon`) }] : [];
   });
-  return [...skillGroup("战斗天赋", skills), ...skillGroup("固有天赋", passives), ...skillGroup("绘想游迹", echoes)];
+  return [...skillGroup($t("role-data.text_95208b8c9c"), skills), ...skillGroup($t("role-data.text_c928701188"), passives), ...skillGroup($t("role-data.text_8818cea517"), echoes)];
 }
 
 function starRailSectionSkill(template: unknown, source: readonly RecordValue[], basic: boolean,
@@ -236,7 +239,7 @@ function starRailSectionSkill(template: unknown, source: readonly RecordValue[],
       return value === undefined ? [] : [{ level, value }];
     });
     if (values.length !== selected.length || !values.length) continue;
-    const row = `正文第 ${sectionParameters.length + 1} 项`;
+    const row = $t("role-data.text_10970a1f45", { "value1": sectionParameters.length + 1 });
     sectionParameters.push({ label: row, values });
     for (const [i, { value }] of values.entries()) {
       displayed[i]!.details.push({ label: row, text: print(value) });
@@ -259,15 +262,15 @@ function starRailSkillCard(skill: RecordValue, artwork?: string): RoleSkillCard 
   const basic = /^(?:普攻|普通攻击|忆灵技|忆灵天赋)$/u.test(type ?? "");
   const omitFromSection = label(skill.type) === "MazeNormal" || (!type && (integer(skill.id) ?? 0) % 100 === 6);
   return { name, description: text(skill.simple_desc) ?? levels[0]?.description ?? text(skill.desc),
-    details: type ? [{ label: "类型", text: type }] : [], levels, omitFromSection, sectionEnergy: number(skill.sp_base) || undefined,
+    details: type ? [{ label: $t("role-data.text_ba40014ff4"), text: type }] : [], levels, omitFromSection, sectionEnergy: number(skill.sp_base) || undefined,
     ...starRailSectionSkill(skill.desc, sourceLevels, basic, levels), artwork };
 }
 
 // In the fixed original character sheets these source slots map to me/me2, then mt/mt1/mt2.
 // The variant attack uses 02 or 07; slots 13 and later are separate linked effects.
 const memospriteSectionSlots = [
-  ["01", "忆灵技", "me"], [["02", "07"], "忆灵技", undefined],
-  ["03", "忆灵天赋", "mt"], ["05", "忆灵天赋", undefined], ["06", "忆灵天赋", undefined],
+  ["01", $t("role-data.text_79bd79472f"), "me"], [["02", "07"], $t("role-data.text_79bd79472f"), undefined],
+  ["03", $t("role-data.text_2df39f9d63"), "mt"], ["05", $t("role-data.text_2df39f9d63"), undefined], ["06", $t("role-data.text_2df39f9d63"), undefined],
 ] as const;
 
 function memospriteCard(skill: RecordValue, artwork?: string) {
@@ -310,14 +313,14 @@ function starRailMemospriteCards(id: string, detail: RecordValue, artwork: Artwo
 type StarRailActiveCard = { id: number | undefined; kind: string; card: RoleSkillCard };
 
 const starRailSkillTypes: Readonly<Record<string, string>> = {
-  Normal: "普攻", BPSkill: "战技", Ultra: "终结技", Talent: "天赋", Maze: "秘技", Assist: "助战技",
+  Normal: $t("role-data.text_8b79df27ba"), BPSkill: $t("role-data.text_6d8c868f52"), Ultra: $t("role-data.text_a985bc32b7"), Talent: $t("role-data.text_866e2e6d67"), Maze: $t("role-data.text_4bd90c6477"), Assist: $t("role-data.text_bde5b0a97f"),
 };
 
 function starRailSkillKind(skill: RecordValue) {
   const type = label(skill.type);
   if (type === "MazeNormal") return "";
   const name = label(skill.type_name);
-  if (name) return name === "普通攻击" ? "普攻" : name;
+  if (name) return name === "普通攻击" ? $t("role-data.text_8b79df27ba") : name;
   return Object.hasOwn(starRailSkillTypes, type) ? starRailSkillTypes[type]! : "";
 }
 
@@ -354,7 +357,7 @@ function starRailSectionCards(id: string, skills: readonly StarRailActiveCard[],
     if (covered.has(sourceId)) return [];
     const sectionVariants = parents.get(sourceId);
     return sectionVariants ? [{ ...card, sectionVariants,
-      sectionVariantTitle: id === "1213" && sourceId === 121301 ? "强化普攻" : undefined,
+      sectionVariantTitle: id === "1213" && sourceId === 121301 ? $t("role-data.text_0393687f9e") : undefined,
     }] : [card];
   });
 }
@@ -389,12 +392,12 @@ function starRailSkills(id: string, detail: RecordValue, artwork: Artwork) {
     return [{ name, description: levels[0]?.description, details: levels[0]?.details ?? [], levels, sectionLevels: [],
       omitFromSection: first[1].point_type === 1, artwork: artwork(`detail.skill_trees.${point}.${first[0]}.icon`) }];
   });
-  const active = skillGroup("技能", activeCards.map(({ card }) => card));
-  const passive = skillGroup("行迹", traces);
+  const active = skillGroup($t("role-data.text_99aea2f913"), activeCards.map(({ card }) => card));
+  const passive = skillGroup($t("role-data.text_f852e2fa16"), traces);
   const memosprite = starRailMemospriteCards(id, detail, artwork);
   return {
     skills: [...active, ...passive],
-    sectionSkills: [...skillGroup("技能", starRailSectionCards(id, activeCards, groups)), ...skillGroup("忆灵技能", memosprite), ...passive],
+    sectionSkills: [...skillGroup($t("role-data.text_99aea2f913"), starRailSectionCards(id, activeCards, groups)), ...skillGroup($t("role-data.text_ae9626ede5"), memosprite), ...passive],
   };
 }
 
@@ -433,7 +436,7 @@ function zenlessSkillsAndCores(detail: RecordValue, artwork: Artwork): RoleSkill
       return name ? [{ name, description, details: [], levels: zenlessNumbers(entry, levelNumbers),
         artwork: artwork(`detail.skill.${key}.description.${index}.icon`) }] : [];
     });
-    return skillGroup(label(zenlessSkills[key]) || text(skill.name) || "技能", cards);
+    return skillGroup(label(zenlessSkills[key]) || text(skill.name) || $t("role-data.text_99aea2f913"), cards);
   });
   const cores = new Map<string, RoleSkillLevel[]>();
   for (const [sourceId, row] of rows(object(detail.passive).level)) {
@@ -449,7 +452,7 @@ function zenlessSkillsAndCores(detail: RecordValue, artwork: Artwork): RoleSkill
       cores.set(name, levels);
     }
   }
-  return [...skills, ...skillGroup("核心能力", [...cores].map(([name, levels]) => ({ name, details: [], levels })))];
+  return [...skills, ...skillGroup($t("role-data.text_a53516700f"), [...cores].map(([name, levels]) => ({ name, details: [], levels })))];
 }
 
 function ranksFor(game: Game, detail: RecordValue, artwork: Artwork): RoleRank[] {
@@ -503,11 +506,11 @@ function genshinMaterials(detail: RecordValue, artwork: Artwork): RoleMaterialGr
     }
     groups.push(...materialsGroup(title, items, cost || undefined));
   }
-  collect("角色突破材料", materials.ascensions, "detail.materials.ascensions");
+  collect($t("role-data.text_68d02ac00a"), materials.ascensions, "detail.materials.ascensions");
   const talents = Array.isArray(materials.talents) ? materials.talents : object(materials.talents);
   for (const [key, tree] of Object.entries(talents)) {
     const skillName = Array.isArray(detail.skills) ? text(object(detail.skills[Number(key)]).name) : undefined;
-    collect(skillName ? `${skillName}升级材料` : "天赋升级材料", tree, `detail.materials.talents.${key}`);
+    collect(skillName ? $t("role-data.text_fe79ecadad", { "skillName": skillName }) : $t("role-data.text_0dd207d6ae"), tree, `detail.materials.talents.${key}`);
   }
   return groups;
 }
@@ -519,8 +522,8 @@ function starRailMaterials(detail: RecordValue): RoleMaterialGroup[] {
     return id && count ? [{ id, count }] : [];
   });
   return [
-    ...materialsGroup("角色晋阶材料", values(detail.stats).flatMap((row) => read(row.cost))),
-    ...materialsGroup("行迹材料", values(detail.skill_trees).flatMap((group) => values(group).flatMap((row) => read(row.material_list)))),
+    ...materialsGroup($t("role-data.text_6922395560"), values(detail.stats).flatMap((row) => read(row.cost))),
+    ...materialsGroup($t("role-data.text_0386bafda5"), values(detail.skill_trees).flatMap((group) => values(group).flatMap((row) => read(row.material_list)))),
   ];
 }
 
@@ -531,11 +534,11 @@ function zenlessMaterials(detail: RecordValue): RoleMaterialGroup[] {
     return id && count ? [{ id, count }] : [];
   });
   return [
-    ...materialsGroup("角色晋阶材料", values(detail.level).flatMap((row) => read(row.materials))),
-    ...rows(detail.skill).flatMap(([key, skill]) => materialsGroup(`${label(zenlessSkills[key]) || "技能"}升级材料`,
+    ...materialsGroup($t("role-data.text_6922395560"), values(detail.level).flatMap((row) => read(row.materials))),
+    ...rows(detail.skill).flatMap(([key, skill]) => materialsGroup($t("role-data.text_a173b79e86", { "value1": label(zenlessSkills[key]) || $t("role-data.text_99aea2f913") }),
       values(skill.material).flatMap(read))),
-    ...materialsGroup("核心技升级材料", values(object(detail.passive).materials).flatMap(read)),
-    ...materialsGroup("潜能材料", values(detail.potential_detail).flatMap((row) => values(row.potential_materials).flatMap((item) => {
+    ...materialsGroup($t("role-data.text_0cbc102021"), values(object(detail.passive).materials).flatMap(read)),
+    ...materialsGroup($t("role-data.text_ddf7750af8"), values(detail.potential_detail).flatMap((row) => values(row.potential_materials).flatMap((item) => {
       const id = identifier(item.item_id);
       const count = integer(item.number);
       return id && count ? [{ id, count }] : [];
@@ -546,12 +549,12 @@ function zenlessMaterials(detail: RecordValue): RoleMaterialGroup[] {
 function overviewFacts(game: Game, detail: RecordValue): RoleDetails["overview"]["facts"] {
   const info = object(detail.chara_info);
   const fields: [string, unknown][] = game === "gi"
-    ? [["称号", info.title], ["地区", info.native], ["神之眼", info.vision], ["命之座", info.constellation]]
+    ? [[$t("role-data.text_94c2b0ba85"), info.title], [$t("role-data.text_0b5daa9276"), info.native], [$t("role-data.text_d4e9599744"), info.vision], [$t("role-data.text_a63ee7f0fe"), info.constellation]]
     : game === "hsr"
-      ? [["阵营", info.camp], ["命途", starRailPaths[label(detail.base_type)]], ["属性", starRailElements[label(detail.damage_type)]]]
-      : [["阵营", Object.values(object(detail.camp)).map(label).filter(Boolean).join("、")],
-        ["特性", Object.values(object(detail.weapon_type)).map(label).filter(Boolean).join("、")],
-        ["属性", Object.values(object(detail.element_type)).map(label).filter(Boolean).join("、")]];
+      ? [[$t("role-data.text_5a62168bef"), info.camp], [$t("role-data.text_d9455920fc"), starRailPaths[label(detail.base_type)]], [$t("role-data.text_86de52d178"), starRailElements[label(detail.damage_type)]]]
+      : [[$t("role-data.text_5a62168bef"), Object.values(object(detail.camp)).map(label).filter(Boolean).join("、")],
+        [$t("role-data.text_adcf64ba14"), Object.values(object(detail.weapon_type)).map(label).filter(Boolean).join("、")],
+        [$t("role-data.text_86de52d178"), Object.values(object(detail.element_type)).map(label).filter(Boolean).join("、")]];
   return fields.flatMap(([label, source]) => {
     const value = text(source);
     return value ? [{ label, value }] : [];
@@ -565,11 +568,16 @@ function number(value: unknown): number | undefined {
 type Stat = readonly [label: string, value: number | undefined, format?: Intl.NumberFormat];
 type LevelStats = (typeof levelStats)[number];
 const levelStats = ["生命", "攻击", "防御"] as const;
+const levelStatLabels = {
+  生命: () => $t("role-data.text_45bc77bc1c"),
+  攻击: () => $t("role-data.text_8226ca02ff"),
+  防御: () => $t("role-data.text_75ba7a5727"),
+} as const;
 
 function levelPairs(high: number | undefined, calculate: (stat: LevelStats, high: boolean) => number | undefined): Stat[] {
   return levelStats.flatMap((stat) => [
-    [`Lv1${stat}`, calculate(stat, false)] as const,
-    ...(high === undefined ? [] : [[`Lv${high}${stat}`, calculate(stat, true)] as const]),
+    [`Lv1${levelStatLabels[stat]()}`, calculate(stat, false)] as const,
+    ...(high === undefined ? [] : [[`Lv${high}${levelStatLabels[stat]()}`, calculate(stat, true)] as const]),
   ]);
 }
 
@@ -595,8 +603,8 @@ function genshinStats(detail: RecordValue): Stat[] {
     const base = number(detail[baseField]);
     if (base !== undefined) return base + (number(ascension?.[bonusField]) ?? 0);
   }
-  return [...leveled, ["暴击率", critical("crit_rate", "fight_prop_critical"), percentStat],
-    ["暴击伤害", critical("crit_dmg", "fight_prop_critical_hurt"), percentStat]];
+  return [...leveled, [$t("role-data.text_d4b0baf955"), critical("crit_rate", "fight_prop_critical"), percentStat],
+    [$t("role-data.text_15bccc3951"), critical("crit_dmg", "fight_prop_critical_hurt"), percentStat]];
 }
 
 function starRailStats(detail: RecordValue): Stat[] {
@@ -613,8 +621,8 @@ function starRailStats(detail: RecordValue): Stat[] {
     if (growth !== undefined) return base + growth * 79;
   });
   const stats = last ?? first;
-  return [...leveled, ["速度", number(stats?.speed_base), decimalStat],
-    ["暴击率", number(stats?.critical_chance), percentStat], ["暴击伤害", number(stats?.critical_damage), percentStat]];
+  return [...leveled, [$t("role-data.text_0e14d148b4"), number(stats?.speed_base), decimalStat],
+    [$t("role-data.text_d4b0baf955"), number(stats?.critical_chance), percentStat], [$t("role-data.text_15bccc3951"), number(stats?.critical_damage), percentStat]];
 }
 
 function zenlessStats(detail: RecordValue): Stat[] {
@@ -643,27 +651,27 @@ function zenlessStats(detail: RecordValue): Stat[] {
   });
   const critical = number(stats.crit);
   const criticalDamage = number(stats.crit_dmg ?? stats.crit_damage);
-  return [...leveled, ["冲击力", number(stats.break_stun), decimalStat],
-    ["暴击率", critical === undefined ? undefined : critical / 10_000, percentStat],
-    ["暴击伤害", criticalDamage === undefined ? undefined : criticalDamage / 10_000, percentStat]];
+  return [...leveled, [$t("role-data.text_1a7dc21762"), number(stats.break_stun), decimalStat],
+    [$t("role-data.text_d4b0baf955"), critical === undefined ? undefined : critical / 10_000, percentStat],
+    [$t("role-data.text_15bccc3951"), criticalDamage === undefined ? undefined : criticalDamage / 10_000, percentStat]];
 }
 
 const genshinGrowthLabels: Readonly<Record<string, string>> = {
-  fight_prop_hp_percent: "大生命", fight_prop_attack_percent: "大攻击", fight_prop_defense_percent: "大防御",
-  fight_prop_critical: "暴击", fight_prop_critical_hurt: "爆伤", fight_prop_charge_efficiency: "充能",
-  fight_prop_element_mastery: "精通", fight_prop_heal_add: "治疗",
-  fight_prop_fire_add_hurt: "火伤", fight_prop_water_add_hurt: "水伤", fight_prop_wind_add_hurt: "风伤",
-  fight_prop_ice_add_hurt: "冰伤", fight_prop_rock_add_hurt: "岩伤", fight_prop_elec_add_hurt: "雷伤",
-  fight_prop_grass_add_hurt: "草伤", fight_prop_physical_add_hurt: "物伤",
+  fight_prop_hp_percent: $t("role-data.text_dd1fad216f"), fight_prop_attack_percent: $t("role-data.text_0d43934fdb"), fight_prop_defense_percent: $t("role-data.text_aeed4dc439"),
+  fight_prop_critical: $t("role-data.text_59d499d937"), fight_prop_critical_hurt: $t("role-data.text_c750f692ee"), fight_prop_charge_efficiency: $t("role-data.text_c0c253c271"),
+  fight_prop_element_mastery: $t("role-data.text_591f60433f"), fight_prop_heal_add: $t("role-data.text_c81995fafd"),
+  fight_prop_fire_add_hurt: $t("role-data.text_a2a1cc94c1"), fight_prop_water_add_hurt: $t("role-data.text_66d04b5ad3"), fight_prop_wind_add_hurt: $t("role-data.text_3d148572bd"),
+  fight_prop_ice_add_hurt: $t("role-data.text_37f14a04e3"), fight_prop_rock_add_hurt: $t("role-data.text_208b82f3db"), fight_prop_elec_add_hurt: $t("role-data.text_f698250622"),
+  fight_prop_grass_add_hurt: $t("role-data.text_e7d19b766b"), fight_prop_physical_add_hurt: $t("role-data.text_725e46fa35"),
 };
 
 function sectionBaseStats(game: Game, detail: RecordValue): RoleDetails["overview"]["sectionStats"] {
   if (game === "zzz") return;
   if (game === "hsr") {
     const stats = new Map(starRailStats(detail).map(([label, value]) => [label, value]));
-    const rows = levelStats.map((label) => ({ label: `基础${label}`, value: stats.get(`Lv80${label}`) }));
+    const rows = levelStats.map((label) => ({ label: $t("role-data.text_a60ef97ad9", { "label": label }), value: stats.get(`Lv80${label}`) }));
     const speed = stats.get("速度");
-    if (speed !== undefined) rows.push({ label: "速度", value: speed });
+    if (speed !== undefined) rows.push({ label: $t("role-data.text_0e14d148b4"), value: speed });
     if (!rows.slice(0, 3).every(({ value }) => value !== undefined)) return;
     return { level: 80, rows: rows.map(({ label, value }) => ({ label, value: decimalStat.format(value!) })) };
   }
@@ -672,7 +680,7 @@ function sectionBaseStats(game: Game, detail: RecordValue): RoleDetails["overvie
   const ascension = values(modifiers.ascension).at(-1);
   if (!ascension) return;
   for (const level of [100, 90]) {
-    const base = levelStats.map((stat) => ({ label: `基础${stat}`, value: genshinBase(detail, modifiers, stat, level, ascension) }));
+    const base = levelStats.map((stat) => ({ label: $t("role-data.text_d738370025", { "stat": stat }), value: genshinBase(detail, modifiers, stat, level, ascension) }));
     if (base.some(({ value }) => value === undefined)) continue;
     const rows = base.map(({ label, value }) => ({ label, value: decimalStat.format(Number(value!.toFixed(2))) }));
     const bonus = Object.entries(ascension).flatMap(([property, raw]) => {

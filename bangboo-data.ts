@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry } from "./catalog.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 
@@ -81,14 +84,14 @@ function bangbooSkills(detail: Record<string, unknown>): BangbooSkill[] {
 function bangbooStats(detail: Record<string, unknown>): BangbooDetails["stats"] {
   const stats = object(detail.stats);
   return ([
-    ["生命值", stats.hp_max, "integer"],
-    ["攻击力", stats.attack, "integer"],
-    ["防御力", stats.defence, "integer"],
-    ["冲击力", stats.break_stun, "number"],
-    ["异常掌控", stats.element_abnormal_power, "number"],
-    ["暴击率", stats.crit, "percent"],
-    ["暴击伤害", stats.crit_dmg ?? stats.crit_damage, "percent"],
-    ["耐久", stats.endurance, "number"],
+    [$t("bangboo-data.text_1a256e6376"), stats.hp_max, "integer"],
+    [$t("bangboo-data.text_b84ee11f4f"), stats.attack, "integer"],
+    [$t("bangboo-data.text_1cb579e6ba"), stats.defence, "integer"],
+    [$t("bangboo-data.text_1a7dc21762"), stats.break_stun, "number"],
+    [$t("bangboo-data.text_d29c3efc8f"), stats.element_abnormal_power, "number"],
+    [$t("bangboo-data.text_d4b0baf955"), stats.crit, "percent"],
+    [$t("bangboo-data.text_15bccc3951"), stats.crit_dmg ?? stats.crit_damage, "percent"],
+    [$t("bangboo-data.text_5ad0c596f2"), stats.endurance, "number"],
   ] as const).flatMap<BangbooDetails["stats"][number]>(([label, raw, kind]) => {
     const number = sourceNumber(raw);
     if (number === undefined) return [];

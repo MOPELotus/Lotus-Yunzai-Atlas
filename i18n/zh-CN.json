@@ -1,0 +1,2278 @@
+{
+  "language": "zh-CN",
+  "name": "简体中文",
+  "namespace": "atlas",
+  "description": "图鉴",
+  "sections": {
+    "abyss-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/abyss-data.ts"
+    },
+    "achievements": {
+      "description": "图鉴",
+      "source": "plugins/atlas/achievements.ts"
+    },
+    "acquire-legacy-achievement-art": {
+      "description": "图鉴：立绘",
+      "source": "plugins/atlas/acquire-legacy-achievement-art.ts"
+    },
+    "acquire-legacy-indexes": {
+      "description": "图鉴",
+      "source": "plugins/atlas/acquire-legacy-indexes.ts"
+    },
+    "acquire-legacy-record": {
+      "description": "图鉴",
+      "source": "plugins/atlas/acquire-legacy-record.ts"
+    },
+    "apply-candidate": {
+      "description": "图鉴",
+      "source": "plugins/atlas/apply-candidate.ts"
+    },
+    "assemble-candidate": {
+      "description": "图鉴",
+      "source": "plugins/atlas/assemble-candidate.ts"
+    },
+    "audit-legacy-source": {
+      "description": "图鉴",
+      "source": "plugins/atlas/audit-legacy-source.ts"
+    },
+    "bangboo-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/bangboo-data.ts"
+    },
+    "book-reply": {
+      "description": "图鉴",
+      "source": "plugins/atlas/book-reply.ts"
+    },
+    "boss-source-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/boss-source-data.ts"
+    },
+    "candidate-gallery": {
+      "description": "图鉴：图库",
+      "source": "plugins/atlas/candidate-gallery.ts"
+    },
+    "capture-legacy-details": {
+      "description": "图鉴",
+      "source": "plugins/atlas/capture-legacy-details.ts"
+    },
+    "catalog": {
+      "description": "图鉴",
+      "source": "plugins/atlas/catalog.ts"
+    },
+    "challenges": {
+      "description": "图鉴",
+      "source": "plugins/atlas/challenges.ts"
+    },
+    "deadly-assault-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/deadly-assault-data.ts"
+    },
+    "download-legacy-atlas": {
+      "description": "图鉴：图鉴",
+      "source": "plugins/atlas/download-legacy-atlas.ts"
+    },
+    "export-workspace-seed": {
+      "description": "图鉴",
+      "source": "plugins/atlas/export-workspace-seed.ts"
+    },
+    "full-candidate-gallery": {
+      "description": "图鉴：图库",
+      "source": "plugins/atlas/full-candidate-gallery.ts"
+    },
+    "full-refresh": {
+      "description": "图鉴",
+      "source": "plugins/atlas/full-refresh.ts"
+    },
+    "gcg-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/gcg-data.ts"
+    },
+    "genshin-original-portraits": {
+      "description": "图鉴：原神",
+      "source": "plugins/atlas/genshin-original-portraits.ts"
+    },
+    "help": {
+      "description": "图鉴：帮助",
+      "source": "plugins/atlas/help.ts"
+    },
+    "index": {
+      "description": "图鉴",
+      "source": "plugins/atlas/index.ts"
+    },
+    "initialize-atlas": {
+      "description": "图鉴：图鉴",
+      "source": "plugins/atlas/initialize-atlas.ts"
+    },
+    "legacy-achievement-art": {
+      "description": "图鉴：立绘",
+      "source": "plugins/atlas/legacy-achievement-art.ts"
+    },
+    "legacy-atlas-directory": {
+      "description": "图鉴：图鉴",
+      "source": "plugins/atlas/legacy-atlas-directory.ts"
+    },
+    "legacy-coverage": {
+      "description": "图鉴",
+      "source": "plugins/atlas/legacy-coverage.ts"
+    },
+    "legacy-detail-queue": {
+      "description": "图鉴",
+      "source": "plugins/atlas/legacy-detail-queue.ts"
+    },
+    "legacy-json-evidence": {
+      "description": "图鉴",
+      "source": "plugins/atlas/legacy-json-evidence.ts"
+    },
+    "maintenance": {
+      "description": "图鉴",
+      "source": "plugins/atlas/maintenance.ts"
+    },
+    "native-atlas-export": {
+      "description": "图鉴：图鉴",
+      "source": "plugins/atlas/native-atlas-export.ts"
+    },
+    "native-record-export": {
+      "description": "图鉴",
+      "source": "plugins/atlas/native-record-export.ts"
+    },
+    "onslaught-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/onslaught-data.ts"
+    },
+    "pinned-source-cache": {
+      "description": "图鉴",
+      "source": "plugins/atlas/pinned-source-cache.ts"
+    },
+    "prepare-indexed-only": {
+      "description": "图鉴：资源准备",
+      "source": "plugins/atlas/prepare-indexed-only.ts"
+    },
+    "prepare-theme": {
+      "description": "图鉴：资源准备",
+      "source": "plugins/atlas/prepare-theme.ts"
+    },
+    "publish-candidate": {
+      "description": "图鉴",
+      "source": "plugins/atlas/publish-candidate.ts"
+    },
+    "rebuild-legacy-index": {
+      "description": "图鉴",
+      "source": "plugins/atlas/rebuild-legacy-index.ts"
+    },
+    "reference-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/reference-data.ts"
+    },
+    "refresh-source": {
+      "description": "图鉴",
+      "source": "plugins/atlas/refresh-source.ts"
+    },
+    "retain-gallery": {
+      "description": "图鉴：图库",
+      "source": "plugins/atlas/retain-gallery.ts"
+    },
+    "review-legacy-details": {
+      "description": "图鉴",
+      "source": "plugins/atlas/review-legacy-details.ts"
+    },
+    "role-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/role-data.ts"
+    },
+    "role-material-source": {
+      "description": "图鉴",
+      "source": "plugins/atlas/role-material-source.ts"
+    },
+    "role-render": {
+      "description": "图鉴：图片渲染",
+      "source": "plugins/atlas/role-render.ts"
+    },
+    "set-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/set-data.ts"
+    },
+    "shiyu-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/shiyu-data.ts"
+    },
+    "shiyu-source-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/shiyu-source-data.ts"
+    },
+    "snapshot-pointer": {
+      "description": "图鉴",
+      "source": "plugins/atlas/snapshot-pointer.ts"
+    },
+    "source-acquisition": {
+      "description": "图鉴",
+      "source": "plugins/atlas/source-acquisition.ts"
+    },
+    "source-transport": {
+      "description": "图鉴",
+      "source": "plugins/atlas/source-transport.ts"
+    },
+    "starrail-challenge-data": {
+      "description": "图鉴：星铁",
+      "source": "plugins/atlas/starrail-challenge-data.ts"
+    },
+    "status": {
+      "description": "图鉴：运行状态",
+      "source": "plugins/atlas/status.ts"
+    },
+    "theater-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/theater-data.ts"
+    },
+    "traditional": {
+      "description": "图鉴",
+      "source": "plugins/atlas/traditional.ts"
+    },
+    "update-plan": {
+      "description": "图鉴：更新",
+      "source": "plugins/atlas/update-plan.ts"
+    },
+    "update-policy": {
+      "description": "图鉴：更新",
+      "source": "plugins/atlas/update-policy.ts"
+    },
+    "validate-candidate": {
+      "description": "图鉴",
+      "source": "plugins/atlas/validate-candidate.ts"
+    },
+    "weapon-data": {
+      "description": "图鉴",
+      "source": "plugins/atlas/weapon-data.ts"
+    },
+    "zzz-challenge-data": {
+      "description": "图鉴：绝区零",
+      "source": "plugins/atlas/zzz-challenge-data.ts"
+    }
+  },
+  "messages": {
+    "abyss-data.text_0c18a08596": "霜夜巡天灵主",
+    "abyss-data.text_1175de4368": "深黯钓客",
+    "abyss-data.text_12acd5aa19": "不灭衍生造物",
+    "abyss-data.text_24df5ddd2a": "历经百战的浊水喷吐幻灵",
+    "abyss-data.text_27233b4404": "秒 / ",
+    "abyss-data.text_2aeedc74a3": "嵌合翼骏狮",
+    "abyss-data.text_2b00256572": "祝福说明待核对",
+    "abyss-data.text_2b58e3dafc": "巡陆艇·强侦地效型",
+    "abyss-data.text_2d7f065bf3": "巡陆艇·近战攻坚型",
+    "abyss-data.text_304320c421": "浊水粉碎幻灵",
+    "abyss-data.text_3062d0f2d9": "当期深境螺旋",
+    "abyss-data.text_30c80fa5ec": "浪涛锚定者",
+    "abyss-data.text_3401df6359": "上半",
+    "abyss-data.text_3640f8f604": "嗥狼追猎者",
+    "abyss-data.text_3865c1360c": "愚人众特辖队·榴铳手",
+    "abyss-data.text_38866b106e": "下半",
+    "abyss-data.text_39930dd5da": "蕴光月守宫",
+    "abyss-data.text_3d47fda67e": "秘源机兵·统御械",
+    "abyss-data.text_3f09963704": "冰结镜映体",
+    "abyss-data.text_42816ffea2": "兽怪投掷者",
+    "abyss-data.text_430ad167eb": "幼嫩的分节树",
+    "abyss-data.text_51215e9754": "辉卷之月",
+    "abyss-data.text_53d9916fd0": "巡陆艇·尖端全能斥候型",
+    "abyss-data.text_55e852474e": "历经百战的矮灵雕刻师",
+    "abyss-data.text_56a7d1b401": "嗜雷·兽境猎犬",
+    "abyss-data.text_5b69b89145": "防守目标剩余生命值 {value1}%",
+    "abyss-data.text_5bf6a173a3": "千年珍珠骏麟",
+    "abyss-data.text_615c0291ec": "历经百战的火刃突击队员",
+    "abyss-data.text_653594ba54": "嵌合蝎尾怪",
+    "abyss-data.text_6575c25d77": "凝冰戍卫",
+    "abyss-data.text_6a01a9c6a0": "蕴光奇羊",
+    "abyss-data.text_6bb1396555": "凝冰秘法师",
+    "abyss-data.text_6cc45d4e84": "恒常机关阵列",
+    "abyss-data.text_6e5f6af0fe": "星级条件待核对",
+    "abyss-data.text_710a5e278e": "骇星之月",
+    "abyss-data.text_7b006a82fb": "巡陆艇·强侦斥候型",
+    "abyss-data.text_801d92cb9d": "剩余时间目标 {value1}秒",
+    "abyss-data.text_82a4fc16d0": "深黯魇语之主",
+    "abyss-data.text_8b1237dab2": "大型水史莱姆",
+    "abyss-data.text_8d7ba0d8ff": "深罪浸礼者·水火雷驱役者",
+    "abyss-data.text_90e581898c": "第{floorId}层",
+    "abyss-data.text_94d1fa4137": "兽怪瞄击者",
+    "abyss-data.text_a601e6009c": "蕴光刃犀",
+    "abyss-data.text_ab3797b86a": "愚人众特辖队·雷霰近卫军",
+    "abyss-data.text_affcbaeab8": "历经百战的嵌合梭地兽",
+    "abyss-data.text_b7efb478d8": "黯色空壳·旗令",
+    "abyss-data.text_bbd171adfc": "嵌合鳄蹄兽",
+    "abyss-data.text_be997f83ff": "巡陆艇·近战斥候型",
+    "abyss-data.text_bef76149bd": "历经百战的嵌合兽怪箭士",
+    "abyss-data.text_bfc4580a3b": "凌振之月",
+    "abyss-data.text_c24e07b4d8": "第{floorId}层上半",
+    "abyss-data.text_c2784ae820": "镀金旅团·魔岩役使",
+    "abyss-data.text_c2de1e0419": "历经百战的执灯人",
+    "abyss-data.text_c70eaed73a": "蕴光凛狼",
+    "abyss-data.text_c7231ae3e9": "牙兽狂徒",
+    "abyss-data.text_cadd28a4a1": "丘丘水行游侠",
+    "abyss-data.text_ce2d8fafd2": "荒野狂狩士",
+    "abyss-data.text_cedadf974b": "历经百战的虹彩史莱姆",
+    "abyss-data.text_d00103b2b3": "蕴光月幻蝶",
+    "abyss-data.text_d11c9e779b": "荒野幽徒",
+    "abyss-data.text_d4c0d9d07f": "游雪的护刃",
+    "abyss-data.text_d6857e21b6": "苍遒的木灵长",
+    "abyss-data.text_dbbde2dbad": "嗜岩·兽境猎犬",
+    "abyss-data.text_e05f60a3e4": "黯色空壳·近卫",
+    "abyss-data.text_e2e96871e6": "巡陆艇·尖端火力地效型",
+    "abyss-data.text_e741124190": "敌人 ID {id}（待核对）",
+    "abyss-data.text_e87385989f": "历经百战的盗宝团精锐",
+    "abyss-data.text_ea2eba2e32": "愚人众特辖队·线列军",
+    "abyss-data.text_eb705cfb07": "渊月祝福",
+    "abyss-data.text_f33bde74dc": "建造特化型机关·荒",
+    "abyss-data.text_f429401c02": "愚人众特辖队·火刃突击队",
+    "abyss-data.text_fbab014a6f": "遗迹龙兽·地巡",
+    "abyss-data.text_fdfba9c7f6": "第{floorId}层下半",
+    "achievements.text_013c71b178": "绝区零成就缺少分类表或条目表。",
+    "achievements.text_10fb7d7f06": "成就分类与同版本详情不一致。",
+    "achievements.text_17be829bdc": "绝区零成就子分类无效。",
+    "achievements.text_5dd2a0da72": "成就索引有重复条目 ID。",
+    "achievements.text_aba99b36dc": "绝区零成就一级分类缺少名称。",
+    "achievements.text_b6becdb263": "绝区零成就无法关联到分类。",
+    "achievements.text_c63f9baca8": "成就条目的 ID 或名称无效。",
+    "achievements.text_d8fc875c7d": "成就页没有可查询的条目。",
+    "acquire-legacy-achievement-art.text_43d8588528": "用法：bun acquire-legacy-achievement-art.ts <原导出根> <索引检查点目录> [0至8次，默认4]",
+    "acquire-legacy-achievement-art.text_6a77aab057": "原神成就固定索引未验证。",
+    "acquire-legacy-achievement-art.text_767849c6ed": "检查点目录须与原导出独立。",
+    "acquire-legacy-achievement-art.text_7e9794be5b": "原神成就原图请求次数须在 0 到 {maxRequestsPerRun} 之间。",
+    "acquire-legacy-achievement-art.text_fdff79bddc": "无法获取已核实的原神成就原图。",
+    "acquire-legacy-indexes.text_16e02a3e8f": "图鉴固定索引准备失败。",
+    "acquire-legacy-indexes.text_1be4f6ac73": "图鉴索引请求次数须在 0 到 {length} 之间。",
+    "acquire-legacy-indexes.text_33b521568b": "用法：bun acquire-legacy-indexes.ts <独立本地目录> [--max-requests 0至29]",
+    "acquire-legacy-record.text_4ac14c0938": "图鉴记录文件准备失败。",
+    "acquire-legacy-record.text_5ab663eeb4": "这条图鉴记录尚无核实的固定详情和原图文件清单。",
+    "acquire-legacy-record.text_7ab0b5c8f7": "此图鉴记录的请求次数须在 0 到 {length} 之间。",
+    "acquire-legacy-record.text_82c31cdca0": "用法：bun acquire-legacy-record.ts <原索引检查点目录> <{value1}> [--max-requests 次数]",
+    "acquire-legacy-record.text_c79fcd7834": "图鉴固定详情缺少对应版本索引。",
+    "apply-candidate.text_28893f89d5": "请指定图鉴根目录和本地更新源目录。",
+    "apply-candidate.text_97d0630a08": "用法：bun apply-candidate.ts <图鉴根目录> <本地更新源目录> <gi/[en/]weapon[=版本]> [其他游戏/分类...]",
+    "apply-candidate.text_bc3c38d066": "图鉴根与本地更新源须为独立目录。",
+    "apply-candidate.text_e524ef4b20": "图鉴更新失败。",
+    "assemble-candidate.text_309b8a796e": "合成快照未通过校验。{value1}",
+    "assemble-candidate.text_44004e8aef": "首版图鉴未通过校验。{value1}",
+    "assemble-candidate.text_6432460220": "候选条目路径越界。",
+    "assemble-candidate.text_65d3e90779": "合成只接受三款已核对游戏的快照。",
+    "assemble-candidate.text_83319cc095": "源快照未通过校验。{value1}",
+    "assemble-candidate.text_8d106fd217": "图鉴源和候选目录必须独立。",
+    "assemble-candidate.text_a3b938775a": "请选择一个或多个不重复的候选分类。",
+    "assemble-candidate.text_a868f5eb09": "基线、更新源和合成目标必须是独立目录。",
+    "assemble-candidate.text_b8fc108fbc": "源索引在合成期间改变。",
+    "assemble-candidate.text_bb1ede8e66": "原图鉴导出的分类与已核定首版不同。",
+    "assemble-candidate.text_ed495c48a6": "原图鉴导出的详情或图库数量与已核定首版不符。",
+    "assemble-candidate.text_f0c7918b6e": "快照 data 须为实体目录。",
+    "audit-legacy-source.text_7a852fed09": "用法：bun audit-legacy-source.ts（只读核对原 29 个索引）",
+    "bangboo-data.text_15bccc3951": "暴击伤害",
+    "bangboo-data.text_1a256e6376": "生命值",
+    "bangboo-data.text_1a7dc21762": "冲击力",
+    "bangboo-data.text_1cb579e6ba": "防御力",
+    "bangboo-data.text_5ad0c596f2": "耐久",
+    "bangboo-data.text_b84ee11f4f": "攻击力",
+    "bangboo-data.text_d29c3efc8f": "异常掌控",
+    "bangboo-data.text_d4b0baf955": "暴击率",
+    "book-reply.text_11d4132897": "{title}（第 {value2}/{length} 段）",
+    "book-reply.text_8aed944862": "完整图鉴",
+    "book-reply.text_9373fc6746": "图鉴单页超过当前聊天的图片大小上限。",
+    "book-reply.text_b34e40b621": "{name}{titleSuffix}\n{sections}\n共 {length} 页",
+    "boss-source-data.text_18da30c2cc": "危局来源缺少一致的实装窗口或记录身份（{id}）。",
+    "boss-source-data.text_2b4c27c8b5": "危局来源实装窗口重叠。",
+    "boss-source-data.text_71a00bce6c": "危局来源索引条目数无效。",
+    "boss-source-data.text_dd4d7ab95e": "危局来源详情缺少层级、评分或原图，或与实装窗口不符（{id}）。",
+    "candidate-gallery.text_1ca4fa7583": "图库文件内容与记录不符：{path}",
+    "candidate-gallery.text_2cf763d5ee": "复制时图库文件发生变化：{path}",
+    "candidate-gallery.text_8e2bb9f484": "源图片路径或哈希无效。",
+    "candidate-gallery.text_c5b8f2ebf0": "快照引用的文件必须位于源目录内且为实体文件。",
+    "candidate-gallery.text_e5b44f21d9": "图库路径冲突：{path}",
+    "candidate-gallery.text_e864732606": "补取的图库文件与原记录不符：{path}",
+    "capture-legacy-details.text_219d2ba444": "候选文件名与固定条目身份不符。",
+    "capture-legacy-details.text_2b2c170d11": "图鉴详情候选请求次数须在 0 到 {maxRequestsPerRun} 之间。",
+    "capture-legacy-details.text_3a0afaea23": "无法保存图鉴详情候选。",
+    "capture-legacy-details.text_7f305ba3ee": "用法：bun capture-legacy-details.ts <原导出根> <索引检查点目录> <候选目录> <0至8次> [游戏/分类/ID ...]",
+    "capture-legacy-details.text_8e53e8d3c8": "请求中含重复条目或没有可核实身份的图鉴详情候选。",
+    "capture-legacy-details.text_bd6b383835": "详情候选须与原导出及原索引检查点分开保存。",
+    "capture-legacy-details.text_befc162e23": "详情候选未通过原字节复核。",
+    "capture-legacy-details.text_de18fef78a": "请指定独立的本地图鉴详情候选目录。",
+    "catalog.text_092a6b7674": "击破",
+    "catalog.text_135fd7b0a1": "虚无",
+    "catalog.text_17f4b35418": "欢愉",
+    "catalog.text_18db236249": "丰饶",
+    "catalog.text_2c2de1f14a": "{name}索引包含无效或重复的条目。",
+    "catalog.text_2ce0392ca1": "音擎",
+    "catalog.text_2da8a77416": "位面饰品",
+    "catalog.text_3c8cb9d9f6": "图鉴发布指针丢失或版本倒退。",
+    "catalog.text_3db03533c2": "双手剑",
+    "catalog.text_40a2cbbcce": "敌人",
+    "catalog.text_428fb8bfee": "异常",
+    "catalog.text_4456d1cdc8": "S级",
+    "catalog.text_4807b62b3a": "智识",
+    "catalog.text_4fe131173e": "武器",
+    "catalog.text_52b0e1703d": "成就",
+    "catalog.text_5864750f87": "命破",
+    "catalog.text_6239fc646e": "遗器套装",
+    "catalog.text_668f5712af": "圣遗物套装名称缺失或不一致。",
+    "catalog.text_672bf41f03": "单手剑",
+    "catalog.text_69a58e24ce": "B级",
+    "catalog.text_7a6335b379": "记忆",
+    "catalog.text_7ad730d9ed": "锋御",
+    "catalog.text_82a3071aa1": "{name}索引缺项或收录数量不符。",
+    "catalog.text_85a5719200": "毁灭",
+    "catalog.text_89ae343575": "巡猎",
+    "catalog.text_8f83d07fae": "法器",
+    "catalog.text_92d50bd5df": "防护",
+    "catalog.text_9aa79fc650": "支援",
+    "catalog.text_a2927891f0": "星铁",
+    "catalog.text_aa46a7c35b": "邦布",
+    "catalog.text_abaccecdde": "已发布图鉴索引须为实体文件。",
+    "catalog.text_b1110352c9": "绝区零",
+    "catalog.text_b28b5f46a0": "同谐",
+    "catalog.text_b4cc81a2da": "长柄武器",
+    "catalog.text_c47b54e84e": "角色",
+    "catalog.text_c9ffdabf6a": "强攻",
+    "catalog.text_d1597c51ed": "原神",
+    "catalog.text_d245c1825d": "驱动盘",
+    "catalog.text_d55d4d5989": "存护",
+    "catalog.text_d63ac6066a": "图鉴索引缺少可用分类。",
+    "catalog.text_d97da89d3d": "弓",
+    "catalog.text_e6c2ad53f8": "A级",
+    "catalog.text_e733238b28": "光锥",
+    "catalog.text_fc2ee58f3d": "圣遗物",
+    "challenges.text_021d012f08": "虚事成理",
+    "challenges.text_0551caec03": "骑士",
+    "challenges.text_0e9b00150c": "来源关卡",
+    "challenges.text_22edd0035a": "取象为文",
+    "challenges.text_38028918f7": "王棋",
+    "challenges.text_4b7b8e83d9": "危局强袭战",
+    "challenges.text_5629e20a86": "试炼",
+    "challenges.text_59977c7f79": "混沌回忆",
+    "challenges.text_64fa2949c6": "领航冥茫",
+    "challenges.text_6fc1f71265": "漆黑残响",
+    "challenges.text_82f72c6585": "深境螺旋",
+    "challenges.text_88d514ca0b": "绝境",
+    "challenges.text_8cb870ae6a": "幻想真境剧诗",
+    "challenges.text_8dae72d970": "末日幻影",
+    "challenges.text_be12270e62": "物竞天择",
+    "challenges.text_c3354e0ec8": "幽境危战",
+    "challenges.text_ce3b386bd7": "楼层",
+    "challenges.text_d66b949b63": "虚构叙事",
+    "challenges.text_d9733ee617": "难度配置",
+    "challenges.text_e4539ff0bd": "第{id}层",
+    "challenges.text_ea18af671f": "支配遗忘",
+    "challenges.text_ecaa55b32c": "防线与房间",
+    "challenges.text_f718dc4321": "式舆防卫战",
+    "challenges.text_fdc6c58c58": "异相仲裁",
+    "deadly-assault-data.text_0aef3b8c0c": "当期危局强袭战",
+    "deadly-assault-data.text_3b6942b7e9": "关卡 ID {id}（待核对）",
+    "deadly-assault-data.text_5629e20a86": "试炼",
+    "deadly-assault-data.text_7bdacec67a": "{name} · 记录 ID {id}",
+    "deadly-assault-data.text_88d514ca0b": "绝境",
+    "deadly-assault-data.text_f39c9be50a": "〔术语待核对〕",
+    "deadly-assault-data.text_fdd4893d17": "房间 ID {roomId}",
+    "download-legacy-atlas.text_0066134b36": "份",
+    "download-legacy-atlas.text_14e3c0ff4c": "已合并缓存分类",
+    "download-legacy-atlas.text_172fb7e67b": "次",
+    "download-legacy-atlas.text_1771cc7cef": "公网图鉴候选未通过校验。{value1}",
+    "download-legacy-atlas.text_3dafe5ba08": "该工作目录已有公网图鉴下载正在进行。",
+    "download-legacy-atlas.text_3df9d389f2": "请选择图鉴原站提供的 {game} 版本。",
+    "download-legacy-atlas.text_4fb249b9d7": "类",
+    "download-legacy-atlas.text_653f0b567a": "图鉴下载数据须位于工作区实体目录内。",
+    "download-legacy-atlas.text_684cdc373a": "读取图鉴分类索引",
+    "download-legacy-atlas.text_6bd0054d35": "{game}/{pageId} 原站索引结构无效。",
+    "download-legacy-atlas.text_77ca65d8d6": "图鉴下载数据不能包含链接或特殊文件。",
+    "download-legacy-atlas.text_8a3f324c06": "未选中图鉴下载分类。",
+    "download-legacy-atlas.text_95bb7ca492": "公网图鉴下载工作目录必须独立于发布目录。",
+    "download-legacy-atlas.text_9d4c31335c": "请选择已识别且不重复的图鉴分类。",
+    "download-legacy-atlas.text_a2620068b1": "原站固定版本图鉴分类或条目数与旧资料记录不符。",
+    "download-legacy-atlas.text_a69c44183e": "{game}/{pageId} 同版索引缺少现用条目 {missing}。",
+    "download-legacy-atlas.text_b5d3ed2aca": "合并已核验的缓存分类",
+    "download-legacy-atlas.text_b64465cf72": "原站导出不提供繁體中文，请使用自备图鉴目录。",
+    "download-legacy-atlas.text_b7fd9bfe7e": "图鉴原资源缓存须为实体目录。",
+    "download-legacy-atlas.text_bf1bf7fb83": "图鉴下载锁须为实体文件。",
+    "download-legacy-atlas.text_c4b8b7fec9": "图鉴下载工作目录须为实体目录。",
+    "download-legacy-atlas.text_cedf3f02d2": "核对已有快照与可复用缓存",
+    "download-legacy-atlas.text_cef83d8a3f": "完整图鉴候选校验通过",
+    "download-legacy-atlas.text_d56bc78b95": "已核对缓存，可复用 {value1} 类",
+    "download-legacy-atlas.text_e0f6853717": "校验完整图鉴候选与资源引用",
+    "download-legacy-atlas.text_f5e34cb3d5": "已读取 {game}/{pageId} 索引",
+    "export-workspace-seed.text_22187683e1": "现用图鉴无法用作下载种子。{value1}",
+    "export-workspace-seed.text_4c46130bac": "种子条目路径无效。",
+    "export-workspace-seed.text_560ac069c0": "现用图鉴没有旧导出器支持的分类。",
+    "export-workspace-seed.text_e63116b817": "种子图鉴在准备时发生变化。",
+    "full-candidate-gallery.text_06f63e4b7d": "缺少已校验挑战补图 {path}。",
+    "full-candidate-gallery.text_bfd63a47cb": "{game}/{pageId} {id} 的已下载图标 {field} 缺少可验证原图。",
+    "full-refresh.text_91aa230636": "来源缺少全量更新要求的分类。",
+    "full-refresh.text_e19e5572d6": "全量图鉴候选中的固定副本与原图不符：{path}",
+    "gcg-data.text_1949905ccb": "万能",
+    "gcg-data.text_2a717f01fd": "战意",
+    "gcg-data.text_327b54d04f": "水",
+    "gcg-data.text_32b19b3ff2": "{name}元素伤害",
+    "gcg-data.text_5a93d6dea8": "物理伤害",
+    "gcg-data.text_5d7906f5af": "任意",
+    "gcg-data.text_5de1b913e7": "雷",
+    "gcg-data.text_8c8df27f6c": "七圣召唤",
+    "gcg-data.text_91b246b5db": "草",
+    "gcg-data.text_9638a2a0f9": "岩",
+    "gcg-data.text_a137256a13": "秘传",
+    "gcg-data.text_a56acb7c0a": "相同",
+    "gcg-data.text_be65bd5518": "风",
+    "gcg-data.text_c0c253c271": "充能",
+    "gcg-data.text_ce1b850700": "冰",
+    "gcg-data.text_d2b9a9ed29": "蛇之狡谋",
+    "gcg-data.text_d4cfe8c82c": "火",
+    "gcg-data.text_e106770c98": "角色牌",
+    "gcg-data.text_fcaee3d650": "行动牌",
+    "genshin-original-portraits.text_0596d45768": "米提亚",
+    "genshin-original-portraits.text_5c1ac4ef79": "原神补充立绘已检查",
+    "genshin-original-portraits.text_752fa906ed": "达妮卡",
+    "genshin-original-portraits.text_9a0b2b16d5": "核对原神补充立绘",
+    "genshin-original-portraits.text_be494ab8cf": "瓦列里",
+    "genshin-original-portraits.text_eac1851ba5": "安娜丝塔夏",
+    "genshin-original-portraits.text_f56a049fcc": "张",
+    "help.text_0a0d8db5be": "挑战图鉴：#本期幻想图鉴 / *上期末日图鉴 / %上期危局图鉴",
+    "help.text_672eff0602": "数据目录：默认 data/atlas，可用 LOTUS_ATLAS_DATA_DIR 指定快照",
+    "help.text_922eeeb074": "主人维护：#检查图鉴更新 / #更新图鉴",
+    "help.text_9fd01ef12e": "图鉴帮助",
+    "help.text_bb0c86266e": "显式：#图鉴 原神 元素专家·第一辑 / #图鉴 绝区零 星见雅",
+    "help.text_ccc6b2cff8": "成就分类：#成就分类 原神 元素专家·第一辑",
+    "help.text_e250d03b82": "Lotus-Yunzai · 图鉴\n图鉴查询公开资料，个人战绩使用各游戏原命令。",
+    "help.text_e36378c363": "状态：#图鉴状态",
+    "help.text_fbea48d29c": "直查：#神里绫华图鉴 / *卡芙卡星魂 / %艾莲影画",
+    "index.text_0022fe1b27": "未找到匹配的角色。",
+    "index.text_0371b7ccae": "当前轮换 · 中国服（UTC+8）",
+    "index.text_077bf29c3c": "用法：#邦布图鉴 名称或 ID",
+    "index.text_08e794ea54": "{command}用于查询{value2}的套装。",
+    "index.text_0daad61b9b": "下期预览 · 快照暂无实装起止时间。",
+    "index.text_1113492a90": "{value1} · {length} 项 · ID {id}",
+    "index.text_1cb115d399": "{name}{value2}轮换时间待核对。请输入记录 ID 或名称查看资料。",
+    "index.text_1f9c2c1a6e": "{title}\n当前快照缺少已核对的敌人简介。",
+    "index.text_23f23f332e": "星铁 虚构叙事 本期",
+    "index.text_24453570a4": "更多 ID 可在模式列表中查看。",
+    "index.text_2a1ba26efb": "{command}用于查询{value2}的装备。",
+    "index.text_2fde7e30bd": "用法：#角色图鉴 [原神|星铁|绝区零] 名称或 ID",
+    "index.text_30180ca5b7": "记录 ID {id}",
+    "index.text_31ab2c7f89": "用法：{command} {value2}名称或 ID",
+    "index.text_322c9a75a3": "{origin} · {begin} 至 {end}",
+    "index.text_33ff71e25f": "未找到挑战记录，请核对完整名称或记录 ID。",
+    "index.text_372aef067b": "星铁 虚构叙事 下期",
+    "index.text_385a845b60": "等",
+    "index.text_3bb7575ef6": "输入记录 ID 或名称查看关卡资料，也可在模式后追加第2页等页码。",
+    "index.text_40a2cbbcce": "敌人",
+    "index.text_444fd3abe5": "{value1} · {length} 项",
+    "index.text_4475247780": "效果待核对",
+    "index.text_460a5905a7": "用法：{command} {value2}套装名或 ID",
+    "index.text_462fe295af": "星铁 异相仲裁 上期",
+    "index.text_465fd7591f": "星铁 异相仲裁 本期",
+    "index.text_474da3018a": "本期",
+    "index.text_4f615c5b46": "原神 幻想真境剧诗 本期",
+    "index.text_4ff826ade5": "绝区零 式舆防卫战 下期",
+    "index.text_5241b1c170": "请输入第 1 至 {lastPage} 页。",
+    "index.text_53b64e740d": "当前快照缺少可验证的关卡详情。",
+    "index.text_54024cd9af": "{value1}挑战图鉴：{value2}。请输入模式以查看记录。",
+    "index.text_58877b9712": "{reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。",
+    "index.text_58aa1755f5": "等级待核对",
+    "index.text_5da80321f0": "命座",
+    "index.text_5ea1d04f1e": "成就分类 · {length} 类 · 第 {pageNo}/{lastPage} 页",
+    "index.text_5f1fd3609a": "所查询的角色资料已关闭。",
+    "index.text_60b6ab7a1e": "快照时间（与实装公告冲突，待核对）",
+    "index.text_650bb48331": "下期幻想真境剧诗（预览）",
+    "index.text_66c0400fa3": "绝区零 危局强袭战 本期",
+    "index.text_6b0debea9e": "星铁 混沌回忆 本期",
+    "index.text_6ef2a277d9": "{name}（下期预览）",
+    "index.text_6f30975ca8": "图鉴查询",
+    "index.text_6fc8bcd0fb": "结果较多，请补充游戏名或更完整的套装名。",
+    "index.text_7842602050": "用法：#成就图鉴 [原神|星铁|绝区零] 成就名或 ID",
+    "index.text_789d6a7807": "可在指令末尾追加第2页等页码。",
+    "index.text_7a7f310335": "{name}的{title}图片暂不可用。",
+    "index.text_7bbe6c3397": "{value1}\n图鉴图片暂不可用。",
+    "index.text_7da40803fc": "页码须为正整数。",
+    "index.text_8186572b6d": "该条目缺少已知的起止时间。",
+    "index.text_86140a0ef0": "星铁 混沌回忆 下期",
+    "index.text_866e2e6d67": "天赋",
+    "index.text_87015456e4": "适用范围待核对",
+    "index.text_88ddf3bb5d": "原神 深境螺旋 上期",
+    "index.text_8980fcebd5": "部分索引未更新，可发送 #图鉴状态 查看版本。",
+    "index.text_8a9a6307d2": "星铁 末日幻影 下期",
+    "index.text_8edfa1d941": "绝区零 式舆防卫战 本期",
+    "index.text_91711408c0": "快照版本 {version}",
+    "index.text_917308100d": "星铁 异相仲裁",
+    "index.text_937287fb35": "结果较多，请补充游戏名或更完整的名称。",
+    "index.text_93bf8689d8": "结果较多，请补充更完整的邦布名。",
+    "index.text_988a8c7958": "图鉴条目详情不可用，请检查当前图鉴导出。",
+    "index.text_98c96a56f3": "未找到匹配的图鉴资料。请补充游戏名或更完整的名称。",
+    "index.text_9b77e5462d": "快照记录的实装时间",
+    "index.text_9bd2d5af77": "星魂",
+    "index.text_9c15bd2faa": "绝区零 式舆防卫战 上期",
+    "index.text_9f485d385e": "未找到匹配的套装。",
+    "index.text_9fb779bd4e": "套装效果待核对",
+    "index.text_9feb60bc21": "快照中未收录{value1}的{name}资料。",
+    "index.text_a1c77908b9": "未找到挑战记录。",
+    "index.text_a5b2f72b96": "下期{name}（预览）",
+    "index.text_a71660671b": "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID",
+    "index.text_a8194dabf7": "原神 · 七圣召唤 · {name} · ID {id}",
+    "index.text_a8586004a5": "原神 深境螺旋 本期",
+    "index.text_a9329215e7": "{message}\n部分索引未更新，可发送 #图鉴状态 查看版本。",
+    "index.text_aa46a7c35b": "邦布",
+    "index.text_aad88bbc56": "未找到匹配的成就分类。",
+    "index.text_abf3e7c38f": "{value1} · {length} 项 · 第 {pageNo}/{lastPage} 页",
+    "index.text_af838aec58": "共 {lastPage} 页，请调整页码。",
+    "index.text_b1110352c9": "绝区零",
+    "index.text_b5375d65dc": "导出时间（轮换待核对）",
+    "index.text_b62f5b9093": "未找到匹配的成就。",
+    "index.text_b86852571f": "暂无图片",
+    "index.text_b94f39a33e": "{label} · 共 {count} 条{value3}",
+    "index.text_bc116d5f55": "共 {length} 条，请补充游戏名或更完整的成就名。",
+    "index.text_c328e97537": "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。",
+    "index.text_c47b54e84e": "角色",
+    "index.text_c7ce8f379a": "星铁 混沌回忆 上期",
+    "index.text_c8385932e6": "{value1}暂无{title}资料。",
+    "index.text_cd4bc503b9": "结果较多，请补充游戏名或更完整的角色名。",
+    "index.text_cd528b99b7": "{name}有 {length} 条同名记录，请用 ID 查询。",
+    "index.text_ce1c0c2a97": "{pieces}件套 · {value2}",
+    "index.text_d3078be4ad": "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]",
+    "index.text_da2e8f829b": "未找到匹配的角色资料。",
+    "index.text_db7ee5aa2c": "未找到匹配的邦布。",
+    "index.text_db8a4c0aa4": "绝区零 危局强袭战 上期",
+    "index.text_dbe2bd1676": "星铁 末日幻影 本期",
+    "index.text_e0345c079e": "原神 幻想真境剧诗 上期",
+    "index.text_e21512c2d7": "未找到匹配的武器、光锥或音擎。",
+    "index.text_e81d464df2": "异相仲裁存在同名资料，请使用 #挑战图鉴 星铁 异相仲裁 记录 ID。",
+    "index.text_eed20307a6": "{value1} · {name} · 共 {length} 条 · 第 {page}/{lastPage} 页",
+    "index.text_f23aa440a0": "原神 幻想真境剧诗 下期",
+    "index.text_f852e2fa16": "行迹",
+    "index.text_fa8a08f435": "星铁 异相仲裁 下期",
+    "index.text_fac8d9c7dc": "星铁 虚构叙事 上期",
+    "index.text_fbe30ba493": "星铁 末日幻影 上期",
+    "index.text_fd83cbeec8": "快照预计（下期预览）",
+    "index.text_fdd3b21b30": "下期预览 · 导出时间",
+    "index.text_febffc01b1": "[原神|星铁|绝区零] ",
+    "initialize-atlas.text_0e9b40aac6": "自动初始化要求选定版本渠道和空的图鉴受管目录。",
+    "initialize-atlas.text_130f55bdd2": "本地图鉴初始化须选择来源版本。",
+    "initialize-atlas.text_172fb7e67b": "次",
+    "initialize-atlas.text_1c4ae98347": "无法从原图鉴导出初始化。",
+    "initialize-atlas.text_303c400120": "复核并发布图鉴快照",
+    "initialize-atlas.text_37e3605f80": "图鉴目标和原导出必须是独立目录。",
+    "initialize-atlas.text_47646fe5f3": "图鉴发布结果：{status}",
+    "initialize-atlas.text_4a1b408bb7": "图鉴已准备完成",
+    "initialize-atlas.text_4a2d40a630": "准备七圣召唤资料与原图",
+    "initialize-atlas.text_4aba396577": "图鉴已有旧版 data，首版初始化未执行。",
+    "initialize-atlas.text_5a1e7018bd": "用法：bun initialize-atlas.ts <本地图鉴目标目录> [已有原导出目录 | --public 下载工作目录 [--channel live|latest [--locale zh|en|ja|ko]]]",
+    "initialize-atlas.text_6970c2265f": "请提供已有的本地图鉴目标目录和原导出目录。",
+    "initialize-atlas.text_7ace6b5247": "未找到旧图鉴导出，请指定包含 data/map.json 和 gallery/ 的原目录。",
+    "initialize-atlas.text_99cc90b917": "读取原站图鉴版本清单",
+    "initialize-atlas.text_bc4f0f24bb": "来源缺少首装要求的完整图鉴分类。",
+    "initialize-atlas.text_d4f0cfe34b": "自动初始化仅可写实体受管目录。",
+    "initialize-atlas.text_df624ad8a2": "组装完整图鉴快照",
+    "initialize-atlas.text_ed7979ec3b": "图鉴初始化已中止，下载工作目录已保留。",
+    "initialize-atlas.text_f8acb7484e": "原站清单未列出三款游戏所选的图鉴版本。",
+    "legacy-achievement-art.text_6e5852299c": "原神成就原图清单与旧图库指纹不同。",
+    "legacy-achievement-art.text_e3f16aa669": "原神成就原图与固定索引不符（{id}）。",
+    "legacy-atlas-directory.text_1055dc7a7a": "旧图鉴 map.json 须为实体文件。",
+    "legacy-atlas-directory.text_249fbc657f": "旧图鉴 data 须为原导出目录下的实体目录。",
+    "legacy-atlas-directory.text_46622f1071": "检测到两个不同的旧图鉴导出。请设置 LOTUS_ATLAS_DATA_DIR，或在初始化时指定来源目录。",
+    "legacy-coverage.text_2bb22f4f27": "旧导出含无效原图引用。",
+    "legacy-coverage.text_3bd0da63bd": "旧导出原图身份冲突（{path}）。",
+    "legacy-coverage.text_3d110cd8ca": "用法：bun legacy-coverage.ts <原本地导出根目录> <已有原响应检查点目录>",
+    "legacy-coverage.text_76ce939c70": "旧导出详情来源不同（{game}/{pageId}/{id}）。",
+    "legacy-coverage.text_80f126a0ac": "旧导出含无效占位图引用。",
+    "legacy-coverage.text_880f10b843": "旧条目与固定详情不符（{key}）。",
+    "legacy-coverage.text_8ef7bf9f0f": "旧导出缺少原图引用清单（{game}/{pageId}/{id}）。",
+    "legacy-coverage.text_b62ae1d00c": "旧导出条目路径无效（{game}/{pageId}/{id}）。",
+    "legacy-coverage.text_c809914da2": "旧导出的详情或图库引用总数与核实版本不同。",
+    "legacy-coverage.text_d2735a1a84": "旧导出与核实的 29 类目录不同。{value1}",
+    "legacy-coverage.text_d702da97bb": "请指定已有的原响应检查点目录。",
+    "legacy-coverage.text_e190c71e7f": "旧原图引用与固定来源不同（{key}/{galleryPath}）。",
+    "legacy-coverage.text_e1dc5ba60d": "无法核对图鉴准备覆盖范围。",
+    "legacy-coverage.text_fc78d0c62d": "旧导出索引来源不同（{game}/{pageId}）。",
+    "legacy-detail-queue.text_0fbdf0211c": "无法生成图鉴详情队列。",
+    "legacy-detail-queue.text_182bde1819": "旧导出记录 ID 与固定索引不同（{prefix}）。",
+    "legacy-detail-queue.text_96cb0352de": "用法：bun legacy-detail-queue.ts <原本地导出根目录> <已有原索引检查点目录>",
+    "legacy-detail-queue.text_a744932eae": "请指定已有的图鉴索引检查点目录。",
+    "legacy-detail-queue.text_c9d434139a": "图鉴索引未验证（{game}/{pageId}）。",
+    "legacy-detail-queue.text_ff9d8ab1b4": "旧导出详情来源与固定字节清单不同（{key}）。",
+    "legacy-json-evidence.text_415632bcd5": "图鉴 JSON 数字指数超出可比较范围。",
+    "legacy-json-evidence.text_fb7f38a962": "当前运行时无法保留图鉴 JSON 原数字。",
+    "maintenance.text_0081035a40": "图鉴检查更新",
+    "maintenance.text_00bb111576": "网站最新版",
+    "maintenance.text_00f3a0dd93": "全量图鉴候选校验未通过，保留现用资料。",
+    "maintenance.text_02f4bcddda": "图鉴全量更新结果",
+    "maintenance.text_0d36d4e059": "只有 bot 主人可以操作图鉴更新。",
+    "maintenance.text_10023a4719": "轮换变化 {length} 类",
+    "maintenance.text_18407f2acc": "检查图鉴更新",
+    "maintenance.text_187c603311": "只有 bot 主人可以重置图鉴。",
+    "maintenance.text_1892c2deac": "图鉴重置已中止。",
+    "maintenance.text_19176efda0": "同版原神角色未发布可用的新立绘，保留现用快照。",
+    "maintenance.text_1b7e026d87": "未能核实 {value1} 的目标版本，本次范围未发布。",
+    "maintenance.text_1ee847eab2": "正在检查图鉴版本，随后增量更新有变化的分类。",
+    "maintenance.text_2d0f7094c0": "来源版本未知",
+    "maintenance.text_2f20706539": "{channelLabel} · {targetNotes} · 本次范围 {value3} 类",
+    "maintenance.text_31e8a4f658": "{initial}七圣召唤已保存到候选 {version}。",
+    "maintenance.text_36498405d4": "图鉴 version_channel 须为 live 或 latest，请先修正配置。",
+    "maintenance.text_379b18aabc": "正在全量核对三款游戏图鉴，首次初始化可能需要较长时间。",
+    "maintenance.text_39737080fa": "图鉴更新结果",
+    "maintenance.text_461b879530": "图鉴全量更新候选校验未通过。",
+    "maintenance.text_4ad318f411": "{value1} → {cardsVersion}，待更新",
+    "maintenance.text_4cdf443413": "原神角色同版索引已变化，本次立绘补齐保留现用快照。",
+    "maintenance.text_4ecaaefc5a": "图鉴初始化未完成，已保留现有资料和下载工作目录。",
+    "maintenance.text_5295d8b192": "当前图鉴只读使用旧版导出。请先运行本地初始化，再管理更新。",
+    "maintenance.text_53ddba063e": "原神角色 {recovered} 张原立绘已保存到候选 {version}，现用图鉴保持原版。",
+    "maintenance.text_55863134b4": "已有图鉴更新正在进行，请稍后再试。",
+    "maintenance.text_56cd0a6b70": "原神角色已补齐 {recovered} 张原立绘，发布至快照 {version}。",
+    "maintenance.text_5c3c9ca389": "已有图鉴发布正在进行，请稍后再试。",
+    "maintenance.text_5d199e4105": "自动初始化",
+    "maintenance.text_5d74fe58b3": "图鉴版本清单不可用，保留现有资料。",
+    "maintenance.text_6381ac1279": "{localVersion} → {targetVersion}，可准备候选",
+    "maintenance.text_6412aa91ff": "当前使用显式图鉴数据目录，请通过本地运维更新该目录。",
+    "maintenance.text_65622e8ee9": "初始化",
+    "maintenance.text_66e09aa55a": "更新未完成，保留现有资料",
+    "maintenance.text_677eadf5cc": "未能核实三款游戏的目标版本，保留现用图鉴。",
+    "maintenance.text_6a5b70b02d": "没有可重置的主图鉴快照。",
+    "maintenance.text_6c5f47554f": "已有发布正在进行，本次候选未发布",
+    "maintenance.text_6d75c3fa59": "原神角色原立绘补齐未完成，保留现用快照。",
+    "maintenance.text_6d8e08e8bc": "或原图",
+    "maintenance.text_716b6e5f0a": "图鉴{action}候选已保存，尚未发布至现用目录。候选 {version}。",
+    "maintenance.text_71f3bfeb96": "已是同一正式版本 {targetVersion}",
+    "maintenance.text_7327f89ea6": "已更新至 {targetVersion}",
+    "maintenance.text_7450e285ce": "未完成全量图鉴更新，保留现用资料。",
+    "maintenance.text_761bd81ffb": "七圣召唤 · {status}",
+    "maintenance.text_76cfbd225f": "图鉴配置未选中已核实的分类。",
+    "maintenance.text_76ec12c518": "现用快照已切换，本次候选未发布",
+    "maintenance.text_787aeeb910": "{value1} → {target}，待更新",
+    "maintenance.text_78a03c1095": "所选 {updateCount} 类",
+    "maintenance.text_79c12b1c4f": "现有分类不完整，保留现有资料",
+    "maintenance.text_7a91c98cee": "清空图鉴",
+    "maintenance.text_7f5a5a0f48": "请直接发送 {resetCommand}。",
+    "maintenance.text_838d247eea": "图鉴全量更新失败。",
+    "maintenance.text_856bc930b5": "候选校验未通过，保留现有资料",
+    "maintenance.text_85d5a6e6b5": "{initial}七圣召唤已发布至第 {version} 版。",
+    "maintenance.text_8721c2ee4a": "来源版本低于现有版本或无法比较，保留现有资料",
+    "maintenance.text_8739b76ffa": "图鉴更新",
+    "maintenance.text_8bba9f4859": "候选 {version} 已校验并保存，现用图鉴保持原版",
+    "maintenance.text_8c8df27f6c": "七圣召唤",
+    "maintenance.text_8ce8132099": "图鉴未{action}，{value2}。",
+    "maintenance.text_92702fca10": "请直接发送 {value1}。",
+    "maintenance.text_93a48223a5": "正式版",
+    "maintenance.text_9924455013": "其余待更新分类留待下次检查。",
+    "maintenance.text_9ab75e22ac": "{subject}{remaining} 个角色分类仍缺同版材料名称{value3}。",
+    "maintenance.text_9b3a6a2fe1": "已发布 {length} 个角色分类的同版材料补充。",
+    "maintenance.text_9bd3b76919": "图鉴初始化完成，已发布第 {version} 版。",
+    "maintenance.text_9d1109443e": "图鉴材料补齐失败。",
+    "maintenance.text_9dea67f0e0": "图鉴已重置，源文件和历次快照仍可恢复。请发送 #全量更新图鉴 重新初始化。",
+    "maintenance.text_a129de6bae": "图鉴全量更新",
+    "maintenance.text_a1d9a1a253": "图鉴重置结果",
+    "maintenance.text_a1fd01784c": "请直接发送 {fullCommand}。",
+    "maintenance.text_a5dd9b6faa": "已是同一版本 {cardsVersion}",
+    "maintenance.text_a697ff9f5c": "现用快照已切换，本次候选未发布。",
+    "maintenance.text_a7a2a739e5": "图鉴版本检查",
+    "maintenance.text_a9f5927eb0": "同版角色材料未补齐，保留现用资料。",
+    "maintenance.text_ac0f10a2bb": "重置图鉴",
+    "maintenance.text_ad4064c097": "全量更新图鉴",
+    "maintenance.text_b4c318a2ff": "图鉴重置",
+    "maintenance.text_b64465cf72": "原站导出不提供繁體中文，请使用自备图鉴目录。",
+    "maintenance.text_b6544a8b27": "原神角色还有 {length} 张已核原立绘待补齐。",
+    "maintenance.text_ba4f669a8a": "所选 {updateCount} 类未完成更新，现用快照仍可用。",
+    "maintenance.text_baafe46bb2": "现用图鉴资料无法核实，请先检查本地快照。",
+    "maintenance.text_bca4ca195f": "未能核实来源版本",
+    "maintenance.text_be036087b6": "维护已中止",
+    "maintenance.text_be27cdb354": "所选渠道有分类低于现用版本或版本无法比较，保留现用图鉴。",
+    "maintenance.text_c11231482f": "{coverage}未发布，{value2}。",
+    "maintenance.text_c23c8528bc": "正在检查图鉴版本，有变化的分类将保存到候选目录。",
+    "maintenance.text_c44c0384aa": "图鉴初始化候选 {version} 已保存，尚未发布至现用目录。",
+    "maintenance.text_c5e07c6f80": "三款游戏的全部 30 类图鉴已重新核对，和现用资料一致。",
+    "maintenance.text_c665f73806": "本地版本为 {target}",
+    "maintenance.text_cc53bd6fe9": "当前使用显式图鉴数据目录，请通过本地运维管理该目录。",
+    "maintenance.text_cd1e045cad": "已是同一正式版本 {version}",
+    "maintenance.text_cdbc37343c": "图鉴候选校验未通过，保留现有资料。",
+    "maintenance.text_cfe6010915": "图鉴维护已中止。",
+    "maintenance.text_d0c1a32df8": "正在检查图鉴版本差异。",
+    "maintenance.text_d3668a8bb1": "同版角色材料：{value1}。",
+    "maintenance.text_d3c3ad57b0": "未准备",
+    "maintenance.text_d5e6d60866": "或图标",
+    "maintenance.text_d789551441": "图鉴增量更新失败。",
+    "maintenance.text_daed5cdbcc": "{length} 个角色分类待补齐同版材料名称{value2}。",
+    "maintenance.text_db2e57513e": "{initial}七圣召唤待更新，可发送 {updateCommand} 重试。",
+    "maintenance.text_db9bdc61d1": "图鉴{action}完成，已发布第 {version} 版。",
+    "maintenance.text_dc73097905": "版本未知",
+    "maintenance.text_def2a88624": "候选中",
+    "maintenance.text_e6341fdc17": "维护完成。",
+    "maintenance.text_ea0cc6cf35": "{coverage}已核对并发布至快照 {version}。",
+    "maintenance.text_ec4d921bb2": "本地所选 {length} 类版本均为目标版本。",
+    "maintenance.text_ece6aabfc6": "图鉴自动更新未启用。",
+    "maintenance.text_ed2d308174": "三款游戏的全部 30 类图鉴已更新，发布至快照 {version}。",
+    "maintenance.text_eeffca51b0": "无法重置图鉴，保留现有资料。",
+    "maintenance.text_f3da2d9ad9": "更新图鉴",
+    "maintenance.text_f5446217a0": "无法核对图鉴快照，请稍后重试。",
+    "maintenance.text_fc7ce19535": "图鉴数据未初始化或无法验证，请先准备完整快照。",
+    "maintenance.text_fe82dd5549": "已核对挑战轮换，来源索引与现用资料一致。",
+    "native-atlas-export.text_01ca88f080": "原图鉴候选未通过校验。{value1}",
+    "native-atlas-export.text_09b7101a65": "图鉴来源索引条目与所选版本不符。",
+    "native-atlas-export.text_2de581cec9": "核对可复用的原图资源",
+    "native-atlas-export.text_4f7683d5ac": "校验下载的图鉴记录和图片",
+    "native-atlas-export.text_5ede3d0b52": "图鉴工作文件须为实体文件。",
+    "native-atlas-export.text_61c701da05": "同一游戏的下载版本须一致。",
+    "native-atlas-export.text_91bdf9f289": "选择已验证且互不重复的原图鉴分类。",
+    "native-atlas-export.text_9f9a32e6c8": "图鉴来源编号无效。",
+    "native-atlas-export.text_c5dd96efcb": "图鉴原资源字节校验失败。",
+    "native-atlas-export.text_ea255c4f36": "{game}/{pageId}，已处理图片 {completedImages} 张",
+    "native-atlas-export.text_f004f1d84c": "条",
+    "native-atlas-export.text_ffef18dfb7": "图鉴缓存目录须为工作区内的实体目录。",
+    "native-record-export.text_1077b809a5": "四星",
+    "native-record-export.text_149f5763ce": "无限精英组",
+    "native-record-export.text_1ccef31aa0": "幻想真境剧诗挑战",
+    "native-record-export.text_2ce0392ca1": "音擎",
+    "native-record-export.text_2d99d85003": "无效的原图鉴分类或版本。",
+    "native-record-export.text_40a2cbbcce": "敌人",
+    "native-record-export.text_4b7b8e83d9": "危局强袭战",
+    "native-record-export.text_4cdaab8f22": "二星",
+    "native-record-export.text_4fe131173e": "武器",
+    "native-record-export.text_52b0e1703d": "成就",
+    "native-record-export.text_54b89f9012": "未分类",
+    "native-record-export.text_59977c7f79": "混沌回忆",
+    "native-record-export.text_5fdd673ed1": "三星",
+    "native-record-export.text_6239fc646e": "遗器套装",
+    "native-record-export.text_72a4407f6a": "原图鉴详情格式无效。",
+    "native-record-export.text_789a6953ec": "五星",
+    "native-record-export.text_82f72c6585": "深境螺旋",
+    "native-record-export.text_83e9c51b3d": "星",
+    "native-record-export.text_8b9c031034": "难度组",
+    "native-record-export.text_8dae72d970": "末日幻影",
+    "native-record-export.text_a1c6f7a65f": "敌人数值",
+    "native-record-export.text_a2927891f0": "星铁",
+    "native-record-export.text_aa46a7c35b": "邦布",
+    "native-record-export.text_b1110352c9": "绝区零",
+    "native-record-export.text_b421060376": "一星",
+    "native-record-export.text_b4f37d0a87": "地脉异常",
+    "native-record-export.text_b8a7da050d": "原图地址未指向对应游戏的 Nanoka CDN。",
+    "native-record-export.text_c47b54e84e": "角色",
+    "native-record-export.text_c9f9d88c98": "精英组",
+    "native-record-export.text_cab879dffb": "无效的原图鉴条目编号。",
+    "native-record-export.text_d1597c51ed": "原神",
+    "native-record-export.text_d245c1825d": "驱动盘",
+    "native-record-export.text_d66b949b63": "虚构叙事",
+    "native-record-export.text_e23587866d": "六星",
+    "native-record-export.text_e733238b28": "光锥",
+    "native-record-export.text_f718dc4321": "式舆防卫战",
+    "native-record-export.text_fc2ee58f3d": "圣遗物",
+    "native-record-export.text_fdc6c58c58": "异相仲裁",
+    "onslaught-data.text_979a332955": "详情",
+    "pinned-source-cache.text_32bfdeb0af": "图鉴下载目录须为空或已有图鉴下载检查点。",
+    "pinned-source-cache.text_8c333f683d": "图鉴下载目录须为实体目录。",
+    "pinned-source-cache.text_948d4d0cfb": "图鉴检查点文件名无效。",
+    "pinned-source-cache.text_9a83cbf731": "请指定独立的本地图鉴下载目录。",
+    "pinned-source-cache.text_bd9bfe19d3": "图鉴下载检查点须为实体文件。",
+    "pinned-source-cache.text_f3f9030b75": "图鉴下载检查点与登记的 SHA-256 不符。",
+    "prepare-indexed-only.text_16c2bda5c8": "图鉴暂存条目路径越界。",
+    "prepare-indexed-only.text_39974af741": "无法准备图鉴索引条目。",
+    "prepare-indexed-only.text_552c12b00a": "请指定新的本地图鉴暂存目录。",
+    "prepare-indexed-only.text_7bcd14ada8": "用法：bun prepare-indexed-only.ts <原导出根> <原索引检查点目录> [新暂存目录]",
+    "prepare-indexed-only.text_81c5c1e826": "图鉴暂存目录须与原导出及索引检查点独立。",
+    "prepare-indexed-only.text_a744932eae": "请指定已有的图鉴索引检查点目录。",
+    "prepare-indexed-only.text_c9d434139a": "图鉴索引未验证（{game}/{pageId}）。",
+    "prepare-indexed-only.text_da2375a60e": "旧索引类含独立详情（{key}）。",
+    "prepare-indexed-only.text_eda67c0992": "旧条目与固定索引不符（{game}/{pageId}/{id}）。",
+    "prepare-indexed-only.text_f34794b093": "图鉴暂存未通过运行时结构验证。{value1}",
+    "prepare-theme.text_3a116815bc": "个",
+    "prepare-theme.text_4b94f19b9d": "已核对 {asset}",
+    "prepare-theme.text_6b71a2d8a1": "下载图鉴卡片素材 {file}（{attempt}/2）",
+    "prepare-theme.text_70ef84a6dc": "核对图鉴卡片背景与字体",
+    "prepare-theme.text_8f6f8d979c": "已复制",
+    "prepare-theme.text_b69f0137d3": "已核对",
+    "prepare-theme.text_ff45401325": "下载图鉴卡片素材 {file}",
+    "publish-candidate.text_0829ad6eb5": "图鉴发布锁须为实体文件。",
+    "publish-candidate.text_09f1469a96": "[atlas] 未能清理旧图鉴候选。",
+    "publish-candidate.text_1c1a348d03": "图鉴候选库须为发布根内的实体目录。",
+    "publish-candidate.text_314d461167": "发布候选引用的图库文件缺失或不可读。",
+    "publish-candidate.text_4aba396577": "图鉴已有旧版 data，首版初始化未执行。",
+    "publish-candidate.text_4ac3811b2b": "图鉴候选暂存与版本库须位于同一文件系统。",
+    "publish-candidate.text_76e28bf95f": "图鉴发布只接收相邻私有暂存中的合成候选。",
+    "publish-candidate.text_7ebd0a02a0": "发布候选与预期完整分类清单不一致。",
+    "publish-candidate.text_87a9206a79": "图鉴发布版本已用尽。",
+    "publish-candidate.text_91718baacd": "首版图鉴初始化要求没有现用指针。",
+    "publish-candidate.text_b3d0b59a93": "发布候选图库校验失败。",
+    "publish-candidate.text_d804e47d07": "图鉴发布版本须为正整数。",
+    "publish-candidate.text_f675720333": "图鉴版本库须为发布根内的实体目录。",
+    "publish-candidate.text_f9f3f8cdc6": "图鉴受管目录已有数据，未自动初始化。",
+    "publish-candidate.text_fc535c7ff3": "发布候选 data 须为发布根内的实体目录。",
+    "rebuild-legacy-index.text_0d7c419083": "旧图鉴条目树含无效、重复或跨来源记录，无法恢复索引。",
+    "rebuild-legacy-index.text_a2927891f0": "星铁",
+    "rebuild-legacy-index.text_b1110352c9": "绝区零",
+    "rebuild-legacy-index.text_d1597c51ed": "原神",
+    "reference-data.text_0e14d148b4": "速度",
+    "reference-data.text_1a256e6376": "生命值",
+    "reference-data.text_1cb579e6ba": "防御力",
+    "reference-data.text_2d84990389": "培养材料",
+    "reference-data.text_3277ed325c": "基础生命值",
+    "reference-data.text_4c2c5762d3": "故事",
+    "reference-data.text_86a00cf742": "效果",
+    "reference-data.text_9a2ba9f61e": "基础攻击力",
+    "reference-data.text_a7ad704923": "专属信息",
+    "reference-data.text_b84ee11f4f": "攻击力",
+    "reference-data.text_b953c90f99": "基础防御力",
+    "reference-data.text_c5500a58e0": "数值",
+    "refresh-source.text_01f0de000f": "{title}缺少已有{group}。",
+    "refresh-source.text_0765183046": "{title} {id} 缺少已有条目。",
+    "refresh-source.text_07c167eb4e": "一级分类",
+    "refresh-source.text_086cdc5c1f": "原神武器",
+    "refresh-source.text_08c6656b73": "星铁无限精英组",
+    "refresh-source.text_0d76eccf57": "{title} {id} 缺少已有套装资料。",
+    "refresh-source.text_11ef5964fe": "{title} {id} 缺少已下载图标 {field}。",
+    "refresh-source.text_12407278c4": "星铁虚构叙事",
+    "refresh-source.text_2189796d5c": "缺少现用分类 {key}。",
+    "refresh-source.text_236344c763": "{title} {id} 与已有角色身份不符。",
+    "refresh-source.text_29c00d44de": "互斥数据",
+    "refresh-source.text_2ce0392ca1": "音擎",
+    "refresh-source.text_2f2a653b45": "子分类 {id}",
+    "refresh-source.text_3270ac31ec": "{title} {id} 缺少已有详情。",
+    "refresh-source.text_37895076cd": "{title} {id} 缺少已有轮换资料。",
+    "refresh-source.text_40ae023db8": "{title} {id} 缺少已有挑战分区。",
+    "refresh-source.text_40c4c6654e": "{title} {id} 缺少已有变体或阶段。",
+    "refresh-source.text_419c575f1e": "星铁异相仲裁",
+    "refresh-source.text_44af67af8d": "请选择支持刷新的图鉴分类。",
+    "refresh-source.text_4b7b8e83d9": "危局强袭战",
+    "refresh-source.text_5013174952": "原神成就",
+    "refresh-source.text_56525bbe19": "{title} {id} 缺少已有说明。",
+    "refresh-source.text_56c99bcc38": "图鉴候选条目路径无效。",
+    "refresh-source.text_59e54b366d": "星铁混沌回忆",
+    "refresh-source.text_608b7e8d9a": "无法刷新{title}图鉴。",
+    "refresh-source.text_6a5c195f0f": "{name} {id} 无法关联同版本{linkedTitle} {missing}。",
+    "refresh-source.text_6d515a5b4d": "绝区零成就",
+    "refresh-source.text_6d949d3a2f": "星铁角色",
+    "refresh-source.text_70320f908f": "原神角色",
+    "refresh-source.text_75bc5e1137": "星铁末日幻影",
+    "refresh-source.text_76a25acbcb": "绝区零敌人",
+    "refresh-source.text_810786eac8": "星铁遗器",
+    "refresh-source.text_83ebe3015f": "星铁敌人数值",
+    "refresh-source.text_893935edeb": "{title} {id} 缺少已有音擎资料。",
+    "refresh-source.text_8bda1b07d2": "{title} {id} 与已有卡牌身份不符。",
+    "refresh-source.text_8c8df27f6c": "七圣召唤",
+    "refresh-source.text_9438bc4cf8": "星铁难度组",
+    "refresh-source.text_98c049debf": "{title} {id} 缺少已有楼层、战斗或敌人。",
+    "refresh-source.text_9c1f058c33": "{title} {id} 与已有敌人身份不符。",
+    "refresh-source.text_a2123d6950": "或",
+    "refresh-source.text_aa46a7c35b": "邦布",
+    "refresh-source.text_b221591d3f": "星铁敌人",
+    "refresh-source.text_b95d7209a4": "绝区零角色",
+    "refresh-source.text_bdb1188d28": "星铁精英组",
+    "refresh-source.text_bebbbb6612": "{title} {id} 与已有身份或实装窗口冲突。",
+    "refresh-source.text_c53f62c9ea": "原神圣遗物",
+    "refresh-source.text_ca8260cf5b": "全量图鉴候选须提供不重复的分类范围。",
+    "refresh-source.text_d245c1825d": "驱动盘",
+    "refresh-source.text_d314decadd": "{key} 的版本 {version} 不能证明晚于现用 {value3}。",
+    "refresh-source.text_d6118bcbe4": "星铁敌人 {id} 缺少同版本数值表关联的变体。",
+    "refresh-source.text_d6aa0908db": "星铁成就",
+    "refresh-source.text_df2e3f3756": "{name} {id} 关卡身份或结构无效。",
+    "refresh-source.text_e6b18efff5": "{title}缺少已有条目 {id}。",
+    "refresh-source.text_e733238b28": "光锥",
+    "refresh-source.text_e78fa5f026": "用法：bun refresh-source.ts <图鉴根目录> <{value1}>",
+    "refresh-source.text_ea5a565f3e": "{title} {id} 缺少已有部位或套装效果。",
+    "refresh-source.text_f0954a1a80": "{game}/{pageId} 存在无效或重复主键。",
+    "refresh-source.text_f1691435e9": "{title} {id} 缺少已有字段。",
+    "refresh-source.text_f624c9cf15": "原神敌人",
+    "refresh-source.text_f718dc4321": "式舆防卫战",
+    "retain-gallery.text_0f3f74f771": "现用图库的索引不可验证。",
+    "retain-gallery.text_19c3ae070b": "保留图库索引无效。",
+    "retain-gallery.text_323c550b13": "候选图片引用无效。",
+    "retain-gallery.text_7571a1b317": "保留图库的引用无效。",
+    "retain-gallery.text_9d47db229c": "候选条目路径无效。",
+    "retain-gallery.text_b8b34e62d9": "保留图库的游戏路径无效。",
+    "review-legacy-details.text_580654e1a2": "用法：bun review-legacy-details.ts <原导出根> <原索引检查点目录> <条目键 候选文件 | --indexed-only>",
+    "review-legacy-details.text_70089a5b85": "无法复核图鉴原详情。",
+    "review-legacy-details.text_a744932eae": "请指定已有的图鉴索引检查点目录。",
+    "review-legacy-details.text_b56c2f0382": "旧导出没有对应的嵌入详情。",
+    "review-legacy-details.text_d2e3db0b42": "图鉴详情没有可独立复核的候选身份。",
+    "role-data.text_0386bafda5": "行迹材料",
+    "role-data.text_0393687f9e": "强化普攻",
+    "role-data.text_0b5daa9276": "地区",
+    "role-data.text_0cbc102021": "核心技升级材料",
+    "role-data.text_0d43934fdb": "大攻击",
+    "role-data.text_0dd207d6ae": "天赋升级材料",
+    "role-data.text_0e14d148b4": "速度",
+    "role-data.text_10970a1f45": "正文第 {value1} 项",
+    "role-data.text_135fd7b0a1": "虚无",
+    "role-data.text_14ed0de6a1": "量子",
+    "role-data.text_15bccc3951": "暴击伤害",
+    "role-data.text_17f4b35418": "欢愉",
+    "role-data.text_18db236249": "丰饶",
+    "role-data.text_1a7dc21762": "冲击力",
+    "role-data.text_208b82f3db": "岩伤",
+    "role-data.text_2df39f9d63": "忆灵天赋",
+    "role-data.text_37f14a04e3": "冰伤",
+    "role-data.text_3b89502eed": "闪避",
+    "role-data.text_3d148572bd": "风伤",
+    "role-data.text_40e2ef812f": "快速支援",
+    "role-data.text_45bc77bc1c": "生命",
+    "role-data.text_4807b62b3a": "智识",
+    "role-data.text_4bd90c6477": "秘技",
+    "role-data.text_591f60433f": "精通",
+    "role-data.text_59d499d937": "暴击",
+    "role-data.text_5a62168bef": "阵营",
+    "role-data.text_5de1b913e7": "雷",
+    "role-data.text_66d04b5ad3": "水伤",
+    "role-data.text_68d02ac00a": "角色突破材料",
+    "role-data.text_6922395560": "角色晋阶材料",
+    "role-data.text_6d8c868f52": "战技",
+    "role-data.text_725e46fa35": "物伤",
+    "role-data.text_75ba7a5727": "防御",
+    "role-data.text_79bd79472f": "忆灵技",
+    "role-data.text_7a6335b379": "记忆",
+    "role-data.text_8226ca02ff": "攻击",
+    "role-data.text_85a5719200": "毁灭",
+    "role-data.text_85ebf039c1": "强化特殊技",
+    "role-data.text_866e2e6d67": "天赋",
+    "role-data.text_86de52d178": "属性",
+    "role-data.text_8818cea517": "绘想游迹",
+    "role-data.text_8908281fc3": "虚数",
+    "role-data.text_89ae343575": "巡猎",
+    "role-data.text_8b79df27ba": "普攻",
+    "role-data.text_94c2b0ba85": "称号",
+    "role-data.text_95208b8c9c": "战斗天赋",
+    "role-data.text_99aea2f913": "技能",
+    "role-data.text_a173b79e86": "{value1}升级材料",
+    "role-data.text_a2a1cc94c1": "火伤",
+    "role-data.text_a454f17872": "物理",
+    "role-data.text_a53516700f": "核心能力",
+    "role-data.text_a60ef97ad9": "基础{label}",
+    "role-data.text_a63ee7f0fe": "命之座",
+    "role-data.text_a985bc32b7": "终结技",
+    "role-data.text_adcf64ba14": "特性",
+    "role-data.text_ae9626ede5": "忆灵技能",
+    "role-data.text_aeed4dc439": "大防御",
+    "role-data.text_b28b5f46a0": "同谐",
+    "role-data.text_ba40014ff4": "类型",
+    "role-data.text_bde5b0a97f": "助战技",
+    "role-data.text_be65bd5518": "风",
+    "role-data.text_c0c253c271": "充能",
+    "role-data.text_c601aa644a": "连携技",
+    "role-data.text_c74ede8277": "闪避反击",
+    "role-data.text_c750f692ee": "爆伤",
+    "role-data.text_c81995fafd": "治疗",
+    "role-data.text_c928701188": "固有天赋",
+    "role-data.text_ce1b850700": "冰",
+    "role-data.text_d4b0baf955": "暴击率",
+    "role-data.text_d4cfe8c82c": "火",
+    "role-data.text_d4e9599744": "神之眼",
+    "role-data.text_d55d4d5989": "存护",
+    "role-data.text_d738370025": "基础{stat}",
+    "role-data.text_d90c73f75a": "普通攻击",
+    "role-data.text_d9455920fc": "命途",
+    "role-data.text_dd1fad216f": "大生命",
+    "role-data.text_ddf7750af8": "潜能材料",
+    "role-data.text_e0dd8a8c6d": "连携技与终结技",
+    "role-data.text_e7d19b766b": "草伤",
+    "role-data.text_eff514b8b8": "切换",
+    "role-data.text_f1739fc27c": "核心技",
+    "role-data.text_f3a96442e9": "支援技",
+    "role-data.text_f698250622": "雷伤",
+    "role-data.text_f852e2fa16": "行迹",
+    "role-data.text_fb6d88911b": "特殊技",
+    "role-data.text_fe79ecadad": "{skillName}升级材料",
+    "role-material-source.text_1aa9c4170b": "位",
+    "role-material-source.text_1cb106adcf": "图鉴材料版本无效。",
+    "role-material-source.text_37ac69b6e3": "{game} 角色材料信息已写入",
+    "role-material-source.text_3a85508d6f": "{game} 角色材料原图已处理",
+    "role-material-source.text_49ccde43a1": "项",
+    "role-material-source.text_4eae3d3eb6": "{game} 角色材料信息已核对",
+    "role-material-source.text_5215599023": "读取失败。",
+    "role-material-source.text_52c8a331b2": "图鉴角色材料记录身份不符（{game}/{recordId}）。",
+    "role-material-source.text_5d4f7e0d7e": "图鉴同版物品表未包含角色引用的材料。",
+    "role-material-source.text_772dae5cf6": "[atlas] {game}/character 材料来源暂不可用：{value2}",
+    "role-material-source.text_8fb2bc7a56": "图鉴材料目标目录须为实体目录。",
+    "role-material-source.text_a7dbd8bb33": "{game} 角色材料原图",
+    "role-material-source.text_b0e5d6e044": "核对角色材料名称及图片",
+    "role-material-source.text_c76f54e0d8": "图鉴角色材料记录路径无效。",
+    "role-material-source.text_c7db704020": "图鉴材料图标不是原始 WebP（{game}/{icon}）。",
+    "role-material-source.text_e244c41137": "图鉴同版物品表为空。",
+    "role-material-source.text_f84a78ab03": "{game} 写入角色材料信息",
+    "role-render.text_04b9449280": "{pageNumber} · 原分项 {part}",
+    "role-render.text_13c626828a": "角色与装备资料",
+    "role-render.text_1858f14ac1": "环境与全局效果",
+    "role-render.text_1992c0745f": "快照时间 {range}（与实装公告冲突，待核对）",
+    "role-render.text_23308e2908": "限定元素",
+    "role-render.text_27665dc0f5": "暂无详细数据",
+    "role-render.text_29724f74bb": "精",
+    "role-render.text_2ce0392ca1": "音擎",
+    "role-render.text_2d4589477f": "能量恢复",
+    "role-render.text_2edbe7b74a": "套装故事",
+    "role-render.text_2f8267a89a": "空",
+    "role-render.text_31126cd1e7": "叠影",
+    "role-render.text_40a2cbbcce": "敌人",
+    "role-render.text_4262c45dc7": "说明",
+    "role-render.text_481fcedd4b": "生命 {hp}",
+    "role-render.text_4846c3467f": "图鉴缩放比例须在 1 至 4 之间。",
+    "role-render.text_4ba431a75f": "技能与核心能力",
+    "role-render.text_4bcc60d36d": "武器故事",
+    "role-render.text_4fe131173e": "武器",
+    "role-render.text_527c9d78d0": "获得方式",
+    "role-render.text_52b0e1703d": "成就",
+    "role-render.text_5733a97f5a": "稀有度：{rarity}",
+    "role-render.text_5926f5bd20": "改装等级 ",
+    "role-render.text_5963f77bf6": "数值 {value1}",
+    "role-render.text_5da80321f0": "命座",
+    "role-render.text_5ee1f7830b": "套装部件",
+    "role-render.text_60c7509992": "二倍整图超限，按原分项续页。",
+    "role-render.text_69c8843c44": "待核对材料（{id}）",
+    "role-render.text_6d73e79621": "消耗　{cost}",
+    "role-render.text_6fef084848": "挑战图鉴",
+    "role-render.text_7182722358": "荧",
+    "role-render.text_73ee4adf7e": "轮换时间待核对",
+    "role-render.text_79f326be44": "项目",
+    "role-render.text_7b9fca11ef": "{value1}弱点 {value2}",
+    "role-render.text_7f3d2cf101": "快照生命值 {value1}",
+    "role-render.text_802e7a16fe": "增益说明待核对",
+    "role-render.text_8131eafd02": "简介",
+    "role-render.text_8396e0dee6": "四倍图超过当前聊天的单图大小上限。",
+    "role-render.text_87e02c9700": "养成材料",
+    "role-render.text_89bcd4b4ad": "邦布总览",
+    "role-render.text_8c8df27f6c": "七圣召唤",
+    "role-render.text_8d9c113abc": "技能与天赋",
+    "role-render.text_8edef1168f": "图鉴资料",
+    "role-render.text_909ee3bae1": "弱点 {value1}",
+    "role-render.text_94367bf611": "快照预计 · {range}",
+    "role-render.text_985ed4784c": "套装效果",
+    "role-render.text_9bd2d5af77": "星魂",
+    "role-render.text_9cdb90f0f1": "{value1} 幽境危战 N5/6",
+    "role-render.text_9f837531a3": "资料版本 {version}",
+    "role-render.text_a87440b261": "首领最大幕次待核对",
+    "role-render.text_aa37ae4078": "导出时间 {range}（轮换待核对）",
+    "role-render.text_aca7c4e5d8": "抗性 {value1}",
+    "role-render.text_af6902cff7": "低配整图超限，按原分项续页。",
+    "role-render.text_b5375d65dc": "导出时间（轮换待核对）",
+    "role-render.text_b8eb5f068c": "全部游戏",
+    "role-render.text_be01b769f0": "本条目未提供详细说明。",
+    "role-render.text_c2bbe82672": "可选增益",
+    "role-render.text_c4278b64e4": "最低角色等级 Lv{minLevel}",
+    "role-render.text_c568f76b1b": "首领最大幕次 {maxAct}",
+    "role-render.text_c9b2243536": "等级数值",
+    "role-render.text_ceaac5a9cc": "最低角色等级待核对",
+    "role-render.text_cee3478603": "阵容待核对",
+    "role-render.text_d51b2d2768": "Lotus-Yunzai · 图鉴 · {page}",
+    "role-render.text_d64a756a57": "图鉴「{section}」超过当前聊天的单图大小上限。",
+    "role-render.text_d6960d887e": "等级 {level}",
+    "role-render.text_e0008ce9ed": "技能与行迹",
+    "role-render.text_e140c977bf": "材料",
+    "role-render.text_e3eb56def0": "起止时间待核对",
+    "role-render.text_e5bbfc16a5": "{difficulty}说明",
+    "role-render.text_e66da4b1b0": "影画",
+    "role-render.text_e733238b28": "光锥",
+    "role-render.text_f14ca77cb1": "邦布技能",
+    "role-render.text_f21629e751": "费用 {cost}",
+    "role-render.text_f5e218433b": "{level}级基础数据",
+    "role-render.text_fc318671fd": "角色总览",
+    "role-render.text_fd80ea1baa": "基础数据",
+    "role-render.text_fdbab35a55": "奇缘星魂",
+    "set-data.text_22b045500c": "{count}件套",
+    "set-data.text_debde1537c": "{pieces}件套",
+    "shiyu-data.text_084b42f6e9": "二",
+    "shiyu-data.text_1b0542878c": "七",
+    "shiyu-data.text_2c467d3673": "八",
+    "shiyu-data.text_30180ca5b7": "记录 ID {id}",
+    "shiyu-data.text_3401df6359": "上半",
+    "shiyu-data.text_38866b106e": "下半",
+    "shiyu-data.text_51a75f4634": "一",
+    "shiyu-data.text_5b2b40b3b8": "关卡说明",
+    "shiyu-data.text_67c3e0660e": "当期式舆防卫战",
+    "shiyu-data.text_754a9d5828": "四",
+    "shiyu-data.text_8c19c36253": "第{value1}防线",
+    "shiyu-data.text_a4c3313deb": "三",
+    "shiyu-data.text_c9b87f516a": "五",
+    "shiyu-data.text_d0ecc272b9": "防线 ID {zoneId}（待核对）",
+    "shiyu-data.text_d8925ad8e7": "下期式舆防卫战",
+    "shiyu-data.text_de07b53838": "六",
+    "shiyu-data.text_df897da6e0": "九",
+    "shiyu-data.text_fc7edd399a": "十",
+    "shiyu-data.text_fdd4893d17": "房间 ID {roomId}",
+    "shiyu-source-data.text_52a5d7fffd": "式舆来源索引条目数无效。",
+    "shiyu-source-data.text_59920fccdd": "式舆剧变节点实装窗口重叠。",
+    "shiyu-source-data.text_895a079dba": "式舆来源详情缺少防线、评级或原图，或与实装窗口不符（{id}）。",
+    "shiyu-source-data.text_efa3dc5028": "式舆来源缺少一致的实装窗口或节点身份（{id}）。",
+    "snapshot-pointer.text_52b3665313": "图鉴发布指针须指向实体快照目录。",
+    "snapshot-pointer.text_5b05234db1": "图鉴已重置，请重新初始化图鉴。",
+    "snapshot-pointer.text_9d0e73c167": "图鉴发布指针格式无效。",
+    "source-acquisition.text_0066134b36": "份",
+    "source-acquisition.text_049b6125de": "邦布来源索引条目结构无效。",
+    "source-acquisition.text_08c6656b73": "星铁无限精英组",
+    "source-acquisition.text_0a1220211b": "绝区零角色来源原图缺失（{id}，{fieldPath}）。",
+    "source-acquisition.text_0b3a3e59f6": "读取七圣召唤引用表",
+    "source-acquisition.text_13c14c4d78": "校验{folder}资料与资源引用",
+    "source-acquisition.text_16d6a0e75e": "七圣召唤来源索引条目结构无效（{id}）。",
+    "source-acquisition.text_232929750f": "{folder}索引必须是完整数组。",
+    "source-acquisition.text_2ce0392ca1": "音擎",
+    "source-acquisition.text_310842532e": "音擎来源索引条目结构无效。",
+    "source-acquisition.text_34e375283d": "{folder}详情与来源索引身份或等级不符（{id}）。",
+    "source-acquisition.text_3fcfb1f025": "光锥来源索引条目结构无效。",
+    "source-acquisition.text_43181cc9b1": "{folder}来源图标缺失（{id}）。",
+    "source-acquisition.text_4456d1cdc8": "S级",
+    "source-acquisition.text_472d68c987": "七圣召唤来源缺少 {table} 引用表。",
+    "source-acquisition.text_4b7b8e83d9": "危局强袭战",
+    "source-acquisition.text_4cdaab8f22": "二星",
+    "source-acquisition.text_4efbc4769a": "请选择支持抓取的分类及对应版本。",
+    "source-acquisition.text_4fe131173e": "武器",
+    "source-acquisition.text_5013174952": "原神成就",
+    "source-acquisition.text_50f6dceb80": "{folder}存在结构错误或重复主键（第 {position} 项）。",
+    "source-acquisition.text_52627521ec": "原神武器来源图标标识无效。",
+    "source-acquisition.text_54b89f9012": "未分类",
+    "source-acquisition.text_58d3fc742a": "式舆",
+    "source-acquisition.text_59977c7f79": "混沌回忆",
+    "source-acquisition.text_606689811a": "已读取七圣召唤 {table} 引用表",
+    "source-acquisition.text_6412db513e": "星铁敌人来源索引条目结构无效（{id}）。",
+    "source-acquisition.text_6537056c0d": "此分类请通过原站多语下载入口获取。",
+    "source-acquisition.text_69a58e24ce": "B级",
+    "source-acquisition.text_69bd4985fd": "{folder}索引身份或轮换时间无效（{id}）。",
+    "source-acquisition.text_6a8a3c9011": "绝区零成就来源表 {id} 结构无效。",
+    "source-acquisition.text_6d515a5b4d": "绝区零成就",
+    "source-acquisition.text_754d363da7": "读取{folder}索引",
+    "source-acquisition.text_76a25acbcb": "绝区零敌人",
+    "source-acquisition.text_797a625d28": "星铁遗器来源图标缺失（{id}）。",
+    "source-acquisition.text_810786eac8": "星铁遗器",
+    "source-acquisition.text_81f38689a8": "{folder}来源条目数与计划不符。",
+    "source-acquisition.text_82d523d171": "{folder}来源图标不是有效的 WebP 文件。",
+    "source-acquisition.text_83ebe3015f": "星铁敌人数值",
+    "source-acquisition.text_840af60d6f": "绝区零敌人来源索引条目结构无效（{id}）。",
+    "source-acquisition.text_888c464a14": "星铁敌人来源原图缺失（{id}）。",
+    "source-acquisition.text_889931af62": "{folder}资料与原图",
+    "source-acquisition.text_8a4d803295": "绝区零角色来源索引条目结构无效（{id}）。",
+    "source-acquisition.text_8c25726aa2": "原神圣遗物来源部位图缺失（{id}，{slot}）。",
+    "source-acquisition.text_8c8df27f6c": "七圣召唤",
+    "source-acquisition.text_8dae72d970": "末日幻影",
+    "source-acquisition.text_8e27d0dca5": "光锥来源原图缺失（{id}）。",
+    "source-acquisition.text_8ed1fd5f29": "{folder}索引条目数无效。",
+    "source-acquisition.text_931e7b52f3": "星铁敌人数值来源索引条目结构无效（{id}）。",
+    "source-acquisition.text_93781e2c87": "驱动盘来源索引条目结构无效。",
+    "source-acquisition.text_9438bc4cf8": "星铁难度组",
+    "source-acquisition.text_aa46a7c35b": "邦布",
+    "source-acquisition.text_b221591d3f": "星铁敌人",
+    "source-acquisition.text_b95d7209a4": "绝区零角色",
+    "source-acquisition.text_bdb1188d28": "星铁精英组",
+    "source-acquisition.text_bebfe54e90": "星铁遗器来源索引条目结构无效。",
+    "source-acquisition.text_c2fc84ae93": "光锥来源命途图标缺失（{id}）。",
+    "source-acquisition.text_c53f62c9ea": "原神圣遗物",
+    "source-acquisition.text_cfa5001596": "绝区零成就缺少原始分类、条目或互斥表。",
+    "source-acquisition.text_d245c1825d": "驱动盘",
+    "source-acquisition.text_d5636be4da": "危局",
+    "source-acquisition.text_d66b949b63": "虚构叙事",
+    "source-acquisition.text_d6aa0908db": "星铁成就",
+    "source-acquisition.text_d6da741711": "原神圣遗物来源索引条目结构无效。",
+    "source-acquisition.text_db1386083e": "驱动盘详情与来源索引不符或缺少套装故事（{id}）。",
+    "source-acquisition.text_db593b55f1": "{folder}来源索引条目结构无效。",
+    "source-acquisition.text_dbefe79f38": "{folder}，已处理原图 {size} 张",
+    "source-acquisition.text_dea593c88f": "原神武器来源索引条目结构无效。",
+    "source-acquisition.text_e1c9a5a221": "原神武器来源图标缺失（{id}）。",
+    "source-acquisition.text_e6c2ad53f8": "A级",
+    "source-acquisition.text_e733238b28": "光锥",
+    "source-acquisition.text_e7902164ea": "{mode}来源原图缺失（{id}，{fieldPath}）。",
+    "source-acquisition.text_f004f1d84c": "条",
+    "source-acquisition.text_f718dc4321": "式舆防卫战",
+    "source-acquisition.text_f98ddf03d0": "抓取的源快照未通过校验。{value1}",
+    "source-acquisition.text_fdc6c58c58": "异相仲裁",
+    "source-acquisition.text_fff7075d04": "原神圣遗物来源主图缺失（{id}）。",
+    "source-transport.text_19273d93e7": "图鉴来源文件超出大小上限。",
+    "source-transport.text_1fa380ca04": "图鉴来源读取失败（HTTP {status}）。",
+    "starrail-challenge-data.text_039a4b8be3": "{value1} · 星启模式",
+    "starrail-challenge-data.text_14ed0de6a1": "量子",
+    "starrail-challenge-data.text_24907e8634": "当期{name}",
+    "starrail-challenge-data.text_30180ca5b7": "记录 ID {id}",
+    "starrail-challenge-data.text_3401df6359": "上半",
+    "starrail-challenge-data.text_38866b106e": "下半",
+    "starrail-challenge-data.text_3b6942b7e9": "关卡 ID {id}（待核对）",
+    "starrail-challenge-data.text_40a2cbbcce": "敌人",
+    "starrail-challenge-data.text_5caa91cf60": "关卡名称待核对",
+    "starrail-challenge-data.text_5de1b913e7": "雷",
+    "starrail-challenge-data.text_68a8f8184f": "额外目标 {additionalGoal}",
+    "starrail-challenge-data.text_863c08ca66": "星启模式",
+    "starrail-challenge-data.text_8908281fc3": "虚数",
+    "starrail-challenge-data.text_a454f17872": "物理",
+    "starrail-challenge-data.text_baddef9767": "属性 {value}（待核对）",
+    "starrail-challenge-data.text_be65bd5518": "风",
+    "starrail-challenge-data.text_cb05285c60": "关卡 ID {id}",
+    "starrail-challenge-data.text_ce1b850700": "冰",
+    "starrail-challenge-data.text_d4cfe8c82c": "火",
+    "starrail-challenge-data.text_e0711a0bb4": "末法余烬",
+    "starrail-challenge-data.text_e741124190": "敌人 ID {id}（待核对）",
+    "starrail-challenge-data.text_ec3fbbc033": "常规关卡",
+    "status.text_09ce400492": "旧索引缺失，本次按实体条目重建索引，原导出未修改，资料完整性待核对。",
+    "status.text_65364e6fd8": "缺失",
+    "status.text_65687894af": "语言：{folder}",
+    "status.text_764eee8500": "部分索引更新失败，已有数据的分类保留了上一次可用的版本。",
+    "status.text_8075f0e20a": "{length} 类 · {value2} 项",
+    "status.text_9a7e760342": "图鉴状态",
+    "status.text_a4a7fca516": "条目：{value1}",
+    "status.text_a6c377fdf3": "{length} 个条目",
+    "status.text_b5a8cc43e6": "图库：{value1}",
+    "status.text_be35d8a00a": "分类：{value1}",
+    "status.text_cd396e8772": "{value1} 个",
+    "status.text_d74691f60e": "图鉴数据不可用。请检查 data/atlas 快照或 LOTUS_ATLAS_DATA_DIR 设置。",
+    "status.text_de03ee139f": "已找到",
+    "status.text_de69d15875": "{length} 个",
+    "status.text_e9f5e3f1fa": "{value1}\n数据目录：{root}",
+    "status.text_eefb1e3dfa": "（样例）",
+    "theater-data.text_084b42f6e9": "二",
+    "theater-data.text_175721fa68": "特邀角色",
+    "theater-data.text_1b0542878c": "七",
+    "theater-data.text_2aeedc74a3": "嵌合翼骏狮",
+    "theater-data.text_2c467d3673": "八",
+    "theater-data.text_45cc49fe49": "角色 ID {id}（待核对）",
+    "theater-data.text_45daa9092e": "轻简",
+    "theater-data.text_49b5f6c5a6": "圣牌挑战",
+    "theater-data.text_4ea02714a1": "困难",
+    "theater-data.text_5102bbdbe1": "卓越",
+    "theater-data.text_51a75f4634": "一",
+    "theater-data.text_57089b1164": "元素代码 {id}（待核对）",
+    "theater-data.text_680ea5e43a": "月谕",
+    "theater-data.text_754a9d5828": "四",
+    "theater-data.text_8481f992ad": "首领阵容",
+    "theater-data.text_8bd1d453a7": "开幕角色",
+    "theater-data.text_9a41e92526": "第{value1}幕",
+    "theater-data.text_a4c3313deb": "三",
+    "theater-data.text_b8745abf83": "圣牌{value1}",
+    "theater-data.text_bef76149bd": "历经百战的嵌合兽怪箭士",
+    "theater-data.text_c4a0399bc0": "当期幻想真境剧诗",
+    "theater-data.text_c9b87f516a": "五",
+    "theater-data.text_de07b53838": "六",
+    "theater-data.text_de907d10df": "普通",
+    "theater-data.text_df897da6e0": "九",
+    "theater-data.text_e741124190": "敌人 ID {id}（待核对）",
+    "theater-data.text_fc7edd399a": "十",
+    "traditional.text_0672471912": "图鉴旧指令",
+    "traditional.text_bee4ec2bf2": "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。",
+    "traditional.text_f1baf57ee7": "合并转发结果未确认，请在聊天中核对。",
+    "update-plan.text_08b7a6f73a": "用法：bun update-plan.ts <包含 map.json 的本地目录> [清单 JSON 文件]",
+    "update-plan.text_1e411d53d0": "图鉴更新范围包含未识别的游戏或分类。",
+    "update-plan.text_388c6936a6": "图鉴版本清单不可用。",
+    "update-plan.text_8cf7c78f9b": "无法生成图鉴更新计划。请检查固定来源或本地清单文件。",
+    "update-policy.text_5992679a7a": "图鉴 auto_update.{cronKey} 无效或无法等价转换。",
+    "update-policy.text_a2d4c8b694": "图鉴 auto_update 配置无效。",
+    "update-policy.text_b53afe6520": "图鉴配置须为对象。",
+    "update-policy.text_bf1ca576c5": "图鉴 {argsKey} 含不支持的选项或无效分类范围。",
+    "validate-candidate.text_051bd6a1f6": "快照文件路径经过链接。",
+    "validate-candidate.text_15096a2aa7": "快照文件在读取时发生更改。",
+    "validate-candidate.text_29cdaeeb9a": "{where} 存在无效条目标识或重复文件路径。",
+    "validate-candidate.text_4d9d4608fb": "候选 map.json 缺失、不可读或不是实体 JSON 文件。",
+    "validate-candidate.text_4dbab3954f": "{value1} 的版本、采样标记或条目计数无效。",
+    "validate-candidate.text_6cd8318977": "{game}/{pageId} 缺失、版本或条目计数与候选要求不符。",
+    "validate-candidate.text_a6996f6891": "候选没有通过校验的图鉴分类。",
+    "validate-candidate.text_b0f06f51d2": "用法：bun validate-candidate.ts <包含 map.json 的候选目录>",
+    "validate-candidate.text_ba449948f4": "{where}/{key} 的条目文件缺失、不可读或不是实体 JSON 文件。",
+    "validate-candidate.text_e39ab8ff06": "{where}/{key} 的身份、版本或详情结构不一致。",
+    "validate-candidate.text_f22262f2ee": "快照文件大小不符。",
+    "weapon-data.text_15bccc3951": "暴击伤害",
+    "weapon-data.text_1a256e6376": "生命值",
+    "weapon-data.text_1cb579e6ba": "防御力",
+    "weapon-data.text_45bc77bc1c": "生命",
+    "weapon-data.text_4653041cfb": "物理伤害加成",
+    "weapon-data.text_75ba7a5727": "防御",
+    "weapon-data.text_8226ca02ff": "攻击",
+    "weapon-data.text_8d3b6cfa30": "元素充能效率",
+    "weapon-data.text_b84ee11f4f": "攻击力",
+    "weapon-data.text_d4b0baf955": "暴击率",
+    "zzz-challenge-data.text_00fe8dda1f": " 秒",
+    "zzz-challenge-data.text_27ca33c097": "评级条件待核对",
+    "zzz-challenge-data.text_2a6586afa6": "综合评级条件待核对",
+    "zzz-challenge-data.text_b75a03ace7": " 分",
+    "zzz-challenge-data.text_d2a0828330": " 次战败",
+    "zzz-challenge-data.text_e741124190": "敌人 ID {id}（待核对）"
+  },
+  "parameters": {
+    "abyss-data.text_801d92cb9d": {
+      "value1": "seconds.join(\"秒 / \")"
+    },
+    "abyss-data.text_5b69b89145": {
+      "value1": "percentages.join(\"% / \")"
+    },
+    "abyss-data.text_90e581898c": {
+      "floorId": "floorId"
+    },
+    "abyss-data.text_c24e07b4d8": {
+      "floorId": "floorId"
+    },
+    "abyss-data.text_fdfba9c7f6": {
+      "floorId": "floorId"
+    },
+    "abyss-data.text_e741124190": {
+      "id": "id"
+    },
+    "acquire-legacy-achievement-art.text_7e9794be5b": {
+      "maxRequestsPerRun": "maxRequestsPerRun"
+    },
+    "acquire-legacy-indexes.text_1be4f6ac73": {
+      "length": "legacyAtlasSourcePages.length"
+    },
+    "acquire-legacy-record.text_7ab0b5c8f7": {
+      "length": "descriptors.length"
+    },
+    "acquire-legacy-record.text_82c31cdca0": {
+      "value1": "Object.keys(legacyAtlasRecordSources).join(\"|\")"
+    },
+    "assemble-candidate.text_83319cc095": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "assemble-candidate.text_44004e8aef": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "assemble-candidate.text_309b8a796e": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "book-reply.text_b34e40b621": {
+      "name": "name",
+      "titleSuffix": "titleSuffix",
+      "sections": "sections",
+      "length": "pages.length"
+    },
+    "book-reply.text_11d4132897": {
+      "title": "title",
+      "value2": "index + 1",
+      "length": "batches.length"
+    },
+    "boss-source-data.text_18da30c2cc": {
+      "id": "id"
+    },
+    "boss-source-data.text_dd4d7ab95e": {
+      "id": "entry.id"
+    },
+    "candidate-gallery.text_e5b44f21d9": {
+      "path": "asset.path"
+    },
+    "candidate-gallery.text_1ca4fa7583": {
+      "path": "asset.path"
+    },
+    "candidate-gallery.text_e864732606": {
+      "path": "asset.path"
+    },
+    "candidate-gallery.text_2cf763d5ee": {
+      "path": "asset.path"
+    },
+    "capture-legacy-details.text_2b2c170d11": {
+      "maxRequestsPerRun": "maxRequestsPerRun"
+    },
+    "catalog.text_82a3071aa1": {
+      "name": "name"
+    },
+    "catalog.text_2c2de1f14a": {
+      "name": "name"
+    },
+    "challenges.text_e4539ff0bd": {
+      "id": "id"
+    },
+    "deadly-assault-data.text_fdd4893d17": {
+      "roomId": "roomId"
+    },
+    "deadly-assault-data.text_3b6942b7e9": {
+      "id": "id"
+    },
+    "deadly-assault-data.text_7bdacec67a": {
+      "name": "deadlyAssaultMode.name",
+      "id": "entry.id"
+    },
+    "download-legacy-atlas.text_3df9d389f2": {
+      "game": "game"
+    },
+    "download-legacy-atlas.text_6bd0054d35": {
+      "game": "game",
+      "pageId": "pageId"
+    },
+    "download-legacy-atlas.text_f5e34cb3d5": {
+      "game": "game",
+      "pageId": "pageId"
+    },
+    "download-legacy-atlas.text_a69c44183e": {
+      "game": "game",
+      "pageId": "pageId",
+      "missing": "missing"
+    },
+    "download-legacy-atlas.text_d56bc78b95": {
+      "value1": "indexes.length - remaining.length"
+    },
+    "download-legacy-atlas.text_1771cc7cef": {
+      "value1": "validated.issues[0] ?? \"\""
+    },
+    "export-workspace-seed.text_22187683e1": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "full-candidate-gallery.text_bfd63a47cb": {
+      "game": "game",
+      "pageId": "pageId",
+      "id": "id",
+      "field": "field"
+    },
+    "full-candidate-gallery.text_06f63e4b7d": {
+      "path": "path"
+    },
+    "full-refresh.text_e19e5572d6": {
+      "path": "path"
+    },
+    "gcg-data.text_32b19b3ff2": {
+      "name": "name"
+    },
+    "index.text_ce1c0c2a97": {
+      "pieces": "pieces",
+      "value2": "text || \"效果待核对\""
+    },
+    "index.text_2a1ba26efb": {
+      "command": "command",
+      "value2": "gameNames[fixedGame]"
+    },
+    "index.text_31ab2c7f89": {
+      "command": "command",
+      "value2": "fixedGame ? \"\" : \"[原神|星铁|绝区零] \""
+    },
+    "index.text_08e794ea54": {
+      "command": "command",
+      "value2": "gameNames[fixedGame]"
+    },
+    "index.text_460a5905a7": {
+      "command": "command",
+      "value2": "fixedGame ? \"\" : \"[原神|星铁|绝区零] \""
+    },
+    "index.text_c8385932e6": {
+      "value1": "role?.overview.name ?? entry.name",
+      "title": "title"
+    },
+    "index.text_7a7f310335": {
+      "name": "role.overview.name",
+      "title": "title"
+    },
+    "index.text_7bbe6c3397": {
+      "value1": "await characterLine(catalog, entry, true)"
+    },
+    "index.text_30180ca5b7": {
+      "id": "id"
+    },
+    "index.text_91711408c0": {
+      "version": "entry.version"
+    },
+    "index.text_322c9a75a3": {
+      "origin": "origin",
+      "begin": "window.begin",
+      "end": "window.end"
+    },
+    "index.text_b94f39a33e": {
+      "label": "section.label",
+      "count": "section.count",
+      "value3": "names.length ? ` · ${names.join(\"、\")}${end}` : \"\""
+    },
+    "index.text_6ef2a277d9": {
+      "name": "onslaught.name"
+    },
+    "index.text_a5b2f72b96": {
+      "name": "challenge.name"
+    },
+    "index.text_1f9c2c1a6e": {
+      "title": "title"
+    },
+    "index.text_a8194dabf7": {
+      "name": "entry.name",
+      "id": "entry.id"
+    },
+    "index.text_a9329215e7": {
+      "message": "message"
+    },
+    "index.text_58877b9712": {
+      "reply": "reply"
+    },
+    "index.text_444fd3abe5": {
+      "value1": "achievementCategoryLabel(category)",
+      "length": "category.entries.length"
+    },
+    "index.text_bc116d5f55": {
+      "length": "matches.length"
+    },
+    "index.text_1113492a90": {
+      "value1": "achievementCategoryLabel(item)",
+      "length": "item.entries.length",
+      "id": "item.id"
+    },
+    "index.text_af838aec58": {
+      "lastPage": "lastPage"
+    },
+    "index.text_abf3e7c38f": {
+      "value1": "achievementCategoryLabel(selected)",
+      "length": "lines.length",
+      "pageNo": "pageNo",
+      "lastPage": "lastPage"
+    },
+    "index.text_5ea1d04f1e": {
+      "length": "lines.length",
+      "pageNo": "pageNo",
+      "lastPage": "lastPage"
+    },
+    "index.text_54024cd9af": {
+      "value1": "gameNames[game]",
+      "value2": "names.join(\"、\")"
+    },
+    "index.text_1cb115d399": {
+      "name": "mode.name",
+      "value2": "currentRequested ? \"本期\" : target"
+    },
+    "index.text_9feb60bc21": {
+      "value1": "gameNames[game]",
+      "name": "mode.name"
+    },
+    "index.text_5241b1c170": {
+      "lastPage": "lastPage"
+    },
+    "index.text_eed20307a6": {
+      "value1": "gameNames[game]",
+      "name": "mode.name",
+      "length": "category.entries.length",
+      "page": "page",
+      "lastPage": "lastPage"
+    },
+    "index.text_cd528b99b7": {
+      "name": "mode.name",
+      "length": "matches.length"
+    },
+    "initialize-atlas.text_47646fe5f3": {
+      "status": "result.status"
+    },
+    "legacy-achievement-art.text_e3f16aa669": {
+      "id": "id"
+    },
+    "legacy-coverage.text_d2735a1a84": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "legacy-coverage.text_fc78d0c62d": {
+      "game": "game",
+      "pageId": "pageId"
+    },
+    "legacy-coverage.text_b62ae1d00c": {
+      "game": "game",
+      "pageId": "pageId",
+      "id": "id"
+    },
+    "legacy-coverage.text_76ce939c70": {
+      "game": "game",
+      "pageId": "pageId",
+      "id": "id"
+    },
+    "legacy-coverage.text_8ef7bf9f0f": {
+      "game": "game",
+      "pageId": "pageId",
+      "id": "id"
+    },
+    "legacy-coverage.text_3bd0da63bd": {
+      "path": "art.path"
+    },
+    "legacy-coverage.text_880f10b843": {
+      "key": "key"
+    },
+    "legacy-coverage.text_e190c71e7f": {
+      "key": "key",
+      "galleryPath": "galleryPath"
+    },
+    "legacy-detail-queue.text_c9d434139a": {
+      "game": "page.game",
+      "pageId": "page.pageId"
+    },
+    "legacy-detail-queue.text_182bde1819": {
+      "prefix": "prefix"
+    },
+    "legacy-detail-queue.text_ff9d8ab1b4": {
+      "key": "key"
+    },
+    "maintenance.text_7327f89ea6": {
+      "targetVersion": "targetVersion"
+    },
+    "maintenance.text_8bba9f4859": {
+      "version": "result.version"
+    },
+    "maintenance.text_cd1e045cad": {
+      "version": "result.version"
+    },
+    "maintenance.text_716b6e5f0a": {
+      "action": "action",
+      "version": "result.version"
+    },
+    "maintenance.text_db9bdc61d1": {
+      "action": "action",
+      "version": "result.version"
+    },
+    "maintenance.text_8ce8132099": {
+      "action": "action",
+      "value2": "describeRefresh(result, \"\")"
+    },
+    "maintenance.text_a5dd9b6faa": {
+      "cardsVersion": "cardsVersion"
+    },
+    "maintenance.text_4ad318f411": {
+      "value1": "currentCards ?? \"未准备\"",
+      "cardsVersion": "cardsVersion"
+    },
+    "maintenance.text_761bd81ffb": {
+      "status": "status"
+    },
+    "maintenance.text_2f20706539": {
+      "channelLabel": "channelLabel",
+      "targetNotes": "targetNotes",
+      "value3": "scope.length + Number(wantsCards)"
+    },
+    "maintenance.text_daed5cdbcc": {
+      "length": "pending.length",
+      "value2": "includeArtwork ? \"或图标\" : \"\""
+    },
+    "maintenance.text_9b3a6a2fe1": {
+      "length": "updated.length"
+    },
+    "maintenance.text_d3668a8bb1": {
+      "value1": "describeRefresh(result, \"\")"
+    },
+    "maintenance.text_9ab75e22ac": {
+      "subject": "subject",
+      "remaining": "remaining",
+      "value3": "includeArtwork ? \"或原图\" : \"\""
+    },
+    "maintenance.text_b6544a8b27": {
+      "length": "pending.length"
+    },
+    "maintenance.text_56cd0a6b70": {
+      "recovered": "recovered",
+      "version": "repaired.version"
+    },
+    "maintenance.text_53ddba063e": {
+      "recovered": "recovered",
+      "version": "repaired.version"
+    },
+    "maintenance.text_c665f73806": {
+      "target": "target"
+    },
+    "maintenance.text_787aeeb910": {
+      "value1": "current ?? \"未准备\"",
+      "target": "target"
+    },
+    "maintenance.text_1b7e026d87": {
+      "value1": "[...new Set([...missing, ...(wantsCards && !cardsVersion ? [\"gi\"] : [])])].join(\"、\")"
+    },
+    "maintenance.text_ec4d921bb2": {
+      "length": "scope.length"
+    },
+    "maintenance.text_10023a4719": {
+      "length": "observed.length"
+    },
+    "maintenance.text_78a03c1095": {
+      "updateCount": "updateCount"
+    },
+    "maintenance.text_ea0cc6cf35": {
+      "coverage": "coverage",
+      "version": "result.version"
+    },
+    "maintenance.text_c11231482f": {
+      "coverage": "coverage",
+      "value2": "describeRefresh(result, \"\")"
+    },
+    "maintenance.text_ba4f669a8a": {
+      "updateCount": "updateCount"
+    },
+    "maintenance.text_71f3bfeb96": {
+      "targetVersion": "entry.targetVersion"
+    },
+    "maintenance.text_6381ac1279": {
+      "localVersion": "entry.localVersion",
+      "targetVersion": "entry.targetVersion"
+    },
+    "maintenance.text_92702fca10": {
+      "value1": "kind === \"check\" ? checkCommand : updateCommand"
+    },
+    "maintenance.text_7f5a5a0f48": {
+      "resetCommand": "resetCommand"
+    },
+    "maintenance.text_a1fd01784c": {
+      "fullCommand": "fullCommand"
+    },
+    "maintenance.text_ed2d308174": {
+      "version": "result.version"
+    },
+    "maintenance.text_9bd3b76919": {
+      "version": "result.version"
+    },
+    "maintenance.text_c44c0384aa": {
+      "version": "result.version"
+    },
+    "maintenance.text_85d5a6e6b5": {
+      "initial": "initial",
+      "version": "next.version"
+    },
+    "maintenance.text_31e8a4f658": {
+      "initial": "initial",
+      "version": "next.version"
+    },
+    "maintenance.text_db2e57513e": {
+      "initial": "initial",
+      "updateCommand": "updateCommand"
+    },
+    "native-atlas-export.text_ea255c4f36": {
+      "game": "nativeAtlasGameNames[game].game",
+      "pageId": "pageId",
+      "completedImages": "completedImages"
+    },
+    "native-atlas-export.text_01ca88f080": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "prepare-indexed-only.text_da2375a60e": {
+      "key": "key"
+    },
+    "prepare-indexed-only.text_c9d434139a": {
+      "game": "game",
+      "pageId": "pageId"
+    },
+    "prepare-indexed-only.text_eda67c0992": {
+      "game": "game",
+      "pageId": "pageId",
+      "id": "id"
+    },
+    "prepare-indexed-only.text_f34794b093": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "prepare-theme.text_6b71a2d8a1": {
+      "file": "file",
+      "attempt": "attempt"
+    },
+    "prepare-theme.text_ff45401325": {
+      "file": "file"
+    },
+    "prepare-theme.text_4b94f19b9d": {
+      "asset": "asset"
+    },
+    "refresh-source.text_f0954a1a80": {
+      "game": "game",
+      "pageId": "pageId"
+    },
+    "refresh-source.text_df2e3f3756": {
+      "name": "starrailSourceRotation(pageId).mode.name",
+      "id": "id"
+    },
+    "refresh-source.text_2f2a653b45": {
+      "id": "id"
+    },
+    "refresh-source.text_e6b18efff5": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_01f0de000f": {
+      "title": "title",
+      "group": "group"
+    },
+    "refresh-source.text_37895076cd": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_0d76eccf57": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_893935edeb": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_0765183046": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_bebbbb6612": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_236344c763": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_8bda1b07d2": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_9c1f058c33": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_ea5a565f3e": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_40c4c6654e": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_f1691435e9": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_56525bbe19": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_98c049debf": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_40ae023db8": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_3270ac31ec": {
+      "title": "title",
+      "id": "id"
+    },
+    "refresh-source.text_11ef5964fe": {
+      "title": "title",
+      "id": "id",
+      "field": "field"
+    },
+    "refresh-source.text_2189796d5c": {
+      "key": "key"
+    },
+    "refresh-source.text_d314decadd": {
+      "key": "key",
+      "version": "next.version",
+      "value3": "previous.version"
+    },
+    "refresh-source.text_d6118bcbe4": {
+      "id": "id"
+    },
+    "refresh-source.text_6a5c195f0f": {
+      "name": "starrailSourceRotation(page.pageId).mode.name",
+      "id": "id",
+      "linkedTitle": "linkedTitle",
+      "missing": "missing"
+    },
+    "refresh-source.text_e78fa5f026": {
+      "value1": "Object.keys(sourcePages).join(\"|\")"
+    },
+    "refresh-source.text_608b7e8d9a": {
+      "title": "sourcePages[selection].title"
+    },
+    "role-data.text_10970a1f45": {
+      "value1": "sectionParameters.length + 1"
+    },
+    "role-data.text_fe79ecadad": {
+      "skillName": "skillName"
+    },
+    "role-data.text_a173b79e86": {
+      "value1": "label(zenlessSkills[key]) || \"技能\""
+    },
+    "role-data.text_a60ef97ad9": {
+      "label": "label"
+    },
+    "role-data.text_d738370025": {
+      "stat": "stat"
+    },
+    "role-material-source.text_c7db704020": {
+      "game": "game",
+      "icon": "icon"
+    },
+    "role-material-source.text_52c8a331b2": {
+      "game": "game",
+      "recordId": "recordId"
+    },
+    "role-material-source.text_772dae5cf6": {
+      "game": "game",
+      "value2": "error instanceof Error ? error.message : \"读取失败。\""
+    },
+    "role-material-source.text_a7dbd8bb33": {
+      "game": "game"
+    },
+    "role-material-source.text_3a85508d6f": {
+      "game": "game"
+    },
+    "role-material-source.text_f84a78ab03": {
+      "game": "game"
+    },
+    "role-material-source.text_4eae3d3eb6": {
+      "game": "game"
+    },
+    "role-material-source.text_37ac69b6e3": {
+      "game": "game"
+    },
+    "role-render.text_d6960d887e": {
+      "level": "level"
+    },
+    "role-render.text_5963f77bf6": {
+      "value1": "++variable"
+    },
+    "role-render.text_f5e218433b": {
+      "level": "sectionStats.level"
+    },
+    "role-render.text_5733a97f5a": {
+      "rarity": "role.overview.rarity"
+    },
+    "role-render.text_6d73e79621": {
+      "cost": "cost"
+    },
+    "role-render.text_69c8843c44": {
+      "id": "item.id"
+    },
+    "role-render.text_481fcedd4b": {
+      "hp": "card.hp"
+    },
+    "role-render.text_f21629e751": {
+      "cost": "card.cost"
+    },
+    "role-render.text_9cdb90f0f1": {
+      "value1": "version.split(\".\", 2).join(\".\")"
+    },
+    "role-render.text_e5bbfc16a5": {
+      "difficulty": "difficulty"
+    },
+    "role-render.text_c4278b64e4": {
+      "minLevel": "minLevel"
+    },
+    "role-render.text_c568f76b1b": {
+      "maxAct": "maxAct"
+    },
+    "role-render.text_1992c0745f": {
+      "range": "range"
+    },
+    "role-render.text_aa37ae4078": {
+      "range": "range"
+    },
+    "role-render.text_7f3d2cf101": {
+      "value1": "hpFormat.format(enemy.hp)"
+    },
+    "role-render.text_7b9fca11ef": {
+      "value1": "side.name === \"星启模式\" || side.name === \"敌人\" ? \"\" : side.name",
+      "value2": "side.weaknesses.join(\" / \")"
+    },
+    "role-render.text_94367bf611": {
+      "range": "range"
+    },
+    "role-render.text_909ee3bae1": {
+      "value1": "room.weaknesses.join(\" / \")"
+    },
+    "role-render.text_aca7c4e5d8": {
+      "value1": "room.resistances.join(\" / \")"
+    },
+    "role-render.text_9f837531a3": {
+      "version": "version"
+    },
+    "role-render.text_d51b2d2768": {
+      "page": "page"
+    },
+    "role-render.text_d64a756a57": {
+      "section": "section"
+    },
+    "role-render.text_04b9449280": {
+      "pageNumber": "pageNumber",
+      "part": "part"
+    },
+    "set-data.text_debde1537c": {
+      "pieces": "pieces"
+    },
+    "set-data.text_22b045500c": {
+      "count": "count"
+    },
+    "shiyu-data.text_8c19c36253": {
+      "value1": "numerals[stage] ?? stage"
+    },
+    "shiyu-data.text_d0ecc272b9": {
+      "zoneId": "zoneId"
+    },
+    "shiyu-data.text_fdd4893d17": {
+      "roomId": "roomId"
+    },
+    "shiyu-data.text_30180ca5b7": {
+      "id": "entry.id"
+    },
+    "shiyu-source-data.text_efa3dc5028": {
+      "id": "id"
+    },
+    "shiyu-source-data.text_895a079dba": {
+      "id": "entry.id"
+    },
+    "source-acquisition.text_232929750f": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_50f6dceb80": {
+      "folder": "folder",
+      "position": "position"
+    },
+    "source-acquisition.text_8ed1fd5f29": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_6a8a3c9011": {
+      "id": "id"
+    },
+    "source-acquisition.text_db593b55f1": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_931e7b52f3": {
+      "id": "id"
+    },
+    "source-acquisition.text_16d6a0e75e": {
+      "id": "id"
+    },
+    "source-acquisition.text_840af60d6f": {
+      "id": "id"
+    },
+    "source-acquisition.text_8a4d803295": {
+      "id": "id"
+    },
+    "source-acquisition.text_69bd4985fd": {
+      "folder": "folder",
+      "id": "id"
+    },
+    "source-acquisition.text_6412db513e": {
+      "id": "id"
+    },
+    "source-acquisition.text_82d523d171": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_754d363da7": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_81f38689a8": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_472d68c987": {
+      "table": "table"
+    },
+    "source-acquisition.text_606689811a": {
+      "table": "table"
+    },
+    "source-acquisition.text_dbefe79f38": {
+      "folder": "folder",
+      "size": "images.size"
+    },
+    "source-acquisition.text_889931af62": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_e7902164ea": {
+      "mode": "mode",
+      "id": "id",
+      "fieldPath": "fieldPath"
+    },
+    "source-acquisition.text_db1386083e": {
+      "id": "id"
+    },
+    "source-acquisition.text_34e375283d": {
+      "folder": "folder",
+      "id": "id"
+    },
+    "source-acquisition.text_0a1220211b": {
+      "id": "id",
+      "fieldPath": "fieldPath"
+    },
+    "source-acquisition.text_8e27d0dca5": {
+      "id": "id"
+    },
+    "source-acquisition.text_c2fc84ae93": {
+      "id": "id"
+    },
+    "source-acquisition.text_43181cc9b1": {
+      "folder": "folder",
+      "id": "id"
+    },
+    "source-acquisition.text_fff7075d04": {
+      "id": "id"
+    },
+    "source-acquisition.text_888c464a14": {
+      "id": "id"
+    },
+    "source-acquisition.text_797a625d28": {
+      "id": "id"
+    },
+    "source-acquisition.text_e1c9a5a221": {
+      "id": "id"
+    },
+    "source-acquisition.text_8c25726aa2": {
+      "id": "id",
+      "slot": "slot"
+    },
+    "source-acquisition.text_13c14c4d78": {
+      "folder": "folder"
+    },
+    "source-acquisition.text_f98ddf03d0": {
+      "value1": "validation.issues[0] ?? \"\""
+    },
+    "source-transport.text_1fa380ca04": {
+      "status": "response.status"
+    },
+    "starrail-challenge-data.text_baddef9767": {
+      "value": "value"
+    },
+    "starrail-challenge-data.text_e741124190": {
+      "id": "id"
+    },
+    "starrail-challenge-data.text_3b6942b7e9": {
+      "id": "id"
+    },
+    "starrail-challenge-data.text_cb05285c60": {
+      "id": "level.id"
+    },
+    "starrail-challenge-data.text_68a8f8184f": {
+      "additionalGoal": "additionalGoal"
+    },
+    "starrail-challenge-data.text_039a4b8be3": {
+      "value1": "names.get(preId) || ownName"
+    },
+    "starrail-challenge-data.text_30180ca5b7": {
+      "id": "entry.id"
+    },
+    "starrail-challenge-data.text_24907e8634": {
+      "name": "mode.name"
+    },
+    "status.text_cd396e8772": {
+      "value1": "pages.reduce((total, page) => total + page.entries.length, 0)"
+    },
+    "status.text_a4a7fca516": {
+      "value1": "result ? `${pages.reduce((total, page) => total + page.entries.length, 0)} 个` : \"缺失\""
+    },
+    "status.text_de69d15875": {
+      "length": "pages.length"
+    },
+    "status.text_be35d8a00a": {
+      "value1": "result ? `${pages.length} 个` : \"缺失\""
+    },
+    "status.text_b5a8cc43e6": {
+      "value1": "galleryReady ? \"已找到\" : \"缺失\""
+    },
+    "status.text_65687894af": {
+      "folder": "atlasLocales[catalog.locale].folder"
+    },
+    "status.text_8075f0e20a": {
+      "length": "achievementCategories.length",
+      "value2": "achievementCategories.reduce((total, category) => total + category.entries.length, 0)"
+    },
+    "status.text_a6c377fdf3": {
+      "length": "entries.length"
+    },
+    "status.text_e9f5e3f1fa": {
+      "value1": "result ? \"READY\" : \"MISSING\"",
+      "root": "root"
+    },
+    "theater-data.text_45cc49fe49": {
+      "id": "id"
+    },
+    "theater-data.text_57089b1164": {
+      "id": "id"
+    },
+    "theater-data.text_e741124190": {
+      "id": "id"
+    },
+    "theater-data.text_9a41e92526": {
+      "value1": "numerals[roomId] ?? roomId"
+    },
+    "theater-data.text_b8745abf83": {
+      "value1": "numerals[index + 1] ?? index + 1"
+    },
+    "update-policy.text_bf1ca576c5": {
+      "argsKey": "argsKey"
+    },
+    "update-policy.text_5992679a7a": {
+      "cronKey": "cronKey"
+    },
+    "validate-candidate.text_4dbab3954f": {
+      "value1": "controls.test(pageId) ? game : where"
+    },
+    "validate-candidate.text_29cdaeeb9a": {
+      "where": "where"
+    },
+    "validate-candidate.text_e39ab8ff06": {
+      "where": "where",
+      "key": "key"
+    },
+    "validate-candidate.text_ba449948f4": {
+      "where": "where",
+      "key": "key"
+    },
+    "validate-candidate.text_6cd8318977": {
+      "game": "expected.game",
+      "pageId": "expected.pageId"
+    },
+    "zzz-challenge-data.text_e741124190": {
+      "id": "id"
+    }
+  }
+}

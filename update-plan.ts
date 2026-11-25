@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { defaultAtlasLocale } from "./locale.ts";
 import type { Game } from "./catalog.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes } from "./source-transport.ts";
@@ -85,7 +88,7 @@ export function planAtlasUpdate(manifest: unknown, local: AtlasCandidateValidati
   scope?: readonly AtlasPlanPage[], channel?: AtlasVersionChannel): AtlasUpdatePlan {
   const entries: AtlasPlanEntry[] = [];
   if (scope?.some(({ game, pageId }) => !trackedPages.some((page) => page.game === game && page.pageId === pageId))) {
-    throw new TypeError("图鉴更新范围包含未识别的游戏或分类。");
+    throw new TypeError($t("update-plan.text_1e411d53d0"));
   }
   for (const page of trackedPages) {
     const { game, pageId, kind } = page;
@@ -117,14 +120,14 @@ export function planPublishedChallengeRefresh(manifest: unknown, local: AtlasCan
 
 export async function fetchAtlasManifest(signal?: AbortSignal): Promise<unknown> {
   const bytes = await readAtlasSourceBytes(atlasManifestUrl, "application/json", maxManifestBytes, false, signal, fetch, { retry: true });
-  if (!bytes) throw new Error("图鉴版本清单不可用。");
+  if (!bytes) throw new Error($t("update-plan.text_388c6936a6"));
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
 }
 
 if (import.meta.main) {
   const [directory, manifestFile, ...extra] = Bun.argv.slice(2);
   if (!directory || extra.length) {
-    console.error("用法：bun update-plan.ts <包含 map.json 的本地目录> [清单 JSON 文件]");
+    console.error($t("update-plan.text_08b7a6f73a"));
     process.exitCode = 2;
   } else {
     try {
@@ -134,7 +137,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(plan, null, 2));
       if (plan.entries.some(({ action }) => action === "review")) process.exitCode = 1;
     } catch {
-      console.error("无法生成图鉴更新计划。请检查固定来源或本地清单文件。");
+      console.error($t("update-plan.text_8cf7c78f9b"));
       process.exitCode = 1;
     }
   }

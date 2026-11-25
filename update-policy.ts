@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
 import type { AtlasPublicationOptions } from "./publish-candidate.ts";
@@ -135,16 +138,16 @@ export function parseAtlasUpdatePolicy(value: unknown): Readonly<Record<AtlasSch
   function policy(kind: AtlasScheduleKind, selections: readonly string[]): AtlasSchedulePolicy {
     const argsKey = kind === "version" ? "update_args" : "challenge_args";
     const selected = configuredScope(atlas[argsKey], selections, parseAtlasLocale(atlas.locale) ?? defaultAtlasLocale);
-    if (!selected) return { selections: [], issue: `图鉴 ${argsKey} 含不支持的选项或无效分类范围。` };
-    if (value !== undefined && !configured) return { selections: selected, issue: "图鉴配置须为对象。" };
-    if (invalidAuto) return { selections: selected, issue: "图鉴 auto_update 配置无效。" };
+    if (!selected) return { selections: [], issue: $t("update-policy.text_bf1ca576c5", { "argsKey": argsKey }) };
+    if (value !== undefined && !configured) return { selections: selected, issue: $t("update-policy.text_b53afe6520") };
+    if (invalidAuto) return { selections: selected, issue: $t("update-policy.text_a2d4c8b694") };
     if (!configured || auto.enable === false || !selected.length) return { selections: selected };
     const cronKey = kind === "version" ? "check_cron" : "challenge_cron";
     const configuredCron = auto[cronKey];
     const rule = cron(configuredCron === undefined ? defaults[kind] : configuredCron);
     const initializeMissing = kind === "version" && atlasAllowsMissingDataInitialization(atlas);
     return rule ? { selections: selected, cron: rule, ...(initializeMissing && { initializeMissing: true }) }
-      : { selections: selected, issue: `图鉴 auto_update.${cronKey} 无效或无法等价转换。` };
+      : { selections: selected, issue: $t("update-policy.text_5992679a7a", { "cronKey": cronKey }) };
   }
   return {
     version: policy("version", atlasExportSelections),

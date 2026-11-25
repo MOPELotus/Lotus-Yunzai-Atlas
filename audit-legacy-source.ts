@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 import { legacyAtlasSourcePages, type LegacyAtlasSourcePage } from "./legacy-source-profile.ts";
 import { atlasSourceOrigin, readAtlasSourceBytes, type AtlasSourceFetch } from "./source-transport.ts";
@@ -51,7 +54,7 @@ export async function auditLegacyAtlasSource({ manifest = fetchAtlasManifest, re
 
 if (import.meta.main) {
   if (Bun.argv.length !== 2) {
-    console.error("用法：bun audit-legacy-source.ts（只读核对原 29 个索引）");
+    console.error($t("audit-legacy-source.text_7a852fed09"));
     process.exitCode = 2;
   } else {
     const report = await auditLegacyAtlasSource();

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocales, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
 import type { Game } from "./catalog.ts";
@@ -17,19 +20,19 @@ type OriginImage = {
 export type ReadOriginImage = (url: string) => Promise<OriginImage | undefined>;
 
 export const nativeAtlasGameNames = {
-  gi: { game: "Genshin Impact", folder: "原神" },
-  hsr: { game: "Honkai: Star Rail", folder: "星铁" },
-  zzz: { game: "Zenless Zone Zero", folder: "绝区零" },
+  gi: { game: "Genshin Impact", folder: $t("native-record-export.text_d1597c51ed") },
+  hsr: { game: "Honkai: Star Rail", folder: $t("native-record-export.text_a2927891f0") },
+  zzz: { game: "Zenless Zone Zero", folder: $t("native-record-export.text_b1110352c9") },
 } as const;
 
 const groups: Readonly<Record<Game, Readonly<Record<string, string>>>> = {
-  gi: { character: "角色", weapon: "武器", artifact: "圣遗物", monster: "敌人",
-    "achievement/achievement": "成就", leyline: "地脉异常", rolecombat: "幻想真境剧诗挑战", tower: "深境螺旋" },
-  hsr: { lightcone: "光锥", character: "角色", monster: "敌人", relicset: "遗器套装", "achievement/achievement": "成就",
-    maze_boss: "末日幻影", maze: "混沌回忆", maze_peak: "异相仲裁", maze_extra: "虚构叙事", monstervalue: "敌人数值",
-    EliteGroup: "精英组", HardLevelGroup: "难度组", InfiniteEliteGroup: "无限精英组" },
-  zzz: { weapon: "音擎", character: "角色", bangboo: "邦布", equipment: "驱动盘", monster: "敌人",
-    "achievement/achievement": "成就", boss: "危局强袭战", shiyu: "式舆防卫战" },
+  gi: { character: $t("native-record-export.text_c47b54e84e"), weapon: $t("native-record-export.text_4fe131173e"), artifact: $t("native-record-export.text_fc2ee58f3d"), monster: $t("native-record-export.text_40a2cbbcce"),
+    "achievement/achievement": $t("native-record-export.text_52b0e1703d"), leyline: $t("native-record-export.text_b4f37d0a87"), rolecombat: $t("native-record-export.text_1ccef31aa0"), tower: $t("native-record-export.text_82f72c6585") },
+  hsr: { lightcone: $t("native-record-export.text_e733238b28"), character: $t("native-record-export.text_c47b54e84e"), monster: $t("native-record-export.text_40a2cbbcce"), relicset: $t("native-record-export.text_6239fc646e"), "achievement/achievement": $t("native-record-export.text_52b0e1703d"),
+    maze_boss: $t("native-record-export.text_8dae72d970"), maze: $t("native-record-export.text_59977c7f79"), maze_peak: $t("native-record-export.text_fdc6c58c58"), maze_extra: $t("native-record-export.text_d66b949b63"), monstervalue: $t("native-record-export.text_a1c6f7a65f"),
+    EliteGroup: $t("native-record-export.text_c9f9d88c98"), HardLevelGroup: $t("native-record-export.text_8b9c031034"), InfiniteEliteGroup: $t("native-record-export.text_149f5763ce") },
+  zzz: { weapon: $t("native-record-export.text_2ce0392ca1"), character: $t("native-record-export.text_c47b54e84e"), bangboo: $t("native-record-export.text_aa46a7c35b"), equipment: $t("native-record-export.text_d245c1825d"), monster: $t("native-record-export.text_40a2cbbcce"),
+    "achievement/achievement": $t("native-record-export.text_52b0e1703d"), boss: $t("native-record-export.text_4b7b8e83d9"), shiyu: $t("native-record-export.text_f718dc4321") },
 };
 
 const pathVersion = /^(?:0|[1-9]\d{0,7})(?:\.(?:0|[1-9]\d{0,7})){1,3}(?:\+(?:0|[1-9]\d{0,14}))?$/u;
@@ -39,7 +42,7 @@ const hues = { orange: 5, gold: 5, purple: 4, blue: 3, green: 2, gray: 1, grey: 
 
 export function nativeAtlasPageOrigin({ game, pageId, version, locale = defaultAtlasLocale }: NativeAtlasPage) {
   const profile = legacyAtlasSourcePages.find(row => row.game === game && row.pageId === pageId);
-  if (!profile || !pathVersion.test(version) || (game !== "zzz" && version.includes("+"))) throw new Error("无效的原图鉴分类或版本。");
+  if (!profile || !pathVersion.test(version) || (game !== "zzz" && version.includes("+"))) throw new Error($t("native-record-export.text_2d99d85003"));
   const sourceLocale = pageId === "achievement/achievement" ? locale : null;
   const path = `${version}/${sourceLocale ? sourceLocale + "/" : ""}${pageId}.json`;
   const localeMode = sourceLocale ? "path" : "embedded";
@@ -80,12 +83,12 @@ function rarityRank(value: unknown) {
 
 function rarity(list: unknown, detail: unknown) {
   const rank = rarityRank(list) ?? rarityRank(detail);
-  return rank ? ["", "一星", "二星", "三星", "四星", "五星", "六星"][rank] ?? rank + "星" : "未分类";
+  return rank ? ["", $t("native-record-export.text_b421060376"), $t("native-record-export.text_4cdaab8f22"), $t("native-record-export.text_5fdd673ed1"), $t("native-record-export.text_1077b809a5"), $t("native-record-export.text_789a6953ec"), $t("native-record-export.text_e23587866d")][rank] ?? rank + $t("native-record-export.text_83e9c51b3d") : $t("native-record-export.text_54b89f9012");
 }
 
 export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, list: unknown,
   readImage: ReadOriginImage, signal: AbortSignal | undefined, request: AtlasSourceFetch) {
-  if (!recordId.test(id)) throw new Error("无效的原图鉴条目编号。");
+  if (!recordId.test(id)) throw new Error($t("native-record-export.text_cab879dffb"));
   const { game, pageId, version, locale = defaultAtlasLocale } = page;
   const { folder, title: _, ...origin } = nativeAtlasPageOrigin(page);
   const detailUrl = legacyIndexedOnlyPages.has(game + "/" + pageId) ? undefined
@@ -93,7 +96,7 @@ export async function readNativeAtlasRecord(page: NativeAtlasPage, id: string, l
   const bytes = detailUrl && await readAtlasSourceBytes(detailUrl, "application/json", 8 * 1024 * 1024, true, signal, request, { retry: true });
   const detailSource = bytes ? utf8.decode(bytes) : "null";
   const detail: unknown = JSON.parse(detailSource);
-  if (bytes && (detail === null || typeof detail !== "object" || (Array.isArray(detail) && !(game === "hsr" && pageId === "maze")))) throw new Error("原图鉴详情格式无效。");
+  if (bytes && (detail === null || typeof detail !== "object" || (Array.isArray(detail) && !(game === "hsr" && pageId === "maze")))) throw new Error($t("native-record-export.text_72a4407f6a"));
   const references = [...nativeAtlasImageReferences(game, pageId, id, list),
     ...(detail ? nativeAtlasImageReferences(game, pageId, id, detail, "detail.") : [])];
   const images = [];
@@ -123,7 +126,7 @@ export function nativeAtlasAssetUrl(game: Game, url: string) {
   const prefix = `/assets/${game}/`;
   if (original.origin !== atlasSourceOrigin || !original.pathname.startsWith(prefix) || original.username ||
       original.password || original.search || original.hash || !original.pathname.endsWith(".webp")) {
-    throw new Error("原图地址未指向对应游戏的 Nanoka CDN。");
+    throw new Error($t("native-record-export.text_b8a7da050d"));
   }
   return original;
 }

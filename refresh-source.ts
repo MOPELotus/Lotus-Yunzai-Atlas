@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -19,31 +22,31 @@ import { validateAtlasCandidate, type AtlasCandidatePage } from "./validate-cand
 
 const itemIcons = ["icon", "detail.icon"] as const;
 const sourcePages = {
-  "zzz/character": { game: "zzz", pageId: "character", title: "绝区零角色", iconFields: [] },
-  "zzz/monster": { game: "zzz", pageId: "monster", title: "绝区零敌人", iconFields: [] },
-  "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "邦布", iconFields: itemIcons },
-  "zzz/weapon": { game: "zzz", pageId: "weapon", title: "音擎", iconFields: itemIcons },
-  "zzz/equipment": { game: "zzz", pageId: "equipment", title: "驱动盘", iconFields: [...itemIcons, "detail.icon2"] },
-  "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "星铁精英组", iconFields: [] },
-  "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "星铁难度组", iconFields: [] },
-  "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "星铁无限精英组", iconFields: [] },
-  "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "星铁虚构叙事", iconFields: [] },
-  "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "星铁末日幻影", iconFields: [] },
-  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: "星铁异相仲裁", iconFields: [] },
-  "hsr/maze": { game: "hsr", pageId: "maze", title: "星铁混沌回忆", iconFields: [] },
-  "hsr/monster": { game: "hsr", pageId: "monster", title: "星铁敌人", iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
-  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "星铁敌人数值", iconFields: [] },
-  "hsr/relicset": { game: "hsr", pageId: "relicset", title: "星铁遗器", iconFields: itemIcons },
-  "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "光锥",
+  "zzz/character": { game: "zzz", pageId: "character", title: $t("refresh-source.text_b95d7209a4"), iconFields: [] },
+  "zzz/monster": { game: "zzz", pageId: "monster", title: $t("refresh-source.text_76a25acbcb"), iconFields: [] },
+  "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: $t("refresh-source.text_aa46a7c35b"), iconFields: itemIcons },
+  "zzz/weapon": { game: "zzz", pageId: "weapon", title: $t("refresh-source.text_2ce0392ca1"), iconFields: itemIcons },
+  "zzz/equipment": { game: "zzz", pageId: "equipment", title: $t("refresh-source.text_d245c1825d"), iconFields: [...itemIcons, "detail.icon2"] },
+  "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: $t("refresh-source.text_bdb1188d28"), iconFields: [] },
+  "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: $t("refresh-source.text_9438bc4cf8"), iconFields: [] },
+  "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: $t("refresh-source.text_08c6656b73"), iconFields: [] },
+  "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: $t("refresh-source.text_12407278c4"), iconFields: [] },
+  "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: $t("refresh-source.text_75bc5e1137"), iconFields: [] },
+  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: $t("refresh-source.text_419c575f1e"), iconFields: [] },
+  "hsr/maze": { game: "hsr", pageId: "maze", title: $t("refresh-source.text_59e54b366d"), iconFields: [] },
+  "hsr/monster": { game: "hsr", pageId: "monster", title: $t("refresh-source.text_b221591d3f"), iconFields: ["icon", "derived.monsterFigure", "detail.image_path"] },
+  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: $t("refresh-source.text_83ebe3015f"), iconFields: [] },
+  "hsr/relicset": { game: "hsr", pageId: "relicset", title: $t("refresh-source.text_810786eac8"), iconFields: itemIcons },
+  "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: $t("refresh-source.text_e733238b28"),
     iconFields: ["derived.lightConeMediumIcon", "derived.path", "detail.derived.lightConeMediumIcon"] },
-  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "绝区零成就", iconFields: [] },
-  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "原神成就", iconFields: ["icon"] },
-  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "星铁成就", iconFields: [] },
-  "gi/artifact": { game: "gi", pageId: "artifact", title: "原神圣遗物", iconFields: itemIcons },
-  "gi/gcg": { game: "gi", pageId: "gcg", title: "七圣召唤", iconFields: itemIcons },
-  "gi/weapon": { game: "gi", pageId: "weapon", title: "原神武器", iconFields: itemIcons },
-  "zzz/boss": { game: "zzz", pageId: "boss", title: "危局强袭战", iconFields: [] },
-  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "式舆防卫战", iconFields: [] },
+  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: $t("refresh-source.text_6d515a5b4d"), iconFields: [] },
+  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: $t("refresh-source.text_5013174952"), iconFields: ["icon"] },
+  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: $t("refresh-source.text_d6aa0908db"), iconFields: [] },
+  "gi/artifact": { game: "gi", pageId: "artifact", title: $t("refresh-source.text_c53f62c9ea"), iconFields: itemIcons },
+  "gi/gcg": { game: "gi", pageId: "gcg", title: $t("refresh-source.text_8c8df27f6c"), iconFields: itemIcons },
+  "gi/weapon": { game: "gi", pageId: "weapon", title: $t("refresh-source.text_086cdc5c1f"), iconFields: itemIcons },
+  "zzz/boss": { game: "zzz", pageId: "boss", title: $t("refresh-source.text_4b7b8e83d9"), iconFields: [] },
+  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: $t("refresh-source.text_f718dc4321"), iconFields: [] },
 } as const;
 export type SourceSelection = keyof typeof sourcePages;
 type SourcePage = { readonly game: Game; readonly locale?: AtlasLocale; readonly pageId: string; readonly title: string; readonly iconFields: readonly string[] };
@@ -51,7 +54,7 @@ type FullImageEvidence = ReturnType<typeof inspectFullAtlasImages>;
 type ChallengeFacts = ReturnType<typeof readChallengeFacts>;
 
 const otherTitles: Readonly<Partial<Record<string, string>>> = {
-  "gi/character": "原神角色", "gi/monster": "原神敌人", "hsr/character": "星铁角色",
+  "gi/character": $t("refresh-source.text_70320f908f"), "gi/monster": $t("refresh-source.text_f624c9cf15"), "hsr/character": $t("refresh-source.text_6d949d3a2f"),
 };
 
 function fullSourcePage(game: Game, pageId: string, locale?: AtlasLocale): SourcePage {
@@ -100,7 +103,7 @@ async function pageAssets(root: string, { game, pageId, iconFields, locale = def
   for (const [id, record] of Object.entries(records)) {
     signal?.throwIfAborted();
     const { path, rarity: indexRarity } = object(record);
-    if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("图鉴候选条目路径无效。");
+    if (typeof path !== "string" || !path.startsWith("items/")) throw new Error($t("refresh-source.text_56c99bcc38"));
     const raw = await readFile(await candidateFile(root, path), "utf8");
     const item = object(JSON.parse(raw));
     const { hasDetail, images, name } = object(item.meta);
@@ -131,12 +134,12 @@ async function pageAssets(root: string, { game, pageId, iconFields, locale = def
     let groupFields: string[] | undefined;
     if (isMonsterGroupPage(pageId)) {
       const semanticKey = monsterGroupKey(pageId, values);
-      if (!semanticKey || assets.has(semanticKey)) throw new Error(`${game}/${pageId} 存在无效或重复主键。`);
+      if (!semanticKey || assets.has(semanticKey)) throw new Error($t("refresh-source.text_f0954a1a80", { "game": game, "pageId": pageId }));
       key = semanticKey;
       groupFields = Object.keys(values);
     }
     const maze = isStarrailRotationPage(pageId) ? mazeSourceOutline(pageId, content.detail, typeof name === "string" ? name : "", id) : undefined;
-    if (!fullImages && isStarrailRotationPage(pageId) && !maze) throw new Error(`${starrailSourceRotation(pageId).mode.name} ${id} 关卡身份或结构无效。`);
+    if (!fullImages && isStarrailRotationPage(pageId) && !maze) throw new Error($t("refresh-source.text_df2e3f3756", { "name": starrailSourceRotation(pageId).mode.name, "id": id }));
     const imageDigests = fullImages && await fullImages.read(game, pageId, key, images);
     let effective: string | undefined;
     if (fullImages) {
@@ -160,10 +163,10 @@ async function pageAssets(root: string, { game, pageId, iconFields, locale = def
   const achievementIds = new Set(achievements.flatMap(({ entries }) => entries.map(({ id }) => id)));
   const achievementGroups = new Set<string>();
   if (game === "zzz" && pageId === "achievement/achievement") {
-    for (const { id } of achievements) achievementGroups.add(`子分类 ${id}`);
+    for (const { id } of achievements) achievementGroups.add($t("refresh-source.text_2f2a653b45", { "id": id }));
     for (const { id, list } of achievementSources) {
       if (id === "category" || id === "mutual_type") {
-        const title = id === "category" ? "一级分类" : "互斥数据";
+        const title = id === "category" ? $t("refresh-source.text_07c167eb4e") : $t("refresh-source.text_29c00d44de");
         for (const key of Object.keys(object(list))) achievementGroups.add(`${title} ${key}`);
       }
     }
@@ -183,19 +186,19 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
     (full && challengeModes.some(mode => mode.game === game && mode.id === pageId));
   const issues: string[] = [];
   for (const id of before.achievementIds) {
-    if (!after.achievementIds.has(id)) issues.push(`${title}缺少已有条目 ${id}。`);
+    if (!after.achievementIds.has(id)) issues.push($t("refresh-source.text_e6b18efff5", { "title": title, "id": id }));
   }
   for (const group of before.achievementGroups) {
-    if (!after.achievementGroups.has(group)) issues.push(`${title}缺少已有${group}。`);
+    if (!after.achievementGroups.has(group)) issues.push($t("refresh-source.text_01f0de000f", { "title": title, "group": group }));
   }
   for (const [id, old] of before.assets) {
     const next = after.assets.get(id);
     if (!next) {
-      if (preserveRotation) issues.push(`${title} ${id} 缺少已有轮换资料。`);
-      if (pageId === "equipment") issues.push(`${title} ${id} 缺少已有套装资料。`);
-      if (game === "zzz" && pageId === "weapon") issues.push(`${title} ${id} 缺少已有音擎资料。`);
+      if (preserveRotation) issues.push($t("refresh-source.text_37895076cd", { "title": title, "id": id }));
+      if (pageId === "equipment") issues.push($t("refresh-source.text_0d76eccf57", { "title": title, "id": id }));
+      if (game === "zzz" && pageId === "weapon") issues.push($t("refresh-source.text_893935edeb", { "title": title, "id": id }));
       if ((preserveRecords || pageId === "gcg" || pageId === "character" || pageId === "achievement/achievement" || pageId === "relicset" || pageId === "artifact" || pageId === "monstervalue" || pageId === "monster" || isMonsterGroupPage(pageId)) && !preserveRotation && pageId !== "equipment" && !(game === "zzz" && pageId === "weapon")) {
-        issues.push(`${title} ${id} 缺少已有条目。`);
+        issues.push($t("refresh-source.text_0765183046", { "title": title, "id": id }));
       }
       continue;
     }
@@ -205,36 +208,36 @@ function regressions({ game, title, pageId }: SourcePage, before: Awaited<Return
       effectText(next.name) === "尘世卷中" && old.window?.from !== "live";
     if (preserveRotation && ((!unnamedPreview && !arbitrationPreview && effectText(old.name) !== effectText(next.name)) || (old.window?.from === "live" &&
       (next.window?.from !== "live" || old.window.begin !== next.window.begin || old.window.end !== next.window.end)))) {
-      issues.push(`${title} ${id} 与已有身份或实装窗口冲突。`);
+      issues.push($t("refresh-source.text_bebbbb6612", { "title": title, "id": id }));
     }
-    if (pageId === "character" && old.name !== next.name) issues.push(`${title} ${id} 与已有角色身份不符。`);
-    if (pageId === "gcg" && old.name !== next.name) issues.push(`${title} ${id} 与已有卡牌身份不符。`);
+    if (pageId === "character" && old.name !== next.name) issues.push($t("refresh-source.text_236344c763", { "title": title, "id": id }));
+    if (pageId === "gcg" && old.name !== next.name) issues.push($t("refresh-source.text_8bda1b07d2", { "title": title, "id": id }));
     if (game === "zzz" && pageId === "monster" && old.name !== "OfficialName_" && old.name !== next.name) {
-      issues.push(`${title} ${id} 与已有敌人身份不符。`);
+      issues.push($t("refresh-source.text_9c1f058c33", { "title": title, "id": id }));
     }
     if (old.parts?.some(part => !next.parts?.includes(part)) || old.effects?.some(effect => !next.effects?.includes(effect))) {
-      issues.push(`${title} ${id} 缺少已有部位或套装效果。`);
+      issues.push($t("refresh-source.text_ea5a565f3e", { "title": title, "id": id }));
     }
     if (old.variants?.some(id => !next.variants?.includes(id)) || old.phases?.some(phase => !next.phases?.includes(phase))) {
-      issues.push(`${title} ${id} 缺少已有变体或阶段。`);
+      issues.push($t("refresh-source.text_40c4c6654e", { "title": title, "id": id }));
     }
     if (old.groupFields?.some(field => !next.groupFields?.includes(field))) {
-      issues.push(`${title} ${id} 缺少已有字段。`);
+      issues.push($t("refresh-source.text_f1691435e9", { "title": title, "id": id }));
     }
-    if (old.description && !next.description) issues.push(`${title} ${id} 缺少已有说明。`);
+    if (old.description && !next.description) issues.push($t("refresh-source.text_56525bbe19", { "title": title, "id": id }));
     const oldMaze = old.maze;
     if (oldMaze && (["floors", "stages", "enemies"] as const).some(key =>
       [...oldMaze[key]].some(value => !next.maze?.[key].has(value)))) {
-      issues.push(`${title} ${id} 缺少已有楼层、战斗或敌人。`);
+      issues.push($t("refresh-source.text_98c049debf", { "title": title, "id": id }));
     }
     if (old.challenge?.some(section => {
       const matches = next.challenge?.filter(current => current.label === section.label) ?? [];
       return !matches.some(current => current.count >= section.count &&
         (pageId !== "tower" || section.items.every(item => current.items.includes(item))));
-    })) issues.push(`${title} ${id} 缺少已有挑战分区。`);
-    if (old.hasDetail && !next.hasDetail) issues.push(`${title} ${id} 缺少已有详情。`);
+    })) issues.push($t("refresh-source.text_40ae023db8", { "title": title, "id": id }));
+    if (old.hasDetail && !next.hasDetail) issues.push($t("refresh-source.text_3270ac31ec", { "title": title, "id": id }));
     for (const field of old.icons) {
-      if (!next.icons.has(field)) issues.push(`${title} ${id} 缺少已下载图标 ${field}。`);
+      if (!next.icons.has(field)) issues.push($t("refresh-source.text_11ef5964fe", { "title": title, "id": id, "field": field }));
     }
   }
   return issues;
@@ -252,7 +255,7 @@ export async function inspectFullAtlasCandidate(baselineData: string, candidateD
   scope: readonly AtlasCandidatePage[], signal?: AbortSignal,
 ): Promise<{ readonly issues: readonly string[]; readonly unchanged: boolean }> {
   if (!scope.length || new Set(scope.map(atlasPageKey)).size !== scope.length) {
-    throw new Error("全量图鉴候选须提供不重复的分类范围。");
+    throw new Error($t("refresh-source.text_ca8260cf5b"));
   }
   const [beforeRoot, afterRoot] = await Promise.all([realpath(baselineData), realpath(candidateData)]);
   const [before, after] = await Promise.all([
@@ -269,11 +272,11 @@ export async function inspectFullAtlasCandidate(baselineData: string, candidateD
   for (const [key, previous] of beforePages) {
     const next = afterPages.get(key);
     if (!next) {
-      issues.push(`缺少现用分类 ${key}。`);
+      issues.push($t("refresh-source.text_2189796d5c", { "key": key }));
       continue;
     }
     if (previous.version !== next.version && !isNewerAtlasVersion(next.version, previous.version, previous.game)) {
-      issues.push(`${key} 的版本 ${next.version} 不能证明晚于现用 ${previous.version}。`);
+      issues.push($t("refresh-source.text_d314decadd", { "key": key, "version": next.version, "value3": previous.version }));
     }
   }
   for (const [key, next] of afterPages) {
@@ -316,7 +319,7 @@ export const atlasSourceSelections = Object.entries(sourcePages).map(([selection
 /** Refresh one supported page from the fixed source. */
 export async function refreshAtlasSource(root: string, options: AtlasRefreshOptions = {}): Promise<AtlasSourceRefresh> {
   const { signal, request, manifest = fetchAtlasManifest, pageId = "bangboo", selection = defaultSelections[pageId] } = options;
-  if (!isSourceSelection(selection)) throw new TypeError("请选择支持刷新的图鉴分类。");
+  if (!isSourceSelection(selection)) throw new TypeError($t("refresh-source.text_44af67af8d"));
   const page = sourcePages[selection];
   const scope = [{ game: page.game, pageId: page.pageId }] as const;
   signal?.throwIfAborted();
@@ -357,7 +360,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
       for (const [id, record] of values.assets) {
         const monster = after.assets.get(id);
         if (!monster || record.variants?.some(variant => !monster.variants?.includes(variant))) {
-          issues.push(`星铁敌人 ${id} 缺少同版本数值表关联的变体。`);
+          issues.push($t("refresh-source.text_d6118bcbe4", { "id": id }));
         }
       }
     }
@@ -383,10 +386,10 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
           }
           permitted.push(known);
         }
-        const linkedTitle = selections.map(selection => sourcePages[selection].title).join("或");
+        const linkedTitle = selections.map(selection => sourcePages[selection].title).join($t("refresh-source.text_a2123d6950"));
         for (const [id, record] of after.assets) {
           const missing = [...record.maze?.[field] ?? []].find(key => !permitted.some(known => known.has(key)));
-          if (missing) issues.push(`${starrailSourceRotation(page.pageId).mode.name} ${id} 无法关联同版本${linkedTitle} ${missing}。`);
+          if (missing) issues.push($t("refresh-source.text_6a5c195f0f", { "name": starrailSourceRotation(page.pageId).mode.name, "id": id, "linkedTitle": linkedTitle, "missing": missing }));
         }
       }
     }
@@ -404,7 +407,7 @@ export async function refreshAtlasSource(root: string, options: AtlasRefreshOpti
 if (import.meta.main) {
   const [root, selection, ...extra] = Bun.argv.slice(2);
   if (!root || !isSourceSelection(selection) || extra.length) {
-    console.error(`用法：bun refresh-source.ts <图鉴根目录> <${Object.keys(sourcePages).join("|")}>`);
+    console.error($t("refresh-source.text_e78fa5f026", { "value1": Object.keys(sourcePages).join("|") }));
     process.exitCode = 2;
   } else {
     try {
@@ -412,7 +415,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(result, null, 2));
       if (result.status !== "published" && result.status !== "current") process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : `无法刷新${sourcePages[selection].title}图鉴。`);
+      console.error(error instanceof Error ? error.message : $t("refresh-source.text_608b7e8d9a", { "title": sourcePages[selection].title }));
       process.exitCode = 1;
     }
   }

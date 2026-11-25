@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -6,7 +9,7 @@ export type AtlasPointer = number | "reset" | null;
 
 export class AtlasSnapshotReset extends Error {
   constructor() {
-    super("图鉴已重置，请重新初始化图鉴。");
+    super($t("snapshot-pointer.text_5b05234db1"));
   }
 }
 
@@ -30,7 +33,7 @@ export async function readAtlasPublicationPointer(path: string): Promise<AtlasPo
   const match = /^snapshots\/([1-9][0-9]*)\/data$/u.exec(target);
   const version = Number(match?.[1]);
   if (!isAtlasSnapshotVersion(version) || atlasSnapshotTarget(version) !== target) {
-    throw new Error("图鉴发布指针格式无效。");
+    throw new Error($t("snapshot-pointer.text_9d0e73c167"));
   }
   return version;
 }
@@ -49,7 +52,7 @@ export async function discoverAtlasDataDirectory(directory: string) {
   // Resolve the captured target, not the moving `current` alias.
   const root = join(atlas, atlasSnapshotTarget(version));
   if (await realpath(root) !== root || !(await lstat(root)).isDirectory()) {
-    throw new Error("图鉴发布指针须指向实体快照目录。");
+    throw new Error($t("snapshot-pointer.text_52b3665313"));
   }
   return { root, version };
 }

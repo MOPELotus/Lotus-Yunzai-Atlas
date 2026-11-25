@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, defaultAtlasLocale } from "./locale.ts";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -21,7 +24,7 @@ function galleryGame(path: unknown): Game {
     const segment = path.split("/")[1];
     if (segment === "gi" || segment === "hsr" || segment === "zzz") return segment;
   }
-  throw new Error("保留图库的游戏路径无效。");
+  throw new Error($t("retain-gallery.text_b8b34e62d9"));
 }
 
 function retainedReference(path: string, reference: Record<string, unknown>) {
@@ -38,7 +41,7 @@ export async function* atlasCandidateItems(directory: string, pages: AtlasCandid
     for (const record of Object.values(object(object(pageMap[pageId]).records))) {
       signal?.throwIfAborted();
       const { path } = object(record);
-      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("候选条目路径无效。");
+      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error($t("retain-gallery.text_9d47db229c"));
       const file = await candidateFile(directory, path);
       const raw = await readFile(file, "utf8");
       yield { game, file, raw, item: object(JSON.parse(raw)) };
@@ -54,7 +57,7 @@ export async function retainAtlasGallery(candidate: string, pages: AtlasCandidat
     const previous = new Map<string, ReturnType<typeof retainedReference>>();
     if (baseline) {
       const validated = await validateAtlasCandidate(baseline, [], signal);
-      if (!validated.ok) throw new Error("现用图库的索引不可验证。");
+      if (!validated.ok) throw new Error($t("retain-gallery.text_0f3f74f771"));
       const gallery = candidateGallery(temp);
       const source = dirname(baseline);
       for await (const { game, item } of atlasCandidateItems(baseline, validated.pages, signal)) {
@@ -70,12 +73,12 @@ export async function retainAtlasGallery(candidate: string, pages: AtlasCandidat
         if (!missing(error)) throw error;
         return [];
       });
-      if (!Array.isArray(prior)) throw new Error("保留图库索引无效。");
+      if (!Array.isArray(prior)) throw new Error($t("retain-gallery.text_19c3ae070b"));
       for (const row of prior) {
         const reference = object(row);
         const game = galleryGame(reference.localPath);
         const asset = candidateImageReference(reference, game);
-        if (!asset?.sha256) throw new Error("保留图库的引用无效。");
+        if (!asset?.sha256) throw new Error($t("retain-gallery.text_7571a1b317"));
         await gallery.include({ meta: { images: [reference] } }, game, source, signal);
         if (!previous.has(asset.path)) previous.set(asset.path, retainedReference(asset.path, reference));
       }
@@ -115,7 +118,7 @@ export async function retainAtlasGallery(candidate: string, pages: AtlasCandidat
       if (changes.size) {
         const record = evidenceObject(parseLegacyJsonEvidence(raw));
         const header = evidenceObject(record.meta!);
-        if (!Array.isArray(header.images)) throw new Error("候选图片引用无效。");
+        if (!Array.isArray(header.images)) throw new Error($t("retain-gallery.text_323c550b13"));
         const images = header.images.map((row, index) => changes.has(index) ? { ...evidenceObject(row), ...changes.get(index) } : row);
         await writeFile(file, serializeLegacyJsonEvidence({ ...record, meta: { ...header, images } }) + "\n", { signal });
       }

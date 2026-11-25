@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocales, defaultAtlasLocale } from "./locale.ts";
 import { readdir, realpath } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -5,7 +8,7 @@ import { candidateJson } from "./validate-candidate.ts";
 import { atlasSourceOrigin } from "./source-transport.ts";
 import { compareKey, object } from "./source-values.ts";
 
-const gameFolders = new Map([["gi", "原神"], ["hsr", "星铁"], ["zzz", "绝区零"]]);
+const gameFolders = new Map([["gi", $t("rebuild-legacy-index.text_d1597c51ed")], ["hsr", $t("rebuild-legacy-index.text_a2927891f0")], ["zzz", $t("rebuild-legacy-index.text_b1110352c9")]]);
 const maxEntries = 20_000;
 const safeId = /^[a-z0-9_][a-z0-9_.+-]{0,127}$/iu;
 const safePage = /^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/iu;
@@ -38,7 +41,7 @@ function sanitizeFolder(value: string) {
 }
 
 function invalid() {
-  return new Error("旧图鉴条目树含无效、重复或跨来源记录，无法恢复索引。");
+  return new Error($t("rebuild-legacy-index.text_0d7c419083"));
 }
 
 // The fixed old exporter used 语言/游戏/分类/稀有度/展示名.json. The native exporter uses game/page/id.json.

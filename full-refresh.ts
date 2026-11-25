@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { defaultAtlasLocale } from "./locale.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -33,7 +36,7 @@ async function retainChallengeArtwork(base: string, candidate: string, signal?: 
     const existing = await candidateFile(candidate, path).catch(() => undefined);
     if (!existing) await copyCandidateFile(original, destination);
     if (await hashCandidateFile(destination, signal) !== sha256) {
-      throw new Error(`全量图鉴候选中的固定副本与原图不符：${path}`);
+      throw new Error($t("full-refresh.text_e19e5572d6", { "path": path }));
     }
   }
 }
@@ -66,7 +69,7 @@ export async function refreshFullAtlasFromPublic(root: string, workspace: string
   return await redownloadAtlasVersion<FullRefreshResult>(workspace, directory, versions, async (source, pages) => {
     if (pages.length !== sourceScope.length || sourceScope.some(({ game, pageId, version }) =>
       !pages.some(page => page.game === game && page.pageId === pageId && page.version === version))) {
-      return { status: "invalid", issues: ["来源缺少全量更新要求的分类。"] };
+      return { status: "invalid", issues: [$t("full-refresh.text_91aa230636")] };
     }
     const stage = await mkdtemp(join(dirname(directory), atlasApplyStagingPrefix));
     let result: FullRefreshResult | undefined;

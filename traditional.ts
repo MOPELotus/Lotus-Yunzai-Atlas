@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { sendBatchedImageForward, type BatchedImageForward } from "@lotus-yunzai/skia/forward-images";
 import type { Game } from "./catalog.ts";
 import { challengeModes, theaterMode, type ChallengeMode } from "./challenges.ts";
@@ -62,7 +65,7 @@ export function parseExplicitAtlasChallenge(query: string, game?: Game) {
   }
 }
 
-export const invalidChallengeDate = "日期无效，请输入有效日期，支持 YYYY-MM-DD 或 YYYY年M月D日。";
+export const invalidChallengeDate = $t("traditional.text_bee4ec2bf2");
 
 export function parseGluedLookup(message: string): string | undefined {
   const input = message.trim();
@@ -170,7 +173,7 @@ async function send(event: ShortcutEvent, reply: AtlasReply | undefined): Promis
     try {
       if (await event.forward(reply.nodes)) return true;
     } catch {
-      await event.reply("合并转发结果未确认，请在聊天中核对。");
+      await event.reply($t("traditional.text_f1baf57ee7"));
       return true;
     }
   }
@@ -183,7 +186,7 @@ export function traditionalAtlasEvent(
   findChallengeReply: (mode: ChallengeMode, period: ChallengePeriod, at?: number, delivery?: AtlasDelivery) => Promise<AtlasReply>,
 ) {
   return {
-    name: "图鉴旧指令",
+    name: $t("traditional.text_0672471912"),
     event: "message",
     priority: 5000,
     rule: {

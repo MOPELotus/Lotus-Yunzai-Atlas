@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 import { matchesLegacyAtlasIndex, maxLegacyAtlasIndexBytes } from "./audit-legacy-source.ts";
 import { legacyAtlasSourcePages } from "./legacy-source-profile.ts";
@@ -38,13 +41,13 @@ export async function readLegacyAchievementArtwork(records: ReadonlyMap<string, 
     const [art] = artwork;
     if (typeof icon !== "string" || !iconName.test(icon) || artwork.length !== 1 || !art || placeholderReferences !== 0 ||
         art.fieldPath !== "icon" || art.originalValue !== icon || art.url !== `${atlasSourceOrigin}/assets/gi/${icon}.webp` ||
-        art.path !== `gallery/gi/${icon}.webp`) throw new Error(`原神成就原图与固定索引不符（${id}）。`);
+        art.path !== `gallery/gi/${icon}.webp`) throw new Error($t("legacy-achievement-art.text_e3f16aa669", { "id": id }));
     assets.push({ id, icon, path: art.path, url: art.url, sha256: art.sha256, bytes: art.bytes });
   }
   const tuples = assets.map(({ id, icon, path, url, sha256, bytes }) => [id, icon, path, url, sha256, bytes] as const)
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
   const digest = createHash("sha256").update(JSON.stringify(tuples)).digest("hex");
-  if (assets.length !== page.recordCount || digest !== topologySha256) throw new Error("原神成就原图清单与旧图库指纹不同。");
+  if (assets.length !== page.recordCount || digest !== topologySha256) throw new Error($t("legacy-achievement-art.text_6e5852299c"));
   return { version: page.version, assets } as const;
 }
 

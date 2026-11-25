@@ -1,8 +1,11 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 
 type Json = Record<string, unknown>;
 const iconPattern = /^UI_Gcg_CardFace_[A-Za-z0-9_]{1,106}$/u;
-export const genshinCardPage = { id: "gcg", name: "七圣召唤" } as const;
+export const genshinCardPage = { id: "gcg", name: $t("gcg-data.text_8c8df27f6c") } as const;
 export const genshinCardIndexIcon = (value: unknown) => {
   const icon = label(value);
   if (iconPattern.test(icon)) return icon;
@@ -19,9 +22,9 @@ function plain(value: unknown) {
   return effectText(label(value).replace(/\{SPRITE_PRESET#\d+\}/gu, ""))
     .replace(/<\/?(?:b|i)\s*>/giu, "").replace(/[\p{Cc}\p{Cf}]/gu, char => char === "\n" ? char : " ").trim();
 }
-const dice = new Map([["CRYO", "冰"], ["HYDRO", "水"], ["PYRO", "火"], ["ELECTRO", "雷"],
-  ["GEO", "岩"], ["ANEMO", "风"], ["DENDRO", "草"], ["VOID", "任意"], ["SAME", "相同"], ["ENERGY", "充能"], ["OMNI", "万能"], ["LEGEND", "秘传"],
-  ["SPECIAL_ENERGY", "战意"], ["SKIRK_SPECIAL_ENERGY", "蛇之狡谋"]]);
+const dice = new Map([["CRYO", $t("gcg-data.text_ce1b850700")], ["HYDRO", $t("gcg-data.text_327b54d04f")], ["PYRO", $t("gcg-data.text_d4cfe8c82c")], ["ELECTRO", $t("gcg-data.text_5de1b913e7")],
+  ["GEO", $t("gcg-data.text_9638a2a0f9")], ["ANEMO", $t("gcg-data.text_be65bd5518")], ["DENDRO", $t("gcg-data.text_91b246b5db")], ["VOID", $t("gcg-data.text_5d7906f5af")], ["SAME", $t("gcg-data.text_a56acb7c0a")], ["ENERGY", $t("gcg-data.text_c0c253c271")], ["OMNI", $t("gcg-data.text_1949905ccb")], ["LEGEND", $t("gcg-data.text_a137256a13")],
+  ["SPECIAL_ENERGY", $t("gcg-data.text_2a717f01fd")], ["SKIRK_SPECIAL_ENERGY", $t("gcg-data.text_d2b9a9ed29")]]);
 
 function costs(value: unknown) {
   const entries = Array.isArray(value) ? value.map(value => {
@@ -48,8 +51,8 @@ function skillText(value: unknown, rawChild: unknown, references: Json) {
     if (key === "d__key__element") {
       const element = label(child.d_key_element).replace(/^GCG_ELEMENT_/u, "");
       const name = dice.get(element);
-      if (element === "VOID") return "物理伤害";
-      if (name) return `${name}元素伤害`;
+      if (element === "VOID") return $t("gcg-data.text_5a93d6dea8");
+      if (name) return $t("gcg-data.text_32b19b3ff2", { "name": name });
     }
     const reference = label(references[key]);
     if (/^a\d+$/u.test(key) && reference) return reference;
@@ -63,7 +66,7 @@ export function normalizeGenshinCard(id: string, version: string, content: Json,
   if (!matchesGenshinCardDetail(list, detail)) return;
   const references = object(content.references);
   const tags = (detail.tag as unknown[]).map(plain).filter(Boolean).slice(0, 12);
-  const type = detail.type === "Character" ? "角色牌" : "行动牌";
+  const type = detail.type === "Character" ? $t("gcg-data.text_e106770c98") : $t("gcg-data.text_fcaee3d650");
   const talent = object(detail.talent);
   const rawSkills = type === "角色牌" ? Object.values(talent) : [talent];
   const skills = rawSkills.map(value => {

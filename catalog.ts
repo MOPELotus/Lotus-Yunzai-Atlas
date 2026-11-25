@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -26,38 +29,38 @@ import { zzzCharacterAliases } from "./zzz-role-names.ts";
 
 export { defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 
-export const gameNames = { gi: "原神", hsr: "星铁", zzz: "绝区零" } as const;
+export const gameNames = { gi: $t("catalog.text_d1597c51ed"), hsr: $t("catalog.text_a2927891f0"), zzz: $t("catalog.text_b1110352c9") } as const;
 export type Game = keyof typeof gameNames;
 
 const shortcutIdentityAgeNs = 100_000_000n;
 
 const equipmentPages = {
-  gi: { id: "weapon", name: "武器" },
-  hsr: { id: "lightcone", name: "光锥" },
-  zzz: { id: "weapon", name: "音擎" },
+  gi: { id: "weapon", name: $t("catalog.text_4fe131173e") },
+  hsr: { id: "lightcone", name: $t("catalog.text_e733238b28") },
+  zzz: { id: "weapon", name: $t("catalog.text_2ce0392ca1") },
 } as const;
 
 const setPages = {
-  gi: { id: "artifact", name: "圣遗物" },
-  hsr: { id: "relicset", name: "遗器套装" },
-  zzz: { id: "equipment", name: "驱动盘" },
+  gi: { id: "artifact", name: $t("catalog.text_fc2ee58f3d") },
+  hsr: { id: "relicset", name: $t("catalog.text_6239fc646e") },
+  zzz: { id: "equipment", name: $t("catalog.text_d245c1825d") },
 } as const;
 
-const achievementPage = { id: "achievement/achievement", name: "成就" } as const;
-const bangbooPage = { id: "bangboo", name: "邦布" } as const;
+const achievementPage = { id: "achievement/achievement", name: $t("catalog.text_52b0e1703d") } as const;
+const bangbooPage = { id: "bangboo", name: $t("catalog.text_aa46a7c35b") } as const;
 const kinds = ["character", "equipment", "set", "bangboo", "monster", "achievement", "gcg"] as const;
 type StandardKind = typeof kinds[number];
 type Kind = StandardKind | "challenge" | "reference";
 
 function pageFor(game: Game, kind: StandardKind): { id: string; name: string } | undefined {
   switch (kind) {
-    case "character": return { id: "character", name: "角色" };
+    case "character": return { id: "character", name: $t("catalog.text_c47b54e84e") };
     case "equipment": return equipmentPages[game];
     case "set": return setPages[game];
     case "achievement": return achievementPage;
     case "bangboo": return game === "zzz" ? bangbooPage : undefined;
     case "gcg": return game === "gi" ? genshinCardPage : undefined;
-    case "monster": return { id: "monster", name: "敌人" };
+    case "monster": return { id: "monster", name: $t("catalog.text_40a2cbbcce") };
   }
 }
 
@@ -126,7 +129,7 @@ function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPa
   const version = label(page.version);
   const records = Object.values(object(page.records));
   if (!version || !records.length || page.recordCount !== records.length) {
-    throw new Error(`${name}索引缺项或收录数量不符。`);
+    throw new Error($t("catalog.text_82a3071aa1", { "name": name }));
   }
   const ids = new Set<string>();
   const entries: AtlasEntry[] = [];
@@ -138,7 +141,7 @@ function readPage(game: Game, kind: Kind, name: string, value: unknown): AtlasPa
     if (!id || !title || !path.startsWith("items/") || !path.endsWith(".json") ||
         path.split("/").some((part) => !part || part === "." || part === ".." || part.includes("\\")) ||
         ids.has(id)) {
-      throw new Error(`${name}索引包含无效或重复的条目。`);
+      throw new Error($t("catalog.text_2c2de1f14a", { "name": name }));
     }
     ids.add(id);
     entries.push({ game, id, name: title, version, path, rarity: label(record.rarity) });
@@ -367,26 +370,26 @@ function detailMatches(value: unknown, query: string, field = "", depth = 0): bo
 }
 
 const weaponTypes = new Map([
-  ["WEAPON_SWORD_ONE_HAND", "单手剑"], ["WEAPON_CLAYMORE", "双手剑"],
-  ["WEAPON_CATALYST", "法器"], ["WEAPON_BOW", "弓"], ["WEAPON_POLE", "长柄武器"],
+  ["WEAPON_SWORD_ONE_HAND", $t("catalog.text_672bf41f03")], ["WEAPON_CLAYMORE", $t("catalog.text_3db03533c2")],
+  ["WEAPON_CATALYST", $t("catalog.text_8f83d07fae")], ["WEAPON_BOW", $t("catalog.text_d97da89d3d")], ["WEAPON_POLE", $t("catalog.text_b4cc81a2da")],
 ]);
 
 const lightConePaths = new Map([
-  ["Warrior", "毁灭"], ["Rogue", "巡猎"], ["Mage", "智识"],
-  ["Warlock", "虚无"], ["Shaman", "同谐"], ["Knight", "存护"],
-  ["Priest", "丰饶"], ["Memory", "记忆"], ["Elation", "欢愉"],
+  ["Warrior", $t("catalog.text_85a5719200")], ["Rogue", $t("catalog.text_89ae343575")], ["Mage", $t("catalog.text_4807b62b3a")],
+  ["Warlock", $t("catalog.text_135fd7b0a1")], ["Shaman", $t("catalog.text_b28b5f46a0")], ["Knight", $t("catalog.text_d55d4d5989")],
+  ["Priest", $t("catalog.text_18db236249")], ["Memory", $t("catalog.text_7a6335b379")], ["Elation", $t("catalog.text_17f4b35418")],
 ]);
 
 const wEngineSpecialties = new Map([
-  [1, "强攻"], [2, "击破"], [3, "异常"], [4, "支援"],
-  [5, "防护"], [6, "命破"], [7, "锋御"],
+  [1, $t("catalog.text_c9ffdabf6a")], [2, $t("catalog.text_092a6b7674")], [3, $t("catalog.text_428fb8bfee")], [4, $t("catalog.text_9aa79fc650")],
+  [5, $t("catalog.text_92d50bd5df")], [6, $t("catalog.text_5864750f87")], [7, $t("catalog.text_7ad730d9ed")],
 ]);
 
 function zzzRarity(rank: unknown): string {
   switch (rank) {
-    case 2: return "B级";
-    case 3: return "A级";
-    case 4: return "S级";
+    case 2: return $t("catalog.text_69a58e24ce");
+    case 3: return $t("catalog.text_e6c2ad53f8");
+    case 4: return $t("catalog.text_4456d1cdc8");
     default: return "";
   }
 }
@@ -470,7 +473,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
             const entries: AtlasEntry[] = [];
             for (const entry of page.entries) {
               const name = artifactName(object((await readContent(entry, pageId)).list), locale);
-              if (!name) throw new Error("圣遗物套装名称缺失或不一致。");
+              if (!name) throw new Error($t("catalog.text_668f5712af"));
               const artifact = { ...entry, name };
               entryRoots.set(artifact, root);
               entries.push(artifact);
@@ -506,7 +509,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     try {
       const { root, version, legacy } = await locate();
       if (snapshot?.version && (version === null || version < snapshot.version)) {
-        throw new Error("图鉴发布指针丢失或版本倒退。");
+        throw new Error($t("catalog.text_3c8cb9d9f6"));
       }
       const mapPath = join(root, "map.json");
       const marker = await lstat(mapPath, { bigint: true }).catch(error => {
@@ -514,7 +517,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
         return undefined;
       });
       const info = marker?.isSymbolicLink() && version === null ? await stat(mapPath, { bigint: true }) : marker;
-      if (version !== null && !info?.isFile()) throw new Error("已发布图鉴索引须为实体文件。");
+      if (version !== null && !info?.isFile()) throw new Error($t("catalog.text_abaccecdde"));
       const mapIdentity = info ? [info.dev, info.ino, info.ctimeNs, info.mtimeNs, info.size].join(":") : "rebuilt";
       // Recent writes can share a filesystem clock tick. Compare bytes until they are outside that window.
       // Explicit queries always compare bytes.
@@ -531,7 +534,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
         const previousPages = info && snapshot?.legacy === legacy && !snapshot.rebuilt && (!legacy || snapshot.root === root)
           ? snapshot.pages : [];
         const { pages, stale } = await materializePages(map, root, previousPages);
-        if (!pages.length || ((version !== null || !info) && stale)) throw new Error("图鉴索引缺少可用分类。");
+        if (!pages.length || ((version !== null || !info) && stale)) throw new Error($t("catalog.text_d63ac6066a"));
         snapshot = { map, mapIdentity, root, version, legacy, pages, stale, ...(!info && { rebuilt: true }) };
       } else if (mapIdentity !== snapshot.mapIdentity) {
         snapshot = { ...snapshot, mapIdentity };
@@ -730,7 +733,7 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
       const effects = setEffects(entry.game, detail);
       const planar = entry.game === "hsr" && Object.keys(object(detail.parts)).length === 2 &&
         effects.length === 1 && effects[0]?.pieces === 2;
-      return { category: planar ? "位面饰品" : category.name, effects };
+      return { category: planar ? $t("catalog.text_2da8a77416") : category.name, effects };
     },
     async setDetails(entry: AtlasEntry) {
       const item = await readItem(entry, setPages[entry.game].id);

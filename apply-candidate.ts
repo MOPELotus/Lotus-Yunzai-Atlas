@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { parseAtlasLocale } from "./locale.ts";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
@@ -18,10 +21,10 @@ export async function applyAtlasCandidate(root: string, source: string, scope: r
   publication?: AtlasPublicationOptions): Promise<AtlasPublication> {
   signal?.throwIfAborted();
   if ([root, source].some((value) => !value.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(value))) {
-    throw new Error("请指定图鉴根目录和本地更新源目录。");
+    throw new Error($t("apply-candidate.text_28893f89d5"));
   }
   const [directory, donor] = await Promise.all([realpath(root), realpath(source)]);
-  if (contains(directory, donor) || contains(donor, directory)) throw new Error("图鉴根与本地更新源须为独立目录。");
+  if (contains(directory, donor) || contains(donor, directory)) throw new Error($t("apply-candidate.text_bc3c38d066"));
 
   const staged = publication?.preparation?.baseline;
   const baseline = staged ?? await discoverAtlasDataDirectory(directory);
@@ -57,7 +60,7 @@ if (import.meta.main) {
   const [root, source, ...selections] = Bun.argv.slice(2);
   const scope = selections.map(parseScope);
   if (!root || !source || !scope.length || !scope.every((page): page is AtlasCandidatePage => page !== undefined)) {
-    console.error("用法：bun apply-candidate.ts <图鉴根目录> <本地更新源目录> <gi/[en/]weapon[=版本]> [其他游戏/分类...]");
+    console.error($t("apply-candidate.text_97d0630a08"));
     process.exitCode = 2;
   } else {
     try {
@@ -65,7 +68,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(result, null, 2));
       if (result.status !== "published") process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "图鉴更新失败。");
+      console.error(error instanceof Error ? error.message : $t("apply-candidate.text_e524ef4b20"));
       process.exitCode = 1;
     }
   }

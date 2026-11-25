@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -55,10 +58,10 @@ export async function readLegacyDetailCandidate(entry: LegacyDetailQueueEntry, p
   signal?.throwIfAborted();
   const file = basename(path);
   const directory = await realpath(dirname(path));
-  if (!candidateFilename.test(file) || !file.startsWith(checkpointPrefix(entry))) throw new Error("候选文件名与固定条目身份不符。");
+  if (!candidateFilename.test(file) || !file.startsWith(checkpointPrefix(entry))) throw new Error($t("capture-legacy-details.text_219d2ba444"));
   const cache = await openAtlasCheckpointDirectory(directory, candidateFilename);
   const candidate = decodeEvidence(entry, await cache.read(file, envelopeBytes, signal));
-  if (!candidate || file !== `${checkpointPrefix(entry)}${candidate.sha256}.candidate.json`) throw new Error("详情候选未通过原字节复核。");
+  if (!candidate || file !== `${checkpointPrefix(entry)}${candidate.sha256}.candidate.json`) throw new Error($t("capture-legacy-details.text_befc162e23"));
   return candidate;
 }
 
@@ -73,19 +76,19 @@ export async function captureLegacyDetails(exportRoot: string, indexCache: strin
 } = {}) {
   signal?.throwIfAborted();
   if (!Number.isSafeInteger(maxRequests) || maxRequests < 0 || maxRequests > maxRequestsPerRun) {
-    throw new Error(`图鉴详情候选请求次数须在 0 到 ${maxRequestsPerRun} 之间。`);
+    throw new Error($t("capture-legacy-details.text_2b2c170d11", { "maxRequestsPerRun": maxRequestsPerRun }));
   }
-  if (!destination.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(destination)) throw new Error("请指定独立的本地图鉴详情候选目录。");
+  if (!destination.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(destination)) throw new Error($t("capture-legacy-details.text_de18fef78a"));
   const resolved = resolve(destination);
   const [reference, indexes, parent] = await Promise.all([realpath(exportRoot), realpath(indexCache), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
   if ([reference, indexes].some((path) => contains(path, target) || contains(target, path))) {
-    throw new Error("详情候选须与原导出及原索引检查点分开保存。");
+    throw new Error($t("capture-legacy-details.text_bd6b383835"));
   }
   const queue = await planLegacyDetailQueue(reference, indexes, signal);
   const eligible = queue.entries.filter(({ state }) => state === "eligible-candidate");
   if (requested && (new Set(requested).size !== requested.length || requested.some((key) => !eligible.some((entry) => entry.key === key)))) {
-    throw new Error("请求中含重复条目或没有可核实身份的图鉴详情候选。");
+    throw new Error($t("capture-legacy-details.text_8e53e8d3c8"));
   }
   const selected = requested ? eligible.filter(({ key }) => requested.includes(key)) : eligible;
   const cache = await openAtlasCheckpointDirectory(target, candidateFilename);
@@ -132,7 +135,7 @@ export async function captureLegacyDetails(exportRoot: string, indexCache: strin
 if (import.meta.main) {
   const [source, cache, destination, budget, ...requested] = Bun.argv.slice(2);
   if (!source || !cache || !destination || budget === undefined || !/^\d+$/u.test(budget)) {
-    console.error("用法：bun capture-legacy-details.ts <原导出根> <索引检查点目录> <候选目录> <0至8次> [游戏/分类/ID ...]");
+    console.error($t("capture-legacy-details.text_7f305ba3ee"));
     process.exitCode = 2;
   } else {
     try {
@@ -140,7 +143,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(result, null, 2));
       if (result.records.some(({ state }) => state === "request-failed" || state === "identity-mismatch" || state === "candidate-conflict")) process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法保存图鉴详情候选。");
+      console.error(error instanceof Error ? error.message : $t("capture-legacy-details.text_3a0afaea23"));
       process.exitCode = 1;
     }
   }

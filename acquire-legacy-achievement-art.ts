@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
@@ -21,14 +24,14 @@ export async function acquireLegacyAchievementArtwork(source: string, cache: str
 } = {}) {
   signal?.throwIfAborted();
   if (!Number.isSafeInteger(maxRequests) || maxRequests < 0 || maxRequests > maxRequestsPerRun) {
-    throw new Error(`原神成就原图请求次数须在 0 到 ${maxRequestsPerRun} 之间。`);
+    throw new Error($t("acquire-legacy-achievement-art.text_7e9794be5b", { "maxRequestsPerRun": maxRequestsPerRun }));
   }
   const [reference, directory] = await Promise.all([realpath(source), realpath(cache)]);
-  if (contains(reference, directory) || contains(directory, reference)) throw new Error("检查点目录须与原导出独立。");
+  if (contains(reference, directory) || contains(directory, reference)) throw new Error($t("acquire-legacy-achievement-art.text_767849c6ed"));
   const checkpoints = await openAtlasPinnedCache(cache);
   const inventory = await readLegacyExportInventory(reference, signal);
   const fixed = await readLegacyAchievementArtwork(inventory.pages.get(legacyGenshinAchievementPage)!, checkpoints, signal);
-  if (!fixed) throw new Error("原神成就固定索引未验证。");
+  if (!fixed) throw new Error($t("acquire-legacy-achievement-art.text_6a77aab057"));
   const files = [];
   let requests = 0;
   for (const asset of fixed.assets) {
@@ -57,7 +60,7 @@ export async function acquireLegacyAchievementArtwork(source: string, cache: str
 if (import.meta.main) {
   const [source, cache, budget, ...extra] = Bun.argv.slice(2);
   if (!source || !cache || extra.length || (budget !== undefined && !/^\d+$/u.test(budget))) {
-    console.error("用法：bun acquire-legacy-achievement-art.ts <原导出根> <索引检查点目录> [0至8次，默认4]");
+    console.error($t("acquire-legacy-achievement-art.text_43d8588528"));
     process.exitCode = 2;
   } else {
     try {
@@ -65,7 +68,7 @@ if (import.meta.main) {
       console.log(JSON.stringify(report, null, 2));
       if (report.files.some(({ state }) => state === "request-failed" || state === "content-mismatch")) process.exitCode = 1;
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法获取已核实的原神成就原图。");
+      console.error(error instanceof Error ? error.message : $t("acquire-legacy-achievement-art.text_fdff79bddc"));
       process.exitCode = 1;
     }
   }

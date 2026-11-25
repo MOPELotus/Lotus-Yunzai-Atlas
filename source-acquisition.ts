@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
@@ -43,30 +46,30 @@ const lightconeRarities = new Map([
 ]);
 const lightconePaths = new Set(["Warrior", "Rogue", "Mage", "Shaman", "Warlock", "Knight", "Priest", "Memory", "Elation"]);
 const pages = {
-  "zzz/character": { game: "zzz", pageId: "character", title: "Character", folder: "绝区零角色", timeout: 600_000, maxRecords: 256 },
-  "zzz/monster": { game: "zzz", pageId: "monster", title: "Monster", folder: "绝区零敌人", timeout: 900_000, maxRecords: 1024 },
-  "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: "邦布", timeout: 180_000, maxRecords: 256 },
-  "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: "音擎", timeout: 180_000, maxRecords: 256 },
-  "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: "驱动盘", timeout: 180_000, maxRecords: 256 },
-  "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "Elite Group", folder: "星铁精英组", timeout: 60_000, maxRecords: 4096 },
-  "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "Difficulty Group", folder: "星铁难度组", timeout: 60_000, maxRecords: 4096 },
-  "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: "星铁无限精英组", timeout: 60_000, maxRecords: 4096 },
-  "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "Pure Fiction", folder: "虚构叙事", timeout: 180_000, maxRecords: 256 },
-  "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "Apocalyptic Shadow", folder: "末日幻影", timeout: 180_000, maxRecords: 256 },
-  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: "Anomaly Arbitration", folder: "异相仲裁", timeout: 180_000, maxRecords: 256 },
-  "hsr/maze": { game: "hsr", pageId: "maze", title: "Memory of Chaos", folder: "混沌回忆", timeout: 180_000, maxRecords: 256 },
-  "hsr/monster": { game: "hsr", pageId: "monster", title: "Monster", folder: "星铁敌人", timeout: 900_000, maxRecords: 4096 },
-  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: "星铁敌人数值", timeout: 60_000, maxRecords: 4096 },
-  "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: "星铁遗器", timeout: 180_000, maxRecords: 256 },
-  "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: "光锥", timeout: 360_000, maxRecords: 256 },
-  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: "绝区零成就", timeout: 60_000, maxRecords: 3 },
-  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: "原神成就", timeout: 180_000, maxRecords: 256 },
-  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: "星铁成就", timeout: 60_000, maxRecords: 256 },
-  "gi/gcg": { game: "gi", pageId: "gcg", title: "Genius Invokation TCG", folder: "七圣召唤", timeout: 900_000, maxRecords: 1024 },
-  "gi/artifact": { game: "gi", pageId: "artifact", title: "Artifact Set", folder: "原神圣遗物", timeout: 360_000, maxRecords: 256 },
-  "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: "武器", timeout: 600_000, maxRecords: 512 },
-  "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: "危局强袭战", timeout: 360_000, maxRecords: 256 },
-  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "Shiyu Defense", folder: "式舆防卫战", timeout: 360_000, maxRecords: 256 },
+  "zzz/character": { game: "zzz", pageId: "character", title: "Character", folder: $t("source-acquisition.text_b95d7209a4"), timeout: 600_000, maxRecords: 256 },
+  "zzz/monster": { game: "zzz", pageId: "monster", title: "Monster", folder: $t("source-acquisition.text_76a25acbcb"), timeout: 900_000, maxRecords: 1024 },
+  "zzz/bangboo": { game: "zzz", pageId: "bangboo", title: "Bangboo", folder: $t("source-acquisition.text_aa46a7c35b"), timeout: 180_000, maxRecords: 256 },
+  "zzz/weapon": { game: "zzz", pageId: "weapon", title: "Weapon", folder: $t("source-acquisition.text_2ce0392ca1"), timeout: 180_000, maxRecords: 256 },
+  "zzz/equipment": { game: "zzz", pageId: "equipment", title: "Drive Disc", folder: $t("source-acquisition.text_d245c1825d"), timeout: 180_000, maxRecords: 256 },
+  "hsr/EliteGroup": { game: "hsr", pageId: "EliteGroup", title: "Elite Group", folder: $t("source-acquisition.text_bdb1188d28"), timeout: 60_000, maxRecords: 4096 },
+  "hsr/HardLevelGroup": { game: "hsr", pageId: "HardLevelGroup", title: "Difficulty Group", folder: $t("source-acquisition.text_9438bc4cf8"), timeout: 60_000, maxRecords: 4096 },
+  "hsr/InfiniteEliteGroup": { game: "hsr", pageId: "InfiniteEliteGroup", title: "Infinite Elite Group", folder: $t("source-acquisition.text_08c6656b73"), timeout: 60_000, maxRecords: 4096 },
+  "hsr/maze_extra": { game: "hsr", pageId: "maze_extra", title: "Pure Fiction", folder: $t("source-acquisition.text_d66b949b63"), timeout: 180_000, maxRecords: 256 },
+  "hsr/maze_boss": { game: "hsr", pageId: "maze_boss", title: "Apocalyptic Shadow", folder: $t("source-acquisition.text_8dae72d970"), timeout: 180_000, maxRecords: 256 },
+  "hsr/maze_peak": { game: "hsr", pageId: "maze_peak", title: "Anomaly Arbitration", folder: $t("source-acquisition.text_fdc6c58c58"), timeout: 180_000, maxRecords: 256 },
+  "hsr/maze": { game: "hsr", pageId: "maze", title: "Memory of Chaos", folder: $t("source-acquisition.text_59977c7f79"), timeout: 180_000, maxRecords: 256 },
+  "hsr/monster": { game: "hsr", pageId: "monster", title: "Monster", folder: $t("source-acquisition.text_b221591d3f"), timeout: 900_000, maxRecords: 4096 },
+  "hsr/monstervalue": { game: "hsr", pageId: "monstervalue", title: "Monster Values", folder: $t("source-acquisition.text_83ebe3015f"), timeout: 60_000, maxRecords: 4096 },
+  "hsr/relicset": { game: "hsr", pageId: "relicset", title: "Relic Set", folder: $t("source-acquisition.text_810786eac8"), timeout: 180_000, maxRecords: 256 },
+  "hsr/lightcone": { game: "hsr", pageId: "lightcone", title: "Light Cone", folder: $t("source-acquisition.text_e733238b28"), timeout: 360_000, maxRecords: 256 },
+  "zzz/achievement/achievement": { game: "zzz", pageId: "achievement/achievement", title: "Achievement", folder: $t("source-acquisition.text_6d515a5b4d"), timeout: 60_000, maxRecords: 3 },
+  "gi/achievement/achievement": { game: "gi", pageId: "achievement/achievement", title: "Achievement", folder: $t("source-acquisition.text_5013174952"), timeout: 180_000, maxRecords: 256 },
+  "hsr/achievement/achievement": { game: "hsr", pageId: "achievement/achievement", title: "Achievement", folder: $t("source-acquisition.text_d6aa0908db"), timeout: 60_000, maxRecords: 256 },
+  "gi/gcg": { game: "gi", pageId: "gcg", title: "Genius Invokation TCG", folder: $t("source-acquisition.text_8c8df27f6c"), timeout: 900_000, maxRecords: 1024 },
+  "gi/artifact": { game: "gi", pageId: "artifact", title: "Artifact Set", folder: $t("source-acquisition.text_c53f62c9ea"), timeout: 360_000, maxRecords: 256 },
+  "gi/weapon": { game: "gi", pageId: "weapon", title: "Weapon", folder: $t("source-acquisition.text_4fe131173e"), timeout: 600_000, maxRecords: 512 },
+  "zzz/boss": { game: "zzz", pageId: "boss", title: "Deadly Assault", folder: $t("source-acquisition.text_4b7b8e83d9"), timeout: 360_000, maxRecords: 256 },
+  "zzz/shiyu": { game: "zzz", pageId: "shiyu", title: "Shiyu Defense", folder: $t("source-acquisition.text_f718dc4321"), timeout: 360_000, maxRecords: 256 },
 } as const;
 type SourcePage = keyof typeof pages;
 const maxJsonBytes = 1024 * 1024;
@@ -146,28 +149,28 @@ function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) 
   const { folder, maxRecords, pageId } = pages[category];
   if (isMonsterGroupPage(pageId)) {
     if (!Array.isArray(value) || !value.length || value.length > maxRecords) {
-      throw new Error(`${folder}索引必须是完整数组。`);
+      throw new Error($t("source-acquisition.text_232929750f", { "folder": folder }));
     }
     const keys = new Set<string>();
     return value.map((row, position) => {
       const key = monsterGroupKey(pageId, row);
-      if (!key || keys.has(key)) throw new Error(`${folder}存在结构错误或重复主键（第 ${position} 项）。`);
+      if (!key || keys.has(key)) throw new Error($t("source-acquisition.text_50f6dceb80", { "folder": folder, "position": position }));
       keys.add(key);
       const id = String(position);
-      return { id, list: object(row), name: id, rarity: "未分类", rank: undefined, iconName: undefined, pathName: undefined };
+      return { id, list: object(row), name: id, rarity: $t("source-acquisition.text_54b89f9012"), rank: undefined, iconName: undefined, pathName: undefined };
     });
   }
 
   const entries = Object.entries(object(value));
-  if (entries.length === 0 || entries.length > maxRecords) throw new Error(`${folder}索引条目数无效。`);
+  if (entries.length === 0 || entries.length > maxRecords) throw new Error($t("source-acquisition.text_8ed1fd5f29", { "folder": folder }));
   if (category === "zzz/achievement/achievement") {
     const tables = ["category", "achievement", "mutual_type"];
     if (entries.length !== tables.length || tables.some(table => !Object.hasOwn(object(value), table))) {
-      throw new Error("绝区零成就缺少原始分类、条目或互斥表。");
+      throw new Error($t("source-acquisition.text_cfa5001596"));
     }
     return entries.map(([id, list]) => {
-      if (list !== object(list)) throw new Error(`绝区零成就来源表 ${id} 结构无效。`);
-      return { id, list: object(list), name: id, rarity: "未分类", rank: undefined, iconName: undefined, pathName: undefined };
+      if (list !== object(list)) throw new Error($t("source-acquisition.text_6a8a3c9011", { "id": id }));
+      return { id, list: object(list), name: id, rarity: $t("source-acquisition.text_54b89f9012"), rank: undefined, iconName: undefined, pathName: undefined };
     });
   }
   return entries.map(([id, value]) => {
@@ -178,23 +181,23 @@ function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) 
       const name = label(list.name);
       if (!/^(0|[1-9]\d{0,9})$/u.test(id) || !name ||
           (category === "gi/achievement/achievement" && (typeof icon !== "string" || !/^UI_AchievementIcon_[A-Za-z0-9_]{1,100}$/u.test(icon)))) {
-        throw new Error(`${folder}来源索引条目结构无效。`);
+        throw new Error($t("source-acquisition.text_db593b55f1", { "folder": folder }));
       }
-      return { id, list, name, rarity: "未分类", iconName: typeof icon === "string" && category === "gi/achievement/achievement" ? icon : undefined };
+      return { id, list, name, rarity: $t("source-acquisition.text_54b89f9012"), iconName: typeof icon === "string" && category === "gi/achievement/achievement" ? icon : undefined };
     }
     if (category === "zzz/equipment") {
       const texts = object(zh);
       const { name } = texts;
       const iconName = typeof icon === "string" ? driveDiscIcon.exec(icon)?.[1] : undefined;
       if (!/^[1-9]\d{0,9}$/u.test(id) || typeof name !== "string" || !name.trim() || !iconName ||
-          !effectText(texts.desc2) || !effectText(texts.desc4)) throw new Error("驱动盘来源索引条目结构无效。");
-      return { id, list, name: name.trim(), rarity: "未分类", iconName };
+          !effectText(texts.desc2) || !effectText(texts.desc4)) throw new Error($t("source-acquisition.text_93781e2c87"));
+      return { id, list, name: name.trim(), rarity: $t("source-acquisition.text_54b89f9012"), iconName };
     }
     if (category === "hsr/monstervalue") {
       if (!/^[1-9]\d{0,9}$/u.test(id) || !monsterStatsIndexRow(list)) {
-        throw new Error(`星铁敌人数值来源索引条目结构无效（${id}）。`);
+        throw new Error($t("source-acquisition.text_931e7b52f3", { "id": id }));
       }
-      return { id, list, name: id, rarity: "未分类", iconName: undefined };
+      return { id, list, name: id, rarity: $t("source-acquisition.text_54b89f9012"), iconName: undefined };
     }
     if (category === "gi/artifact") {
       const effects = Object.entries(object(list.set));
@@ -206,41 +209,41 @@ function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) 
           (effects.length !== 1 && effects.length !== 2) ||
           effects.some(([key, value]) => !/^[1-9]\d{0,9}$/u.test(key) ||
             label(object(object(value).name).zh) !== name || !effectText(object(object(value).desc).zh))) {
-        throw new Error("原神圣遗物来源索引条目结构无效。");
+        throw new Error($t("source-acquisition.text_d6da741711"));
       }
-      return { id, list, name, rarity: "未分类", iconName: icon };
+      return { id, list, name, rarity: $t("source-acquisition.text_54b89f9012"), iconName: icon };
     }
-    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof localizedName !== "string" || !localizedName.trim()) throw new Error(`${folder}来源索引条目结构无效。`);
+    if (!/^[1-9]\d{0,9}$/u.test(id) || typeof localizedName !== "string" || !localizedName.trim()) throw new Error($t("source-acquisition.text_db593b55f1", { "folder": folder }));
     const name = localizedName.trim();
     if (category === "gi/gcg") {
       const iconName = genshinCardIndexIcon(icon);
-      if (!iconName || (type !== "Character" && type !== "Action")) throw new Error(`七圣召唤来源索引条目结构无效（${id}）。`);
+      if (!iconName || (type !== "Character" && type !== "Action")) throw new Error($t("source-acquisition.text_16d6a0e75e", { "id": id }));
       return { id, list, name, rarity: "", rank: undefined, iconName };
     }
     if (category === "zzz/monster") {
       const iconName = zzzMonsterIndexIcon(icon);
       if (!iconName || typeof list.rarity !== "number" || ![1, 2, 3, 4].includes(list.rarity) ||
           typeof list.group !== "number" || !Number.isSafeInteger(list.group) || list.group < 1) {
-        throw new Error(`绝区零敌人来源索引条目结构无效（${id}）。`);
+        throw new Error($t("source-acquisition.text_840af60d6f", { "id": id }));
       }
-      return { id, list, name, rarity: "未分类", iconName };
+      return { id, list, name, rarity: $t("source-acquisition.text_54b89f9012"), iconName };
     }
     if (category === "zzz/character") {
       const iconName = zzzCharacterIndexIcon(icon);
-      if (!iconName || (rank !== 3 && rank !== 4)) throw new Error(`绝区零角色来源索引条目结构无效（${id}）。`);
-      return { id, list, name, rank, rarity: rank === 4 ? "S级" : "A级", iconName };
+      if (!iconName || (rank !== 3 && rank !== 4)) throw new Error($t("source-acquisition.text_8a4d803295", { "id": id }));
+      return { id, list, name, rank, rarity: rank === 4 ? $t("source-acquisition.text_4456d1cdc8") : $t("source-acquisition.text_e6c2ad53f8"), iconName };
     }
     if (isStarrailRotationPage(pageId)) {
-      if (!mazeIndexMatches(pageId, id, list)) throw new Error(`${folder}索引身份或轮换时间无效（${id}）。`);
-      return { id, list, name: effectText(name), rarity: "未分类", iconName: undefined };
+      if (!mazeIndexMatches(pageId, id, list)) throw new Error($t("source-acquisition.text_69bd4985fd", { "folder": folder, "id": id }));
+      return { id, list, name: effectText(name), rarity: $t("source-acquisition.text_54b89f9012"), iconName: undefined };
     }
     if (category === "hsr/monster") {
       const figure = monsterFigure(icon);
       if (!figure || typeof rank !== "string" || !monsterStatRanks.has(rank) ||
           !Array.isArray(list.weak) || !list.weak.every(weakness => monsterWeaknesses.has(weakness)) ||
           !Array.isArray(list.child) || !list.child.every(variant => Number.isSafeInteger(variant) && variant > 0) ||
-          new Set(list.child).size !== list.child.length) throw new Error(`星铁敌人来源索引条目结构无效（${id}）。`);
-      return { id, list, name, rarity: rank === "MinionLv2" ? "二星" : "未分类", iconName: `monsterfigure/${figure}` };
+          new Set(list.child).size !== list.child.length) throw new Error($t("source-acquisition.text_6412db513e", { "id": id }));
+      return { id, list, name, rarity: rank === "MinionLv2" ? $t("source-acquisition.text_4cdaab8f22") : $t("source-acquisition.text_54b89f9012"), iconName: `monsterfigure/${figure}` };
     }
     if (category === "hsr/relicset") {
       const match = typeof icon === "string" && /^SpriteOutput\/ItemIcon\/([1-9]\d{0,9})\.png$/u.exec(icon);
@@ -249,13 +252,13 @@ function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) 
           Object.entries(effects).some(([count, value]) => {
             const { zh, ParamList } = object(value);
             return (count !== "2" && count !== "4") || !Array.isArray(ParamList) || !effectText(zh, ParamList);
-          })) throw new Error("星铁遗器来源索引条目结构无效。");
-      return { id, list, name, rarity: "未分类", iconName: `itemfigures/${match[1]}` };
+          })) throw new Error($t("source-acquisition.text_bebfe54e90"));
+      return { id, list, name, rarity: $t("source-acquisition.text_54b89f9012"), iconName: `itemfigures/${match[1]}` };
     }
     if (category === "hsr/lightcone") {
       const rarity = typeof rank === "string" ? lightconeRarities.get(rank) : undefined;
       if (!rarity || typeof list.baseType !== "string" || !lightconePaths.has(list.baseType)) {
-        throw new Error("光锥来源索引条目结构无效。");
+        throw new Error($t("source-acquisition.text_3fcfb1f025"));
       }
       return { id, list, name, rarity, pathName: list.baseType.toLowerCase() };
     }
@@ -264,27 +267,27 @@ function sourceIndex(category: SourcePage, value: unknown, locale: AtlasLocale) 
       const special = list.skin === true || type === "ITEM_TPS_WEAPON";
       if (!rarity || typeof type !== "string" || !genshinWeaponTypes.has(type) || typeof icon !== "string" ||
           id.length !== (special ? 6 : 5)) {
-        throw new Error("原神武器来源索引条目结构无效。");
+        throw new Error($t("source-acquisition.text_dea593c88f"));
       }
       if (list.skin === true && list.tag === "TAG_TYPE_COLOR_BY_ELEMENT" && /^UI_EquipIcon_[A-Za-z0-9_]+_\{0\}$/u.test(icon)) {
         return { id, list, name, rank, rarity };
       }
-      if (!genshinWeaponIcon.test(icon)) throw new Error("原神武器来源图标标识无效。");
+      if (!genshinWeaponIcon.test(icon)) throw new Error($t("source-acquisition.text_52627521ec"));
       return { id, list, name, rank, rarity, iconName: icon };
     }
     if (typeof icon !== "string" || (rank !== 3 && rank !== 4 && !(category === "zzz/weapon" && rank === 2))) {
-      throw new Error(`${folder}来源索引条目结构无效。`);
+      throw new Error($t("source-acquisition.text_db593b55f1", { "folder": folder }));
     }
-    const rarity = rank === 4 ? "S级" : rank === 3 ? "A级" : "B级";
+    const rarity = rank === 4 ? $t("source-acquisition.text_4456d1cdc8") : rank === 3 ? $t("source-acquisition.text_e6c2ad53f8") : $t("source-acquisition.text_69a58e24ce");
     if (category === "zzz/weapon") {
       if (!weaponIcon.test(icon) || typeof type !== "number" || !Number.isInteger(type) || type < 1 || type > 7 ||
           typeof list.atk !== "number" || !Number.isSafeInteger(list.atk) || list.atk <= 0) {
-        throw new Error("音擎来源索引条目结构无效。");
+        throw new Error($t("source-acquisition.text_310842532e"));
       }
       return { id, list, name, rank, rarity, iconName: icon };
     }
     const iconName = bangbooIcon.exec(icon)?.[1];
-    if (icon !== "" && !iconName) throw new Error("邦布来源索引条目结构无效。");
+    if (icon !== "" && !iconName) throw new Error($t("source-acquisition.text_049b6125de"));
     return { id, list, name, rank, rarity, iconName };
   });
 }
@@ -465,7 +468,7 @@ async function readIcon(name: string, paths: readonly string[], category: Source
     const remoteUrl = `${atlasSourceOrigin}/assets/${game}/${path}.webp`;
     const bytes = await readAtlasSourceBytes(remoteUrl, "image/webp", maxIconBytes, true, signal, request, { retry: true });
     if (!bytes) continue;
-    if (!isAtlasSourceWebp(bytes)) throw new Error(`${folder}来源图标不是有效的 WebP 文件。`);
+    if (!isAtlasSourceWebp(bytes)) throw new Error($t("source-acquisition.text_82d523d171", { "folder": folder }));
     await mkdir(dirname(join(target, localPath)), { recursive: true });
     await writeFile(join(target, localPath), bytes, { flag: "wx" });
     return { remoteUrl, localPath, sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -485,10 +488,10 @@ export async function acquireAtlasSource(destination: string, requirements: read
   const publishedChallenge = category === "zzz/boss" || category === "zzz/shiyu";
   if (requirements.length !== 1 || !scope || !sourcePage(category) || typeof scope.version !== "string" ||
       !versions.test(scope.version) || (category !== "zzz/bangboo" && scope.version.includes("+"))) {
-    throw new Error("请选择支持抓取的分类及对应版本。");
+    throw new Error($t("source-acquisition.text_4efbc4769a"));
   }
   const { version, locale = defaultAtlasLocale } = scope;
-  if (locale !== defaultAtlasLocale && category !== "gi/gcg") throw new Error("此分类请通过原站多语下载入口获取。");
+  if (locale !== defaultAtlasLocale && category !== "gi/gcg") throw new Error($t("source-acquisition.text_6537056c0d"));
   const { game, pageId, folder, title, timeout: limit } = pages[category];
   const timeout = AbortSignal.timeout(limit);
   const active = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -505,29 +508,29 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const localeMode = localized ? "path" : "embedded";
     const sourcePath = `${version}/${localized ? locale + "/" : ""}${pageId}.json`;
     const sourceUrl = `${atlasSourceOrigin}/${game}/${sourcePath}`;
-    await reportProgress(onProgress, { stage: "source-index", message: `读取${folder}索引` }, active);
+    await reportProgress(onProgress, { stage: "source-index", message: $t("source-acquisition.text_754d363da7", { "folder": folder }) }, active);
     const index = await sourceJson(sourceUrl, false, active, request, indexOnly ? maxLargeIndexBytes : maxJsonBytes);
     const entries = category === "zzz/boss" ? bossSourceIndex(index, pages[category].maxRecords)
       : category === "zzz/shiyu" ? shiyuSourceIndex(index, pages[category].maxRecords)
       : sourceIndex(category, index, locale);
     if (localized) readAchievementCategories(game, { version, sourceUrl,
       sources: entries.map(({ id, name, list }) => ({ id, name, list })) });
-    if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error(`${folder}来源条目数与计划不符。`);
+    if (scope.recordCount !== undefined && entries.length !== scope.recordCount) throw new Error($t("source-acquisition.text_81f38689a8", { "folder": folder }));
     await mkdir(join(data, items), { recursive: true });
     const records: Record<string, unknown> = {};
     const cardNames = category === "gi/gcg" ? new Map(entries.map(({ id, name }) => [`a${id}`, name])) : undefined;
     if (cardNames) {
       let referenceTables = 0;
-      await reportProgress(onProgress, { stage: "gcg-references", message: "读取七圣召唤引用表", completed: 0, total: 3, unit: "份" }, active);
+      await reportProgress(onProgress, { stage: "gcg-references", message: $t("source-acquisition.text_0b3a3e59f6"), completed: 0, total: 3, unit: $t("source-acquisition.text_0066134b36") }, active);
       for (const [prefix, table] of [["c", "card"], ["k", "keyword"], ["s", "skill"]] as const) {
         const rows = object(await sourceJson(`${atlasSourceOrigin}/gi/${version}/${locale}/gcg/${table}.json`,
           false, active, request, maxLargeIndexBytes));
-        if (!Object.keys(rows).length) throw new Error(`七圣召唤来源缺少 ${table} 引用表。`);
+        if (!Object.keys(rows).length) throw new Error($t("source-acquisition.text_472d68c987", { "table": table }));
         for (const [id, value] of Object.entries(rows)) {
           const name = label(object(value).name);
           if (/^[1-9]\d{0,9}$/u.test(id) && name) cardNames.set(`${prefix}${id}`, name);
         }
-        await reportProgress(onProgress, { stage: "gcg-references", message: `已读取七圣召唤 ${table} 引用表`, completed: ++referenceTables, total: 3, unit: "份" }, active);
+        await reportProgress(onProgress, { stage: "gcg-references", message: $t("source-acquisition.text_606689811a", { "table": table }), completed: ++referenceTables, total: 3, unit: $t("source-acquisition.text_0066134b36") }, active);
       }
     }
     let completed = 0;
@@ -535,13 +538,13 @@ export async function acquireAtlasSource(destination: string, requirements: read
     const loadIcon = async (name: string, paths: readonly string[] = [name]) => {
       if (!images.has(name)) {
         images.set(name, await readIcon(name, paths, category, target, active, request));
-        await reportProgress(onProgress, { stage: "source-records", message: `${folder}，已处理原图 ${images.size} 张`, completed, total: entries.length, unit: "条" }, active);
+        await reportProgress(onProgress, { stage: "source-records", message: $t("source-acquisition.text_dbefe79f38", { "folder": folder, "size": images.size }), completed, total: entries.length, unit: $t("source-acquisition.text_f004f1d84c") }, active);
       }
       return images.get(name);
     };
     let usedPlaceholder = false;
     const legacyMissing = new Set<string>();
-    await reportProgress(onProgress, { stage: "source-records", message: `${folder}资料与原图`, completed, total: entries.length, unit: "条" }, active);
+    await reportProgress(onProgress, { stage: "source-records", message: $t("source-acquisition.text_889931af62", { "folder": folder }), completed, total: entries.length, unit: $t("source-acquisition.text_f004f1d84c") }, active);
     for (const entry of entries) {
       const { id, name, rarity, list } = entry;
       const detailPage = isStarrailRotationPage(pageId) ? starrailSourceRotation(pageId).detailPath : pageId;
@@ -564,15 +567,15 @@ export async function acquireAtlasSource(destination: string, requirements: read
               legacyMissing.add(originalValue);
               continue;
             }
-            const mode = "priority" in entry ? "式舆" : "危局";
-            throw new Error(`${mode}来源原图缺失（${id}，${fieldPath}）。`);
+            const mode = "priority" in entry ? $t("source-acquisition.text_58d3fc742a") : $t("source-acquisition.text_d5636be4da");
+            throw new Error($t("source-acquisition.text_e7902164ea", { "mode": mode, "id": id, "fieldPath": fieldPath }));
           }
           references.push(imageReference(fieldPath, originalValue, icon));
         }
       } else {
         if (detail !== undefined && !detailMatches(category, detail, entry)) {
-          if (category === "zzz/equipment") throw new Error(`驱动盘详情与来源索引不符或缺少套装故事（${id}）。`);
-          throw new Error(`${folder}详情与来源索引身份或等级不符（${id}）。`);
+          if (category === "zzz/equipment") throw new Error($t("source-acquisition.text_db1386083e", { "id": id }));
+          throw new Error($t("source-acquisition.text_34e375283d", { "folder": folder, "id": id }));
         }
         const { iconName, pathName } = entry;
         if (category === "zzz/character" || category === "zzz/monster") {
@@ -584,31 +587,31 @@ export async function acquireAtlasSource(destination: string, requirements: read
               artwork = await loadIcon(candidate);
               if (artwork) break;
             }
-            if (!artwork && "required" in reference && reference.required) throw new Error(`绝区零角色来源原图缺失（${id}，${fieldPath}）。`);
+            if (!artwork && "required" in reference && reference.required) throw new Error($t("source-acquisition.text_0a1220211b", { "id": id, "fieldPath": fieldPath }));
             if (artwork) references.push(imageReference(fieldPath, originalValue, artwork));
           }
         } else if (pathName) {
           const artName = `lightconemediumicon/${id}`;
           const art = await loadIcon(artName);
-          if (!art) throw new Error(`光锥来源原图缺失（${id}）。`);
+          if (!art) throw new Error($t("source-acquisition.text_8e27d0dca5", { "id": id }));
           const pathIconName = `pathicon/${pathName}`;
           const pathIcon = await loadIcon(pathIconName);
-          if (!pathIcon) throw new Error(`光锥来源命途图标缺失（${id}）。`);
+          if (!pathIcon) throw new Error($t("source-acquisition.text_c2fc84ae93", { "id": id }));
           references.push(imageReference("derived.lightConeMediumIcon", artName, art),
             imageReference("derived.path", pathIconName, pathIcon),
             imageReference("detail.derived.lightConeMediumIcon", artName, art));
         } else if (iconName) {
           const iconFolder = category === "zzz/bangboo" ? bangbooImages : category === "zzz/weapon" ? weaponImages : undefined;
           const icon = await loadIcon(iconName, iconFolder ? [iconName, `${iconFolder}/${iconName}`] : [iconName]);
-          if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error(`${folder}来源图标缺失（${id}）。`);
+          if (!icon && (category === "zzz/weapon" || category === "zzz/equipment")) throw new Error($t("source-acquisition.text_43181cc9b1", { "folder": folder, "id": id }));
           if (!icon && category === "gi/artifact" && !missingGenshinArtifactIcons.get(id)?.has(iconName)) {
-            throw new Error(`原神圣遗物来源主图缺失（${id}）。`);
+            throw new Error($t("source-acquisition.text_fff7075d04", { "id": id }));
           }
-          if (!icon && category === "hsr/monster") throw new Error(`星铁敌人来源原图缺失（${id}）。`);
-          if (!icon && category === "hsr/relicset") throw new Error(`星铁遗器来源图标缺失（${id}）。`);
-          if (!icon && localized) throw new Error(`${folder}来源图标缺失（${id}）。`);
+          if (!icon && category === "hsr/monster") throw new Error($t("source-acquisition.text_888c464a14", { "id": id }));
+          if (!icon && category === "hsr/relicset") throw new Error($t("source-acquisition.text_797a625d28", { "id": id }));
+          if (!icon && localized) throw new Error($t("source-acquisition.text_43181cc9b1", { "folder": folder, "id": id }));
           if (!icon && category === "gi/weapon" && genshinMissingIcons.get(id) !== iconName) {
-            throw new Error(`原神武器来源图标缺失（${id}）。`);
+            throw new Error($t("source-acquisition.text_e1c9a5a221", { "id": id }));
           }
           references.push(imageReference("icon", list.icon, icon));
           usedPlaceholder ||= !icon;
@@ -626,7 +629,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
               const name = object(part).icon as string;
               const artwork = await loadIcon(name);
               if (!artwork && !missingGenshinArtifactIcons.get(id)?.has(name)) {
-                throw new Error(`原神圣遗物来源部位图缺失（${id}，${slot}）。`);
+                throw new Error($t("source-acquisition.text_8c25726aa2", { "id": id, "slot": slot }));
               }
               usedPlaceholder ||= !artwork;
               references.push(imageReference(`detail.parts.${slot}.icon`, name, artwork));
@@ -647,7 +650,7 @@ export async function acquireAtlasSource(destination: string, requirements: read
         recordId: id, name, version, rarity, hasDetail, images: references },
         content: { list, detail: detail ?? null, ...(referencedNames && { references: referencedNames }) } });
       records[id] = { id, name, rarity, path, hasDetail, detailSourceUrl, imageCount: references.length };
-      await reportProgress(onProgress, { stage: "source-records", message: `${folder}：${name}`, completed: ++completed, total: entries.length, unit: "条" }, active);
+      await reportProgress(onProgress, { stage: "source-records", message: `${folder}：${name}`, completed: ++completed, total: entries.length, unit: $t("source-acquisition.text_f004f1d84c") }, active);
     }
     if (usedPlaceholder) {
       await mkdir(join(target, "gallery", "_placeholder"), { recursive: true });
@@ -665,9 +668,9 @@ export async function acquireAtlasSource(destination: string, requirements: read
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
       await completeAtlasRoleMaterials(target, requirements, active, request, true, onProgress);
     }
-    await reportProgress(onProgress, { stage: "source-validate", message: `校验${folder}资料与资源引用` }, active);
+    await reportProgress(onProgress, { stage: "source-validate", message: $t("source-acquisition.text_13c14c4d78", { "folder": folder }) }, active);
     const validation = await validateAtlasCandidate(data, requirements, active);
-    if (!validation.ok) throw new Error(`抓取的源快照未通过校验。${validation.issues[0] ?? ""}`);
+    if (!validation.ok) throw new Error($t("source-acquisition.text_f98ddf03d0", { "value1": validation.issues[0] ?? "" }));
     const imageCount = [...images.values()].filter((image) => image !== undefined).length;
     const missingImageCount = publishedChallenge ? legacyMissing.size : images.size - imageCount;
     return { directory: target, pages: validation.pages, imageCount, missingImageCount };

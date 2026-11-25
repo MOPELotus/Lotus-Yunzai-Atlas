@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry, Game } from "./catalog.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 
@@ -30,7 +33,7 @@ function titledEffects(game: Game, detail: Record<string, unknown>): TitledEffec
     return detail.need.flatMap((pieces, index) => {
       if (pieces !== 1 && pieces !== 2 && pieces !== 4) return [];
       const affix = object(affixes[index]);
-      return [{ pieces, text: effectText(affix.desc), title: label(affix.name) || `${pieces}件套` }];
+      return [{ pieces, text: effectText(affix.desc), title: label(affix.name) || $t("set-data.text_debde1537c", { "pieces": pieces }) }];
     });
   }
   const name = label(detail.name);
@@ -38,13 +41,13 @@ function titledEffects(game: Game, detail: Record<string, unknown>): TitledEffec
     return Object.entries(object(detail.require_num)).flatMap(([count, value]) => {
       if (count !== "2" && count !== "4") return [];
       const effect = object(value);
-      return [{ pieces: Number(count), title: name || `${count}件套`, text: effectText(effect.desc,
+      return [{ pieces: Number(count), title: name || $t("set-data.text_22b045500c", { "count": count }), text: effectText(effect.desc,
         Array.isArray(effect.param_list) ? effect.param_list : undefined) }];
     });
   }
   if (game === "zzz") {
     return ([2, 4] as const).flatMap((pieces) => detail[`desc${pieces}`]
-      ? [{ pieces, title: name || `${pieces}件套`, text: effectText(detail[`desc${pieces}`]) }] : []);
+      ? [{ pieces, title: name || $t("set-data.text_debde1537c", { "pieces": pieces }), text: effectText(detail[`desc${pieces}`]) }] : []);
   }
   return [];
 }

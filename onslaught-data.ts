@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry } from "./catalog.ts";
 import { onslaughtMode, readChallengeFacts } from "./challenges.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
@@ -32,7 +35,7 @@ function rows(value: unknown): readonly unknown[] {
 function enemyMechanics(source: Record<string, unknown>): string {
   const names = rows(source.monster_buff_name_list).map(clean);
   const mechanics = new Set<string>();
-  for (const [group, suffix] of [[source.monster_buff_desc_list, ""], [source.monster_buff_detail_list, "详情"]] as const) {
+  for (const [group, suffix] of [[source.monster_buff_desc_list, ""], [source.monster_buff_detail_list, $t("onslaught-data.text_979a332955")]] as const) {
     for (const [index, value] of rows(group).entries()) {
       const text = clean(value);
       if (!text) continue;

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
 import { copyFile, lstat, mkdir, realpath, writeFile } from "node:fs/promises";
@@ -10,7 +13,7 @@ export async function candidateFile(root: string, path: string): Promise<string>
   const local = relative(root, source);
   if (local === ".." || local.startsWith(`..${sep}`) || isAbsolute(local) ||
       await realpath(source) !== source || !(await lstat(source)).isFile()) {
-    throw new Error("快照引用的文件必须位于源目录内且为实体文件。");
+    throw new Error($t("candidate-gallery.text_c5b8f2ebf0"));
   }
   return source;
 }
@@ -33,10 +36,10 @@ export function candidateImageReference(image: Record<string, unknown>, game: Ga
   if (typeof path !== "string" || /[\\\u0000-\u001f\u007f-\u009f]/u.test(path) ||
       path.split("/").some((part) => !part || part === "." || part === "..") ||
       (placeholder ? path !== "gallery/_placeholder/unknown.svg" : !path.startsWith(`gallery/${game}/`))) {
-    throw new Error("源图片路径或哈希无效。");
+    throw new Error($t("candidate-gallery.text_8e2bb9f484"));
   }
   if (placeholder) return { path, sha256: undefined };
-  if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(sha256)) throw new Error("源图片路径或哈希无效。");
+  if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(sha256)) throw new Error($t("candidate-gallery.text_8e2bb9f484"));
   return { path, sha256 };
 }
 
@@ -60,7 +63,7 @@ export function candidateGallery(destination?: string, recovery?: CandidateImage
         if (!asset) continue;
         const expected = asset.sha256 ?? recovery?.placeholderSha256;
         const earlier = images.get(asset.path);
-        if (earlier && expected && earlier.sha256 !== expected) throw new Error(`图库路径冲突：${asset.path}`);
+        if (earlier && expected && earlier.sha256 !== expected) throw new Error($t("candidate-gallery.text_e5b44f21d9", { "path": asset.path }));
         if (earlier?.sources.has(source)) continue;
         let imageFile: string | undefined;
         let checksum: string;
@@ -69,7 +72,7 @@ export function candidateGallery(destination?: string, recovery?: CandidateImage
           imageFile = await candidateFile(source, asset.path);
           checksum = await hashCandidateFile(imageFile, signal);
           if ((expected && checksum !== expected) || (earlier && earlier.sha256 !== checksum)) {
-            throw new Error(`图库文件内容与记录不符：${asset.path}`);
+            throw new Error($t("candidate-gallery.text_1ca4fa7583", { "path": asset.path }));
           }
         } catch (error) {
           signal?.throwIfAborted();
@@ -81,7 +84,7 @@ export function candidateGallery(destination?: string, recovery?: CandidateImage
           bytes = await recovery.read(source, game, reference, asset.path, expected, signal);
           if (!bytes) throw error;
           checksum = createHash("sha256").update(bytes).digest("hex");
-          if (checksum !== expected) throw new Error(`补取的图库文件与原记录不符：${asset.path}`);
+          if (checksum !== expected) throw new Error($t("candidate-gallery.text_e864732606", { "path": asset.path }));
         }
         if (earlier) earlier.sources.add(source);
         else {
@@ -93,7 +96,7 @@ export function candidateGallery(destination?: string, recovery?: CandidateImage
             } else {
               await copyCandidateFile(imageFile!, output);
             }
-            if (await hashCandidateFile(output, signal) !== checksum) throw new Error(`复制时图库文件发生变化：${asset.path}`);
+            if (await hashCandidateFile(output, signal) !== checksum) throw new Error($t("candidate-gallery.text_2cf763d5ee", { "path": asset.path }));
           }
           images.set(asset.path, { sha256: checksum, sources: new Set([source]) });
         }

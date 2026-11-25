@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry, Game } from "./catalog.ts";
 import { effectText, galleryArtwork, label, object } from "./source-values.ts";
 
@@ -20,9 +23,9 @@ const stats = new Map<string, readonly [string, Intl.NumberFormat]>([
   ["fight_prop_element_mastery", ["元素精通", whole]],
 ]);
 for (const [key, name] of [
-  ["attack_percent", "攻击力"], ["defense_percent", "防御力"], ["hp_percent", "生命值"],
-  ["critical", "暴击率"], ["critical_hurt", "暴击伤害"], ["charge_efficiency", "元素充能效率"],
-  ["physical_add_hurt", "物理伤害加成"],
+  ["attack_percent", $t("weapon-data.text_b84ee11f4f")], ["defense_percent", $t("weapon-data.text_1cb579e6ba")], ["hp_percent", $t("weapon-data.text_1a256e6376")],
+  ["critical", $t("weapon-data.text_d4b0baf955")], ["critical_hurt", $t("weapon-data.text_15bccc3951")], ["charge_efficiency", $t("weapon-data.text_8d3b6cfa30")],
+  ["physical_add_hurt", $t("weapon-data.text_4653041cfb")],
 ] as const) stats.set(`fight_prop_${key}`, [name, percent]);
 
 function sourceNumber(value: unknown): number | undefined {
@@ -81,7 +84,7 @@ function starRail(detail: Record<string, unknown>) {
   const first = stages.find(({ key }) => key === 0)?.row;
   const last = stages.at(-1)?.row;
   const cap = sourceNumber(last?.max_level);
-  const required = [["hp", "生命"], ["attack", "攻击"], ["defence", "防御"]] as const;
+  const required = [["hp", $t("weapon-data.text_45bc77bc1c")], ["attack", $t("weapon-data.text_8226ca02ff")], ["defence", $t("weapon-data.text_75ba7a5727")]] as const;
   const stats = required.flatMap(([key, name]) => {
     const firstValue = sourceNumber(first?.[`base_${key}`]);
     const base = sourceNumber(last?.[`base_${key}`]);

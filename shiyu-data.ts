@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { AtlasEntry } from "./catalog.ts";
 import { readChallengeFacts, shiyuMode } from "./challenges.ts";
 import { effectText, galleryArtwork, object } from "./source-values.ts";
@@ -25,12 +28,12 @@ export interface ShiyuDetails {
   readonly defenses: readonly ShiyuDefense[];
 }
 
-const numerals = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+const numerals = ["", $t("shiyu-data.text_51a75f4634"), $t("shiyu-data.text_084b42f6e9"), $t("shiyu-data.text_a4c3313deb"), $t("shiyu-data.text_754a9d5828"), $t("shiyu-data.text_c9b87f516a"), $t("shiyu-data.text_de07b53838"), $t("shiyu-data.text_1b0542878c"), $t("shiyu-data.text_2c467d3673"), $t("shiyu-data.text_df897da6e0"), $t("shiyu-data.text_fc7edd399a")];
 function defenseEffects(zone: Record<string, unknown>) {
   return Object.values(object(zone.layer_buff)).flatMap((value) => {
     const effect = object(value);
     const description = effectText(effect.desc);
-    return description ? [{ name: effectText(effect.title) || "关卡说明", description }] : [];
+    return description ? [{ name: effectText(effect.title) || $t("shiyu-data.text_5b2b40b3b8"), description }] : [];
   });
 }
 
@@ -51,13 +54,13 @@ export async function normalizeShiyu(entry: AtlasEntry, content: Record<string, 
   async function readDefense(zoneId: string, zone: Record<string, unknown>, childRoom = false): Promise<ShiyuDefense> {
     const stage = natural(zone.stage_num);
     const explicitName = effectText(zone.name);
-    const name = explicitName || (stage ? `第${numerals[stage] ?? stage}防线` : `防线 ID ${zoneId}（待核对）`);
+    const name = explicitName || (stage ? $t("shiyu-data.text_8c19c36253", { "value1": numerals[stage] ?? stage }) : $t("shiyu-data.text_d0ecc272b9", { "zoneId": zoneId }));
     const level = natural(zone.monster_level) || undefined;
     const rooms = await zzzChallengeRooms(zone, `detail.zone.${zoneId}`, { artwork, enemyLookup }, (roomId, count) => {
       if (childRoom && count === 1) return "";
-      if (count === 2 && roomId === zoneId + "1") return "上半";
-      if (count === 2 && roomId === zoneId + "2") return "下半";
-      return `房间 ID ${roomId}`;
+      if (count === 2 && roomId === zoneId + "1") return $t("shiyu-data.text_3401df6359");
+      if (count === 2 && roomId === zoneId + "2") return $t("shiyu-data.text_38866b106e");
+      return $t("shiyu-data.text_fdd4893d17", { "roomId": roomId });
     });
     return { name, level, goals: zzzChallengeGoals(zone), effects: [...new Set(defenseEffects(zone).map((effect) => effect.name))],
       rooms, challenges: [] };
@@ -74,9 +77,9 @@ export async function normalizeShiyu(entry: AtlasEntry, content: Record<string, 
     return { ...line, challenges };
   }));
   if (!defenses.length) return;
-  const title = period === "current" ? "当期式舆防卫战" : period === "next" ? "下期式舆防卫战" : shiyuMode.name;
+  const title = period === "current" ? $t("shiyu-data.text_67c3e0660e") : period === "next" ? $t("shiyu-data.text_d8925ad8e7") : shiyuMode.name;
   return {
-    name: [title, entry.name === entry.id ? `记录 ID ${entry.id}` : entry.name].join(" · "),
+    name: [title, entry.name === entry.id ? $t("shiyu-data.text_30180ca5b7", { "id": entry.id }) : entry.name].join(" · "),
     artwork: artwork(),
     version: entry.version,
     window: readChallengeFacts(shiyuMode, content).window,

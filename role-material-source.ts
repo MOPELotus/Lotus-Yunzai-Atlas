@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
@@ -41,7 +44,7 @@ function materialSource(game: Game, id: string, value: unknown) {
 async function writeAtomic(file: string, data: string | Buffer, signal?: AbortSignal) {
   const parent = dirname(file);
   await mkdir(parent, { recursive: true });
-  if (await realpath(parent) !== parent) throw new Error("图鉴材料目标目录须为实体目录。");
+  if (await realpath(parent) !== parent) throw new Error($t("role-material-source.text_8fb2bc7a56"));
   const stage = await mkdtemp(join(parent, ".atlas-material-"));
   try {
     const temporary = join(stage, "data");
@@ -67,7 +70,7 @@ async function loadIcon(root: string, game: Game, icon: string, request: AtlasSo
     bytes = original && isAtlasSourceWebp(original) ? original
       : await readAtlasSourceBytes(url, "image/webp", maxIconBytes, true, signal, request, { retry: true });
     if (!bytes) return;
-    if (!isAtlasSourceWebp(bytes)) throw new Error(`图鉴材料图标不是原始 WebP（${game}/${icon}）。`);
+    if (!isAtlasSourceWebp(bytes)) throw new Error($t("role-material-source.text_c7db704020", { "game": game, "icon": icon }));
     await writeAtomic(join(root, localPath), bytes, signal);
   }
   return { status: "downloaded", placeholder: false, localPath, url, bytes: bytes.length,
@@ -75,13 +78,13 @@ async function loadIcon(root: string, game: Game, icon: string, request: AtlasSo
 }
 
 async function readRoleMaterials(data: string, path: unknown, recordId: string, game: Game, version: string) {
-  if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("图鉴角色材料记录路径无效。");
+  if (typeof path !== "string" || !path.startsWith("items/")) throw new Error($t("role-material-source.text_c76f54e0d8"));
   const file = await candidateFile(data, path);
   const raw = await Bun.file(file).text();
   const role = object(JSON.parse(raw));
   const metadata = object(role.meta);
   if (metadata.recordId !== recordId || metadata.gameId !== game || metadata.version !== version || metadata.pageId !== "character") {
-    throw new Error(`图鉴角色材料记录身份不符（${game}/${recordId}）。`);
+    throw new Error($t("role-material-source.text_52c8a331b2", { "game": game, "recordId": recordId }));
   }
   const items = roleMaterialGroups(game, object(object(role.content).detail), metadata.images, metadata.materialNames)
     .flatMap(({ items }) => items).filter((item) => item.id && itemId.test(item.id));
@@ -114,7 +117,7 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
   signal?: AbortSignal, request: AtlasSourceFetch = fetch, includeArtwork = true, onProgress?: AtlasInitializationProgressCallback) {
   const data = join(root, "data");
   const map = await Bun.file(await candidateFile(data, "map.json")).json();
-  await reportProgress(onProgress, { stage: "materials", message: "核对角色材料名称及图片" }, signal);
+  await reportProgress(onProgress, { stage: "materials", message: $t("role-material-source.text_b0e5d6e044") }, signal);
   const pending = await pendingAtlasRoleMaterials(data, scope, signal, includeArtwork);
   if (!pending.length) return [];
   const updated: AtlasCandidatePage[] = [];
@@ -125,7 +128,7 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
       }
     } catch (error) {
       signal?.throwIfAborted();
-      console.warn(`[atlas] ${game}/character 材料来源暂不可用：${error instanceof Error ? error.message : "读取失败。"}`);
+      console.warn($t("role-material-source.text_772dae5cf6", { "game": game, "value2": error instanceof Error ? error.message : $t("role-material-source.text_5215599023") }));
     }
   }
   return updated;
@@ -133,7 +136,7 @@ export async function completeAtlasRoleMaterials(root: string, scope: readonly A
 
 async function completeGameMaterials(root: string, data: string, map: unknown, game: Game, version: string | undefined, locale: AtlasLocale,
   request: AtlasSourceFetch, signal: AbortSignal | undefined, includeArtwork: boolean, onProgress?: AtlasInitializationProgressCallback) {
-  if (!version || !materialVersion.test(version)) throw new Error("图鉴材料版本无效。");
+  if (!version || !materialVersion.test(version)) throw new Error($t("role-material-source.text_1cb106adcf"));
   const rolePage = characterPage(map, game, locale);
   const roles = [];
   const ids = new Set<string>();
@@ -148,17 +151,17 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
   const url = `${atlasSourceOrigin}/${game}/${version}/${locale}/item_all.json`;
   const table = object(JSON.parse((await readAtlasSourceBytes(url, "application/json", maxTableBytes, false, signal, request,
     { retry: true }))!.toString("utf8")));
-  if (!Object.keys(table).length) throw new Error("图鉴同版物品表为空。");
+  if (!Object.keys(table).length) throw new Error($t("role-material-source.text_e244c41137"));
   const sources = new Map([...ids].flatMap((id) => {
     const item = materialSource(game, id, table[id]);
     return item ? [[id, item] as const] : [];
   }));
-  if (!sources.size) throw new Error("图鉴同版物品表未包含角色引用的材料。");
+  if (!sources.size) throw new Error($t("role-material-source.text_5d4f7e0d7e"));
   const shared = new Map<string, ReturnType<typeof loadIcon>>();
   const icons = new Map<string, Awaited<ReturnType<typeof loadIcon>>>();
   const wanted = includeArtwork ? [...new Set(roles.flatMap(({ items }) => items.flatMap(({ id, artwork }) => artwork ? [] : [id!])))] : [];
   let processed = 0;
-  await reportProgress(onProgress, { stage: "materials", message: `${game} 角色材料原图`, completed: 0, total: wanted.length, unit: "项" }, signal);
+  await reportProgress(onProgress, { stage: "materials", message: $t("role-material-source.text_a7dbd8bb33", { "game": game }), completed: 0, total: wanted.length, unit: $t("role-material-source.text_49ccde43a1") }, signal);
   for (let index = 0; index < wanted.length; index += 6) {
     const results = await Promise.allSettled(wanted.slice(index, index + 6).map(async (id) => {
       for (const name of sources.get(id)?.icons ?? []) {
@@ -168,14 +171,14 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
         icons.set(id, icon);
         break;
       }
-      await reportProgress(onProgress, { stage: "materials", message: `${game} 角色材料原图已处理`, completed: ++processed, total: wanted.length, unit: "项" }, signal);
+      await reportProgress(onProgress, { stage: "materials", message: $t("role-material-source.text_3a85508d6f", { "game": game }), completed: ++processed, total: wanted.length, unit: $t("role-material-source.text_49ccde43a1") }, signal);
     }));
     const failure = results.find((result) => result.status === "rejected");
     if (failure) throw failure.reason;
   }
   let changed = false;
   let applied = 0;
-  await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 写入角色材料信息`, completed: 0, total: roles.length, unit: "位" }, signal);
+  await reportProgress(onProgress, { stage: "materials-apply", message: $t("role-material-source.text_f84a78ab03", { "game": game }), completed: 0, total: roles.length, unit: $t("role-material-source.text_1aa9c4170b") }, signal);
   for (const { file, raw, items } of roles) {
     const names = Object.fromEntries(items.flatMap(({ id, name: existing }) => {
       const name = existing ? undefined : sources.get(id!)?.name;
@@ -187,7 +190,7 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
       return icon ? [{ ...icon, fieldPath: `derived.material.${id}` }] : [];
     });
     if (!Object.keys(names).length && !images.length) {
-      await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 角色材料信息已核对`, completed: ++applied, total: roles.length, unit: "位" }, signal);
+      await reportProgress(onProgress, { stage: "materials-apply", message: $t("role-material-source.text_4eae3d3eb6", { "game": game }), completed: ++applied, total: roles.length, unit: $t("role-material-source.text_1aa9c4170b") }, signal);
       continue;
     }
     const record = evidenceObject(parseLegacyJsonEvidence(raw));
@@ -198,7 +201,7 @@ async function completeGameMaterials(root: string, data: string, map: unknown, g
       images: [...Array.isArray(meta.images) ? meta.images : [], ...Array.isArray(additions.images) ? additions.images : []] } };
     await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
     changed = true;
-    await reportProgress(onProgress, { stage: "materials-apply", message: `${game} 角色材料信息已写入`, completed: ++applied, total: roles.length, unit: "位" }, signal);
+    await reportProgress(onProgress, { stage: "materials-apply", message: $t("role-material-source.text_37ac69b6e3", { "game": game }), completed: ++applied, total: roles.length, unit: $t("role-material-source.text_1aa9c4170b") }, signal);
   }
   return changed;
 }

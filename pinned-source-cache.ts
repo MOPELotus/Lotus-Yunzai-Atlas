@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from "node:fs/promises";
@@ -15,21 +18,21 @@ function digest(bytes: Uint8Array): string {
 }
 
 export async function openAtlasCheckpointDirectory(path: string, acceptedName: RegExp) {
-  if (!path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path)) throw new Error("请指定独立的本地图鉴下载目录。");
+  if (!path.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(path)) throw new Error($t("pinned-source-cache.text_9a83cbf731"));
   const resolved = resolve(path);
   const directory = join(await realpath(dirname(resolved)), basename(resolved));
   await mkdir(directory, { mode: 0o700 }).catch((error) => {
     if (code(error) !== "EEXIST") throw error;
   });
   if (!(await lstat(directory)).isDirectory() || await realpath(directory) !== directory) {
-    throw new Error("图鉴下载目录须为实体目录。");
+    throw new Error($t("pinned-source-cache.text_8c333f683d"));
   }
   if ((await readdir(directory)).some((name) => !acceptedName.test(name) && !partialName.test(name))) {
-    throw new Error("图鉴下载目录须为空或已有图鉴下载检查点。");
+    throw new Error($t("pinned-source-cache.text_32bfdeb0af"));
   }
 
   function checkpoint(name: string) {
-    if (basename(name) !== name || !acceptedName.test(name)) throw new Error("图鉴检查点文件名无效。");
+    if (basename(name) !== name || !acceptedName.test(name)) throw new Error($t("pinned-source-cache.text_948d4d0cfb"));
     return join(directory, name);
   }
 
@@ -45,7 +48,7 @@ export async function openAtlasCheckpointDirectory(path: string, acceptedName: R
       if (!handle) return;
       try {
         const stats = await handle.stat();
-        if (!stats.isFile()) throw new Error("图鉴下载检查点须为实体文件。");
+        if (!stats.isFile()) throw new Error($t("pinned-source-cache.text_bd9bfe19d3"));
         if (stats.size < 1 || stats.size > limit) return;
         const bytes = Buffer.alloc(stats.size + 1);
         let size = 0;
@@ -98,7 +101,7 @@ export async function openAtlasPinnedCache(path: string) {
       return bytes && digest(bytes) === sha256 ? bytes : undefined;
     },
     async write(sha256: string, bytes: Uint8Array, signal?: AbortSignal) {
-      if (digest(bytes) !== sha256) throw new Error("图鉴下载检查点与登记的 SHA-256 不符。");
+      if (digest(bytes) !== sha256) throw new Error($t("pinned-source-cache.text_f3f9030b75"));
       await cache.write(`${sha256}.blob`, bytes, signal);
     },
   };

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, defaultAtlasLocale } from "./locale.ts";
 import { createHash } from "node:crypto";
@@ -12,10 +15,10 @@ import { galleryArtwork, object } from "./source-values.ts";
 // These original assets were separately decoded and checked against the 7.2 / 7.2.52 roster.
 // The analogous two Mannequin names carry the same two-person composition and are excluded.
 const portraits = [
-  ["10000136", "米提亚", "Mitya", 374752, "c2d1451ceca5699eb2452814e99ce86d3fdf8667fb9b1b42c0cc5438508d501f"],
-  ["10000137", "瓦列里", "Valeriy", 345402, "a90c1f73df1016cd6113b92dc9d099d3ab991c1cde9b3cb25d919db4ac6d7061"],
-  ["10000147", "达妮卡", "Danica", 547020, "e9b38a53f79532d39ba466b35afb5f1a16a72b9cbaf07424c7c4598b6c845679"],
-  ["10000149", "安娜丝塔夏", "Anastasya", 732032, "bd35ce0f01ef008f843e8e73c7b59d8d03951df9e109e654e8e974cec1c3ec52"],
+  ["10000136", $t("genshin-original-portraits.text_0596d45768"), "Mitya", 374752, "c2d1451ceca5699eb2452814e99ce86d3fdf8667fb9b1b42c0cc5438508d501f"],
+  ["10000137", $t("genshin-original-portraits.text_be494ab8cf"), "Valeriy", 345402, "a90c1f73df1016cd6113b92dc9d099d3ab991c1cde9b3cb25d919db4ac6d7061"],
+  ["10000147", $t("genshin-original-portraits.text_752fa906ed"), "Danica", 547020, "e9b38a53f79532d39ba466b35afb5f1a16a72b9cbaf07424c7c4598b6c845679"],
+  ["10000149", $t("genshin-original-portraits.text_eac1851ba5"), "Anastasya", 732032, "bd35ce0f01ef008f843e8e73c7b59d8d03951df9e109e654e8e974cec1c3ec52"],
 ] as const;
 const fieldPath = "derived.avatarGacha";
 
@@ -80,7 +83,7 @@ export async function genshinOriginalPortraitStatus(data: string, version: strin
 /** Supplement a locked public exporter workspace after its original role records have passed validation. */
 export async function completeGenshinPortraits(root: string, version: string, signal?: AbortSignal, request: AtlasSourceFetch = fetch, locale = defaultAtlasLocale, onProgress?: AtlasInitializationProgressCallback) {
   const data = join(root, "data");
-  await reportProgress(onProgress, { stage: "portraits", message: "核对原神补充立绘" }, signal);
+  await reportProgress(onProgress, { stage: "portraits", message: $t("genshin-original-portraits.text_9a0b2b16d5") }, signal);
   const matched = [];
   for await (const entry of matchedGenshinPortraits(data, version, signal, locale)) matched.push(entry);
   let completed = 0;
@@ -104,7 +107,7 @@ export async function completeGenshinPortraits(root: string, version: string, si
       const next = { ...record, meta: { ...header, images: [...header.images, added] } };
       await writeAtomic(file, serializeLegacyJsonEvidence(next) + "\n", signal);
     } finally {
-      await reportProgress(onProgress, { stage: "portraits", message: "原神补充立绘已检查", completed: ++completed, total: matched.length, unit: "张" }, signal);
+      await reportProgress(onProgress, { stage: "portraits", message: $t("genshin-original-portraits.text_5c1ac4ef79"), completed: ++completed, total: matched.length, unit: $t("genshin-original-portraits.text_f56a049fcc") }, signal);
     }
   }
 }

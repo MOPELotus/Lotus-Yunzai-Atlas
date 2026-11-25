@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, atlasLocales, defaultAtlasLocale, parseAtlasLocale, type AtlasLocale } from "./locale.ts";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
@@ -43,20 +46,20 @@ function itemPath(value: unknown): value is string {
 
 export async function candidateJson(directory: string, relative: string): Promise<unknown> {
   const path = join(directory, relative);
-  if (await realpath(path) !== path) throw new Error("快照文件路径经过链接。");
+  if (await realpath(path) !== path) throw new Error($t("validate-candidate.text_051bd6a1f6"));
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = await file.stat();
     const { size } = info;
-    if (!info.isFile() || size === 0 || size > maxJsonBytes) throw new Error("快照文件大小不符。");
+    if (!info.isFile() || size === 0 || size > maxJsonBytes) throw new Error($t("validate-candidate.text_f22262f2ee"));
     const buffer = Buffer.allocUnsafe(size);
     let offset = 0;
     while (offset < buffer.length) {
       const { bytesRead } = await file.read(buffer, offset, buffer.length - offset, offset);
-      if (!bytesRead) throw new Error("快照文件在读取时发生更改。");
+      if (!bytesRead) throw new Error($t("validate-candidate.text_15096a2aa7"));
       offset += bytesRead;
     }
-    if ((await file.stat()).size !== size) throw new Error("快照文件在读取时发生更改。");
+    if ((await file.stat()).size !== size) throw new Error($t("validate-candidate.text_15096a2aa7"));
     return JSON.parse(utf8.decode(buffer)) as unknown;
   } finally {
     await file.close();
@@ -89,7 +92,7 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
     root = await realpath(directory);
     map = object(await candidateJson(root, "map.json"));
   } catch {
-    issue("候选 map.json 缺失、不可读或不是实体 JSON 文件。");
+    issue($t("validate-candidate.text_4d9d4608fb"));
     return result();
   }
   const registered = object(map.games);
@@ -103,7 +106,7 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
         const entries = Object.entries(object(records));
         if (!identity(pageId) || id !== pageId || !identity(version) || sampled !== false ||
             !entries.length || recordCount !== entries.length || totalRecordCount !== entries.length) {
-          issue(`${controls.test(pageId) ? game : where} 的版本、采样标记或条目计数无效。`);
+          issue($t("validate-candidate.text_4dbab3954f", { "value1": controls.test(pageId) ? game : where }));
           continue;
         }
         const before = issueCount;
@@ -112,15 +115,15 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
           const entry = object(value);
           if (!identity(key) || entry.id !== key || !identity(entry.name) || typeof entry.hasDetail !== "boolean" ||
               !itemPath(entry.path) || usedPaths.has(entry.path)) {
-            issue(`${where} 存在无效条目标识或重复文件路径。`);
+            issue($t("validate-candidate.text_29cdaeeb9a", { "where": where }));
             continue;
           }
           usedPaths.add(entry.path);
           try {
             const item = await candidateJson(root, entry.path);
-            if (!matchesItem(item, game, pageId, version, locale, entry)) issue(`${where}/${key} 的身份、版本或详情结构不一致。`);
+            if (!matchesItem(item, game, pageId, version, locale, entry)) issue($t("validate-candidate.text_e39ab8ff06", { "where": where, "key": key }));
           } catch {
-            issue(`${where}/${key} 的条目文件缺失、不可读或不是实体 JSON 文件。`);
+            issue($t("validate-candidate.text_ba449948f4", { "where": where, "key": key }));
           }
         }
         if (issueCount === before) pages.push({ game, pageId, version, recordCount, ...(locale !== defaultAtlasLocale && { locale }) });
@@ -128,13 +131,13 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
     }
   }
   signal?.throwIfAborted();
-  if (!pages.length) issue("候选没有通过校验的图鉴分类。");
+  if (!pages.length) issue($t("validate-candidate.text_a6996f6891"));
   for (const expected of requiredPages) {
     const page = pages.find(({ game, pageId, locale }) => game === expected.game && pageId === expected.pageId &&
       (locale ?? defaultAtlasLocale) === (expected.locale ?? defaultAtlasLocale));
     if (!page || (expected.version !== undefined && page.version !== expected.version) ||
         (expected.recordCount !== undefined && page.recordCount !== expected.recordCount)) {
-      issue(`${expected.game}/${expected.pageId} 缺失、版本或条目计数与候选要求不符。`);
+      issue($t("validate-candidate.text_6cd8318977", { "game": expected.game, "pageId": expected.pageId }));
     }
   }
   return result();
@@ -143,7 +146,7 @@ export async function validateAtlasCandidate(directory: string, requiredPages: r
 if (import.meta.main) {
   const args = Bun.argv.slice(2);
   if (args.length !== 1 || !args[0]?.trim()) {
-    console.error("用法：bun validate-candidate.ts <包含 map.json 的候选目录>");
+    console.error($t("validate-candidate.text_b0f06f51d2"));
     process.exitCode = 2;
   } else {
     const checked = await validateAtlasCandidate(args[0]);

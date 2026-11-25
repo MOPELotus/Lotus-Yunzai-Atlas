@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { atlasLocaleBlock, atlasLocales, atlasPageKey, defaultAtlasLocale, type AtlasLocale } from "./locale.ts";
 import type { ValidatedAtlasCandidatePage } from "./validate-candidate.ts";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -37,12 +40,12 @@ function selectPage(source: Root, page: Page): SelectedPage {
 
 async function readRoot(directory: string, required: readonly AtlasCandidatePage[], signal?: AbortSignal): Promise<Root> {
   const data = join(directory, "data");
-  if (await realpath(data) !== data) throw new Error("快照 data 须为实体目录。");
+  if (await realpath(data) !== data) throw new Error($t("assemble-candidate.text_f0c7918b6e"));
   const validation = await validateAtlasCandidate(data, required, signal);
-  if (!validation.ok) throw new Error(`源快照未通过校验。${validation.issues[0] ?? ""}`);
+  if (!validation.ok) throw new Error($t("assemble-candidate.text_83319cc095", { "value1": validation.issues[0] ?? "" }));
   const map = object(JSON.parse(await readFile(join(data, "map.json"), "utf8")));
   for (const key of Object.keys(object(map.games))) {
-    if (!(key === "gi" || key === "hsr" || key === "zzz")) throw new Error("合成只接受三款已核对游戏的快照。");
+    if (!(key === "gi" || key === "hsr" || key === "zzz")) throw new Error($t("assemble-candidate.text_65d3e90779"));
   }
   return { directory, map, validated: validation.pages };
 }
@@ -95,10 +98,10 @@ async function copyPages(pages: readonly SelectedPage[], gallery: ReturnType<typ
     for (const record of Object.values(object(payload.records))) {
       signal?.throwIfAborted();
       const path = object(record).path;
-      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error("源索引在合成期间改变。");
+      if (typeof path !== "string" || !path.startsWith("items/")) throw new Error($t("assemble-candidate.text_b8fc108fbc"));
       const file = await candidateFile(join(source.directory, "data"), path);
       const destination = join(target, "data", path);
-      if (!inside(join(target, "data", "items"), destination)) throw new Error("候选条目路径越界。");
+      if (!inside(join(target, "data", "items"), destination)) throw new Error($t("assemble-candidate.text_6432460220"));
       await copyCandidateFile(file, destination);
       const item: unknown = JSON.parse(await readFile(destination, "utf8"));
       if (object(object(item).meta).hasDetail === true) detailCount++;
@@ -124,12 +127,12 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
   const resolved = resolve(destination);
   const [base, parent] = await Promise.all([realpath(source), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
-  if (overlaps(base, target)) throw new Error("图鉴源和候选目录必须独立。");
+  if (overlaps(base, target)) throw new Error($t("assemble-candidate.text_8d106fd217"));
   const root = await readRoot(base, scope, signal);
   const keys = new Set(scope.map(atlasPageKey));
   if ((!subset && counts && root.validated.filter(page => !page.locale).length !== scope.filter(page => !page.locale).length) ||
       keys.size !== scope.length || !keys.size) {
-    throw new Error("原图鉴导出的分类与已核定首版不同。");
+    throw new Error($t("assemble-candidate.text_bb1ede8e66"));
   }
   const pages = root.validated.filter(page => !subset || keys.has(atlasPageKey(page))).map(page => selectPage(root, page));
   signal?.throwIfAborted();
@@ -139,7 +142,7 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
     if (counts) {
       const { imageCount, detailCount } = await copyPages(pages.filter(({ page }) => !page.locale), gallery, target, signal);
       if (imageCount !== counts.imageCount || detailCount !== counts.detailCount) {
-        throw new Error("原图鉴导出的详情或图库数量与已核定首版不符。");
+        throw new Error($t("assemble-candidate.text_ed495c48a6"));
       }
       await copyPages(pages.filter(({ page }) => page.locale), gallery, target, signal);
     } else {
@@ -149,7 +152,7 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
     const map = subset ? composeMap(root, root, pages, scope) : root.map;
     await writeFile(join(data, "map.json"), JSON.stringify(map) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(data, scope, signal);
-    if (!validation.ok) throw new Error(`首版图鉴未通过校验。${validation.issues[0] ?? ""}`);
+    if (!validation.ok) throw new Error($t("assemble-candidate.text_44004e8aef", { "value1": validation.issues[0] ?? "" }));
     return { directory: target, validation, imageCount: gallery.count };
   } catch (error) {
     await rm(target, { recursive: true, force: true });
@@ -161,12 +164,12 @@ async function copyPagesFromAtlas(source: string, destination: string, scope: re
 export async function assembleAtlasCandidate(baseline: string, replacement: string, destination: string,
   scope: readonly AtlasCandidatePage[], signal?: AbortSignal, recovery?: CandidateImageRecovery): Promise<AtlasAssembledCandidate> {
   signal?.throwIfAborted();
-  if (!scope.length || new Set(scope.map(atlasPageKey)).size !== scope.length) throw new Error("请选择一个或多个不重复的候选分类。");
+  if (!scope.length || new Set(scope.map(atlasPageKey)).size !== scope.length) throw new Error($t("assemble-candidate.text_a3b938775a"));
   const resolved = resolve(destination);
   const [base, donor, parent] = await Promise.all([realpath(baseline), realpath(replacement), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
   if (overlaps(base, donor) || overlaps(base, target) || overlaps(donor, target)) {
-    throw new Error("基线、更新源和合成目标必须是独立目录。");
+    throw new Error($t("assemble-candidate.text_a868f5eb09"));
   }
   const [existing, updates] = await Promise.all([readRoot(base, [], signal), readRoot(donor, scope, signal)]);
   const pages = describePages(existing, updates, scope);
@@ -177,7 +180,7 @@ export async function assembleAtlasCandidate(baseline: string, replacement: stri
     const dataDirectory = join(target, "data");
     await writeFile(join(dataDirectory, "map.json"), JSON.stringify(composeMap(existing, updates, pages, scope)) + "\n", { flag: "wx" });
     const validation = await validateAtlasCandidate(dataDirectory, pages.map(({ page }) => page), signal);
-    if (!validation.ok) throw new Error(`合成快照未通过校验。${validation.issues[0] ?? ""}`);
+    if (!validation.ok) throw new Error($t("assemble-candidate.text_309b8a796e", { "value1": validation.issues[0] ?? "" }));
     return { directory: target, validation, imageCount };
   } catch (error) {
     await rm(target, { recursive: true, force: true });

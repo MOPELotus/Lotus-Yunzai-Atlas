@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { candidateFile } from "./candidate-gallery.ts";
@@ -22,7 +25,7 @@ function contains(parent: string, child: string): boolean {
 
 async function prepare(source: string, cache: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的图鉴索引检查点目录。");
+  if (!(await lstat(cache)).isDirectory()) throw new Error($t("prepare-indexed-only.text_a744932eae"));
   const checkpoints = await openAtlasPinnedCache(cache);
   const inventory = await readLegacyExportInventory(source, signal);
   const achievement = await readLegacyAchievementArtwork(inventory.pages.get(legacyGenshinAchievementPage)!, checkpoints, signal);
@@ -40,9 +43,9 @@ async function prepare(source: string, cache: string, signal?: AbortSignal) {
     const key = `${game}/${pageId}`;
     if (!legacyIndexedOnlyPages.has(key)) continue;
     const records = inventory.pages.get(key)!;
-    if ([...records.values()].some(({ detailUrl }) => detailUrl !== undefined)) throw new Error(`旧索引类含独立详情（${key}）。`);
+    if ([...records.values()].some(({ detailUrl }) => detailUrl !== undefined)) throw new Error($t("prepare-indexed-only.text_da2375a60e", { "key": key }));
     const indexed = await readFixedIndexEvidence(page, checkpoints, signal);
-    if (!indexed) throw new Error(`图鉴索引未验证（${game}/${pageId}）。`);
+    if (!indexed) throw new Error($t("prepare-indexed-only.text_c9d434139a", { "game": game, "pageId": pageId }));
     const fields = new Map<string, Set<string>>();
     const imagePaths = new Map<string, { path: string; url: string; sha256: string; bytes: number; available: boolean }>();
     let placeholderReferences = 0;
@@ -58,7 +61,7 @@ async function prepare(source: string, cache: string, signal?: AbortSignal) {
       const oldList = evidenceObject(old.content ?? null).list;
       const list = Object.hasOwn(indexed, id) ? indexed[id] : undefined;
       if (oldList === undefined || list === undefined || legacyEvidenceType(list) !== "object" ||
-          compareLegacyJsonEvidence(oldList, list).status !== "exact") throw new Error(`旧条目与固定索引不符（${game}/${pageId}/${id}）。`);
+          compareLegacyJsonEvidence(oldList, list).status !== "exact") throw new Error($t("prepare-indexed-only.text_eda67c0992", { "game": game, "pageId": pageId, "id": id }));
       for (const [key, value] of Object.entries(evidenceObject(list))) {
         const field = /^\d+$/u.test(key) ? "<ID>" : key;
         const types = fields.get(field) ?? new Set<string>();
@@ -109,12 +112,12 @@ export async function planLegacyIndexedOnlyStage(source: string, cache: string, 
 
 export async function stageLegacyIndexedOnly(source: string, cache: string, destination: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (!destination.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(destination)) throw new Error("请指定新的本地图鉴暂存目录。");
+  if (!destination.trim() || /^[a-z][a-z0-9+.-]*:\/\//iu.test(destination)) throw new Error($t("prepare-indexed-only.text_552c12b00a"));
   const resolved = resolve(destination);
   const [reference, checkpoints, parent] = await Promise.all([realpath(source), realpath(cache), realpath(dirname(resolved))]);
   const target = join(parent, basename(resolved));
   if ([reference, checkpoints].some((path) => contains(path, target) || contains(target, path))) {
-    throw new Error("图鉴暂存目录须与原导出及索引检查点独立。");
+    throw new Error($t("prepare-indexed-only.text_81c5c1e826"));
   }
   const { report, wrappers, gallery, requirements, mapGames } = await prepare(reference, checkpoints, signal);
   const preview = join(target, "preview");
@@ -123,7 +126,7 @@ export async function stageLegacyIndexedOnly(source: string, cache: string, dest
     for (const { path, body } of wrappers) {
       signal?.throwIfAborted();
       const file = join(preview, path);
-      if (!contains(join(preview, "data", "items"), file)) throw new Error("图鉴暂存条目路径越界。");
+      if (!contains(join(preview, "data", "items"), file)) throw new Error($t("prepare-indexed-only.text_16c2bda5c8"));
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, `${serializeLegacyJsonEvidence(body)}\n`, { flag: "wx" });
     }
@@ -136,7 +139,7 @@ export async function stageLegacyIndexedOnly(source: string, cache: string, dest
     const data = join(preview, "data");
     await writeFile(join(data, "map.json"), `${JSON.stringify({ meta: { mode: report.status }, games: mapGames })}\n`, { flag: "wx" });
     const validation = await validateAtlasCandidate(data, requirements, signal);
-    if (!validation.ok) throw new Error(`图鉴暂存未通过运行时结构验证。${validation.issues[0] ?? ""}`);
+    if (!validation.ok) throw new Error($t("prepare-indexed-only.text_f34794b093", { "value1": validation.issues[0] ?? "" }));
     await writeFile(join(target, "status.json"), `${JSON.stringify(report, null, 2)}\n`, { flag: "wx" });
     return report;
   } catch (error) {
@@ -148,14 +151,14 @@ export async function stageLegacyIndexedOnly(source: string, cache: string, dest
 if (import.meta.main) {
   const [source, cache, destination, ...extra] = Bun.argv.slice(2);
   if (!source || !cache || extra.length) {
-    console.error("用法：bun prepare-indexed-only.ts <原导出根> <原索引检查点目录> [新暂存目录]");
+    console.error($t("prepare-indexed-only.text_7bcd14ada8"));
     process.exitCode = 2;
   } else {
     try {
       const report = await (destination ? stageLegacyIndexedOnly(source, cache, destination) : planLegacyIndexedOnlyStage(source, cache));
       console.log(JSON.stringify(report, null, 2));
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法准备图鉴索引条目。");
+      console.error(error instanceof Error ? error.message : $t("prepare-indexed-only.text_39974af741"));
       process.exitCode = 1;
     }
   }

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { readAtlasRoleSettings, type AtlasRoleSettings } from "./role-switches.ts";
 import { defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { atlasBookReply } from "./book-reply.ts";
@@ -43,8 +46,8 @@ function searchTerms(argument: string, fixedGame?: Game) {
 
 async function equipmentLine(catalog: AtlasCatalog, item: AtlasEntry): Promise<string> {
   const { category, rarity, scope } = await catalog.equipmentFacts(item);
-  return [gameNames[item.game], category, item.name, rarity || "等级待核对",
-    scope || "适用范围待核对", `ID ${item.id}`].join(" · ");
+  return [gameNames[item.game], category, item.name, rarity || $t("index.text_58aa1755f5"),
+    scope || $t("index.text_87015456e4"), `ID ${item.id}`].join(" · ");
 }
 
 async function setLines(catalog: AtlasCatalog, item: AtlasEntry, showEffects: boolean): Promise<string> {
@@ -52,36 +55,36 @@ async function setLines(catalog: AtlasCatalog, item: AtlasEntry, showEffects: bo
   const header = [gameNames[item.game], category, item.name, `ID ${item.id}`].join(" · ");
   if (!showEffects) return header;
   return [header, ...(effects.length ? effects.map(({ pieces, text }) =>
-    `${pieces}件套 · ${text || "效果待核对"}`) : ["套装效果待核对"])].join("\n");
+    $t("index.text_ce1c0c2a97", { "pieces": pieces, "value2": text || $t("index.text_4475247780") })) : [$t("index.text_9fb779bd4e")])].join("\n");
 }
 
 async function characterLine(catalog: AtlasCatalog, character: AtlasEntry, showCategory = false): Promise<string> {
   const rarity = await catalog.characterRarity(character);
-  const rank = rarity || (character.game === "zzz" ? "等级待核对" : "");
+  const rank = rarity || (character.game === "zzz" ? $t("index.text_58aa1755f5") : "");
   const traveler = character.game === "gi" && character.name === "旅行者" ? await catalog.roleDetails(character) : undefined;
   const name = starRailTrailblazerName(character) ?? traveler?.overview.name ?? character.name;
-  return [gameNames[character.game], showCategory ? "角色" : "", name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
+  return [gameNames[character.game], showCategory ? $t("index.text_c47b54e84e") : "", name, rank, `ID ${character.id}`].filter(Boolean).join(" · ");
 }
 
 async function bangbooLine(catalog: AtlasCatalog, item: AtlasEntry): Promise<string> {
-  return ["绝区零", "邦布", item.name, await catalog.bangbooRarity(item) || "等级待核对", `ID ${item.id}`].join(" · ");
+  return [$t("index.text_b1110352c9"), $t("index.text_aa46a7c35b"), item.name, await catalog.bangbooRarity(item) || $t("index.text_58aa1755f5"), `ID ${item.id}`].join(" · ");
 }
 
 async function equipmentQuery(catalog: AtlasCatalog, argument: string, command: string, limit: number, fixedGame?: Game, delivery?: AtlasDelivery): Promise<string | AtlasImage> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
-  if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的装备。`;
-  if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}名称或 ID`;
+  if (mismatched && fixedGame) return $t("index.text_2a1ba26efb", { "command": command, "value2": gameNames[fixedGame] });
+  if (!query) return $t("index.text_31ab2c7f89", { "command": command, "value2": fixedGame ? "" : $t("index.text_febffc01b1") });
   try {
     const result = await catalog.read();
     const matches = findEquipment(result, query, game);
-    if (!matches.length) return "未找到匹配的武器、光锥或音擎。";
+    if (!matches.length) return $t("index.text_e21512c2d7");
     if (matches.length === 1) {
       const image = await weaponCard(catalog, matches[0]!, delivery);
       if (image) return image;
     }
     const lines = await Promise.all(matches.slice(0, limit).map(item => equipmentLine(catalog, item)));
-    if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (matches.length > lines.length) lines.push($t("index.text_937287fb35"));
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch {
     return missing;
@@ -90,19 +93,19 @@ async function equipmentQuery(catalog: AtlasCatalog, argument: string, command: 
 
 async function setsQuery(catalog: AtlasCatalog, argument: string, command: string, limit: number, fixedGame?: Game, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { game, query, mismatched } = searchTerms(argument, fixedGame);
-  if (mismatched && fixedGame) return `${command}用于查询${gameNames[fixedGame]}的套装。`;
-  if (!query) return `用法：${command} ${fixedGame ? "" : "[原神|星铁|绝区零] "}套装名或 ID`;
+  if (mismatched && fixedGame) return $t("index.text_08e794ea54", { "command": command, "value2": gameNames[fixedGame] });
+  if (!query) return $t("index.text_460a5905a7", { "command": command, "value2": fixedGame ? "" : $t("index.text_febffc01b1") });
   try {
     const result = await catalog.read();
     const matches = findSets(result, query, game);
-    if (!matches.length) return "未找到匹配的套装。";
+    if (!matches.length) return $t("index.text_9f485d385e");
     if (matches.length === 1) {
       const book = await setBook(catalog, matches[0]!, delivery);
       if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, limit).map((item) => setLines(catalog, item, matches.length === 1)));
-    if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的套装名。");
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (matches.length > lines.length) lines.push($t("index.text_6fc8bcd0fb"));
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch {
     return missing;
@@ -112,18 +115,18 @@ async function setsQuery(catalog: AtlasCatalog, argument: string, command: strin
 async function bangbooQuery(catalog: AtlasCatalog, argument: string, limit: number, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { query, mismatched } = searchTerms(argument, "zzz");
   if (mismatched) return "#邦布图鉴用于查询绝区零的邦布。";
-  if (!query) return "用法：#邦布图鉴 名称或 ID";
+  if (!query) return $t("index.text_077bf29c3c");
   try {
     const result = await catalog.read();
     const matches = findBangboos(result, query);
-    if (!matches.length) return "未找到匹配的邦布。";
+    if (!matches.length) return $t("index.text_db7ee5aa2c");
     if (matches.length === 1) {
       const book = await bangbooBook(catalog, matches[0]!, delivery);
       if (book) return book;
     }
     const lines = await Promise.all(matches.slice(0, limit).map(item => bangbooLine(catalog, item)));
-    if (matches.length > lines.length) lines.push("结果较多，请补充更完整的邦布名。");
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (matches.length > lines.length) lines.push($t("index.text_93bf8689d8"));
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch {
     return missing;
@@ -134,9 +137,9 @@ async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: r
   section?: RoleSection, qFace = true): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
   const part = entry.game === "zzz" ? undefined : section;
-  const title = part === "skills" ? (entry.game === "gi" ? "天赋" : "行迹") :
-    part === "ranks" ? (entry.game === "gi" ? "命座" : "星魂") : undefined;
-  const noData = () => title ? `${role?.overview.name ?? entry.name}暂无${title}资料。` : characterLine(catalog, entry, true);
+  const title = part === "skills" ? (entry.game === "gi" ? $t("index.text_866e2e6d67") : $t("index.text_f852e2fa16")) :
+    part === "ranks" ? (entry.game === "gi" ? $t("index.text_5da80321f0") : $t("index.text_9bd2d5af77")) : undefined;
+  const noData = () => title ? $t("index.text_c8385932e6", { "value1": role?.overview.name ?? entry.name, "title": title }) : characterLine(catalog, entry, true);
   if (!role) return noData();
   try {
     const { renderRoleBook } = await import("./role-render.ts");
@@ -145,21 +148,21 @@ async function characterBook(catalog: AtlasCatalog, entry: AtlasEntry, roster: r
       scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry), galleryName, qFace,
     }, part), delivery, !part, title) ?? noData();
   } catch {
-    if (title) return `${role.overview.name}的${title}图片暂不可用。`;
-    return `${await characterLine(catalog, entry, true)}\n图鉴图片暂不可用。`;
+    if (title) return $t("index.text_7a7f310335", { "name": role.overview.name, "title": title });
+    return $t("index.text_7bbe6c3397", { "value1": await characterLine(catalog, entry, true) });
   }
 }
 
 async function characterPhoto(catalog: AtlasCatalog, entry: AtlasEntry, roster: readonly AtlasEntry[], delivery?: AtlasDelivery): Promise<AtlasReply> {
   const role = await catalog.roleDetails(entry);
-  if (!role) return "暂无图片";
+  if (!role) return $t("index.text_b86852571f");
   const { readRolePhoto } = await import("./role-render.ts");
   const photo = await readRolePhoto(role, {
     assetRoot: catalog.assetRoot(entry),
     galleryName: characterGalleryName(entry, roster, role.overview.name),
     inlineImageByteLimit: delivery?.inlineImageByteLimit,
   });
-  return photo ? { type: "image", file: photo } : "暂无图片";
+  return photo ? { type: "image", file: photo } : $t("index.text_b86852571f");
 }
 
 async function weaponCard(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasImage | undefined> {
@@ -201,33 +204,33 @@ async function bangbooBook(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: 
 }
 
 function monsterLine(entry: AtlasEntry): string {
-  return [gameNames[entry.game], "敌人", entry.name, `ID ${entry.id}`].join(" · ");
+  return [gameNames[entry.game], $t("index.text_40a2cbbcce"), entry.name, `ID ${entry.id}`].join(" · ");
 }
 
 function challengeTitle(entry: AtlasEntry, mode: ChallengeMode): string {
-  return [gameNames[entry.game], mode.name, entry.name !== entry.id ? entry.name : "", `记录 ID ${entry.id}`].filter(Boolean).join(" · ");
+  return [gameNames[entry.game], mode.name, entry.name !== entry.id ? entry.name : "", $t("index.text_30180ca5b7", { "id": entry.id })].filter(Boolean).join(" · ");
 }
 
 async function challengeDetails(catalog: AtlasCatalog, entry: AtlasEntry, mode: ChallengeMode, current: boolean,
   facts?: Awaited<ReturnType<AtlasCatalog["challengeFacts"]>>, forecast = false): Promise<string[]> {
   const { window, sections } = facts ?? await catalog.challengeFacts(entry, mode);
-  const lines = [challengeTitle(entry, mode), `快照版本 ${entry.version}`];
-  if (current) lines.push("当前轮换 · 中国服（UTC+8）");
+  const lines = [challengeTitle(entry, mode), $t("index.text_91711408c0", { "version": entry.version })];
+  if (current) lines.push($t("index.text_0371b7ccae"));
   if (window) {
-    const origin = forecast ? (window.from === "live" ? "快照预计（下期预览）" : "下期预览 · 导出时间")
-      : hasChallengeScheduleConflict(mode, entry.id, window) ? "快照时间（与实装公告冲突，待核对）"
-      : window.from === "live" ? "快照记录的实装时间" : "导出时间（轮换待核对）";
-    lines.push(`${origin} · ${window.begin} 至 ${window.end}`);
+    const origin = forecast ? (window.from === "live" ? $t("index.text_fd83cbeec8") : $t("index.text_fdd3b21b30"))
+      : hasChallengeScheduleConflict(mode, entry.id, window) ? $t("index.text_60b6ab7a1e")
+      : window.from === "live" ? $t("index.text_9b77e5462d") : $t("index.text_b5375d65dc");
+    lines.push($t("index.text_322c9a75a3", { "origin": origin, "begin": window.begin, "end": window.end }));
   } else if (forecast && mode.id === arbitrationMode.id) {
-    lines.push("下期预览 · 快照暂无实装起止时间。");
+    lines.push($t("index.text_0daad61b9b"));
   } else {
-    lines.push("该条目缺少已知的起止时间。");
+    lines.push($t("index.text_8186572b6d"));
   }
-  if (!sections.length) lines.push("当前快照缺少可验证的关卡详情。");
+  if (!sections.length) lines.push($t("index.text_53b64e740d"));
   for (const section of sections) {
     const names = section.items.slice(0, 8);
-    const end = section.items.length > names.length ? "等" : "";
-    lines.push(`${section.label} · 共 ${section.count} 条${names.length ? ` · ${names.join("、")}${end}` : ""}`);
+    const end = section.items.length > names.length ? $t("index.text_385a845b60") : "";
+    lines.push($t("index.text_b94f39a33e", { "label": section.label, "count": section.count, "value3": names.length ? ` · ${names.join("、")}${end}` : "" }));
   }
   return lines;
 }
@@ -237,7 +240,7 @@ async function onslaughtCard(catalog: AtlasCatalog, entry: AtlasEntry, delivery?
   if (!onslaught) return;
   try {
     const { renderOnslaught } = await import("./role-render.ts");
-    const card = preview ? { ...onslaught, name: `${onslaught.name}（下期预览）` } : onslaught;
+    const card = preview ? { ...onslaught, name: $t("index.text_6ef2a277d9", { "name": onslaught.name }) } : onslaught;
     const { png } = await renderOnslaught(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
     return { type: "image", file: png };
   } catch {
@@ -251,7 +254,7 @@ async function starrailChallengeCard(catalog: AtlasCatalog, entry: AtlasEntry, r
   if (!challenge) return;
   try {
     const { renderStarrailChallenge } = await import("./role-render.ts");
-    const card = period === "next" ? { ...challenge, name: `下期${challenge.name}（预览）` } : challenge;
+    const card = period === "next" ? { ...challenge, name: $t("index.text_a5b2f72b96", { "name": challenge.name }) } : challenge;
     return await atlasBookReply(card.name, scale => renderStarrailChallenge(card, {
       scale, inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry),
     }), delivery);
@@ -263,7 +266,7 @@ async function starrailChallengeCard(catalog: AtlasCatalog, entry: AtlasEntry, r
 async function monsterReply(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery): Promise<string | AtlasImage> {
   const title = monsterLine(entry);
   const monster = await catalog.monsterDetails(entry);
-  if (!monster) return `${title}\n当前快照缺少已核对的敌人简介。`;
+  if (!monster) return $t("index.text_1f9c2c1a6e", { "title": title });
   try {
     const { renderMonster } = await import("./role-render.ts");
     const { png } = await renderMonster(monster, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
@@ -275,7 +278,7 @@ async function monsterReply(catalog: AtlasCatalog, entry: AtlasEntry, delivery?:
 }
 
 async function genshinCardReply(catalog: AtlasCatalog, entry: AtlasEntry, delivery?: AtlasDelivery): Promise<AtlasReply> {
-  const title = `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
+  const title = $t("index.text_a8194dabf7", { "name": entry.name, "id": entry.id });
   const card = await catalog.genshinCardDetails(entry);
   if (!card) return title;
   try {
@@ -302,7 +305,7 @@ async function lookupNotice(query: string, message: string, game: Game | undefin
   const title = query.replace(/\s+/gu, " ").trim().slice(0, 96).toWellFormed();
   try {
     const { renderLookupNotice } = await import("./role-render.ts");
-    const { png } = await renderLookupNotice(title || "图鉴查询", message, game, {
+    const { png } = await renderLookupNotice(title || $t("index.text_6f30975ca8"), message, game, {
       inlineImageByteLimit: delivery?.inlineImageByteLimit,
     });
     return { type: "image", file: png };
@@ -345,7 +348,7 @@ async function traditionalQuery(
       const key = query.normalize("NFKC").toLowerCase();
       const entries = result.pages.find(({ challengeMode }) => challengeMode?.id === arbitrationMode.id)?.entries ?? [];
       const named = entries.filter(({ name, id }) => name !== id && name.normalize("NFKC").toLowerCase() === key);
-      if (named.length > 1) return ["异相仲裁存在同名资料，请使用 #挑战图鉴 星铁 异相仲裁 记录 ID。",
+      if (named.length > 1) return [$t("index.text_e81d464df2"),
         ...named.map(({ name, id }) => `${name} · ID ${id}`)].join("\n");
       const [entry] = named;
       if (entry) {
@@ -367,13 +370,13 @@ async function traditionalQuery(
       }
     }
     const available = matches.filter(({ kind, entry }) => kind !== "character" || roleQueriesEnabled(roleSettings, entry.game, section));
-    if (matches.length && !available.length) return mode === "search" ? "所查询的角色资料已关闭。" : undefined;
+    if (matches.length && !available.length) return mode === "search" ? $t("index.text_5f1fd3609a") : undefined;
     matches = available;
     if (!matches.length) {
       if (!explicit) return;
-      const message = mode === "character" ? "未找到匹配的角色资料。" :
-        "未找到匹配的图鉴资料。请补充游戏名或更完整的名称。";
-      return lookupNotice(query, result.stale ? `${message}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : message, game, delivery);
+      const message = mode === "character" ? $t("index.text_da2e8f829b") :
+        $t("index.text_98c96a56f3");
+      return lookupNotice(query, result.stale ? $t("index.text_a9329215e7", { "message": message }) : message, game, delivery);
     }
     const first = matches[0]!;
     if (quickLookup && first.kind === "equipment") {
@@ -401,7 +404,7 @@ async function traditionalQuery(
     if (matches.length === 1 && first.kind === "gcg") return genshinCardReply(catalog, first.entry, delivery);
     if (matches.length === 1 && first.kind === "reference") {
       const details = await catalog.referenceDetails(first.entry, result);
-      if (!details) return lookupNotice(query, "图鉴条目详情不可用，请检查当前图鉴导出。", game, delivery);
+      if (!details) return lookupNotice(query, $t("index.text_988a8c7958"), game, delivery);
       try {
         const { renderReference } = await import("./role-render.ts");
         const book = await atlasBookReply(details.name, scale => renderReference(details, {
@@ -416,13 +419,13 @@ async function traditionalQuery(
     }
     if (matches.length === 1 && first.kind === "monster") {
       const reply = await monsterReply(catalog, first.entry, delivery);
-      return typeof reply === "string" && result.stale ? `${reply}\n部分索引未更新，可发送 #图鉴状态 查看版本。` : reply;
+      return typeof reply === "string" && result.stale ? $t("index.text_58877b9712", { "reply": reply }) : reply;
     }
     if (matches.length === 1 && first.kind === "challenge") {
       const image = await onslaughtCard(catalog, first.entry, delivery);
       if (image) return image;
       const lines = await challengeDetails(catalog, first.entry, onslaughtMode, false);
-      if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+      if (result.stale) lines.push($t("index.text_8980fcebd5"));
       return lines.join("\n");
     }
     const lines = await Promise.all(matches.slice(0, limit).map(({ kind, entry }) => {
@@ -432,13 +435,13 @@ async function traditionalQuery(
         case "character": return characterLine(catalog, entry, true);
         case "bangboo": return bangbooLine(catalog, entry);
         case "monster": return monsterLine(entry);
-        case "gcg": return `原神 · 七圣召唤 · ${entry.name} · ID ${entry.id}`;
+        case "gcg": return $t("index.text_a8194dabf7", { "name": entry.name, "id": entry.id });
         case "challenge": return challengeTitle(entry, onslaughtMode);
         case "reference": return `${gameNames[entry.game]} · ${entry.name} · ID ${entry.id}`;
       }
     }));
-    if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的名称。");
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (matches.length > lines.length) lines.push($t("index.text_937287fb35"));
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch (error) {
     if (!explicit) return;
@@ -472,24 +475,24 @@ async function traditionalAchievementCategory(catalog: AtlasCatalog, query: stri
       // The category stays available as text if the card renderer is unavailable.
     }
   }
-  return `${achievementCategoryLabel(category)} · ${category.entries.length} 项`;
+  return $t("index.text_444fd3abe5", { "value1": achievementCategoryLabel(category), "length": category.entries.length });
 }
 
 async function achievementQuery(catalog: AtlasCatalog, argument: string, limit: number): Promise<string> {
   const { game, query } = searchTerms(argument);
-  if (!query) return "用法：#成就图鉴 [原神|星铁|绝区零] 成就名或 ID";
+  if (!query) return $t("index.text_7842602050");
   try {
     const result = await catalog.read();
     const categories = result.pages.flatMap((page) => page.achievementCategories ?? []);
     const matches = findAchievements(categories, query, game);
-    if (!matches.length) return "未找到匹配的成就。";
+    if (!matches.length) return $t("index.text_b62f5b9093");
 
     const lines = matches.slice(0, limit).map(({ category, entry }) => {
       const title = `${achievementCategoryLabel(category)} · ${entry.name} · ID ${entry.id}`;
       return matches.length <= limit && entry.description ? `${title}\n${entry.description}` : title;
     });
-    if (matches.length > lines.length) lines.push(`共 ${matches.length} 条，请补充游戏名或更完整的成就名。`);
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (matches.length > lines.length) lines.push($t("index.text_bc116d5f55", { "length": matches.length }));
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch {
     return missing;
@@ -501,27 +504,27 @@ async function achievementCategoryQuery(catalog: AtlasCatalog, argument: string)
   const suffix = /(?:^|\s+)第(\d+)页$/u.exec(query);
   const pageNo = suffix ? Number(suffix[1]) : 1;
   const name = suffix ? query.slice(0, suffix.index).trimEnd() : query;
-  if (!Number.isSafeInteger(pageNo) || pageNo < 1) return "页码须为正整数。";
+  if (!Number.isSafeInteger(pageNo) || pageNo < 1) return $t("index.text_7da40803fc");
   try {
     const result = await catalog.read();
     const all = result.pages.flatMap((page) => page.achievementCategories ?? []);
     const categories = findAchievementCategories(all, name, game);
-    if (!categories.length) return "未找到匹配的成就分类。";
+    if (!categories.length) return $t("index.text_aad88bbc56");
 
     const [category] = categories;
     const selected = name && categories.length === 1 ? category : undefined;
     const lines = selected ? selected.entries.map(({ id, name }) => `${name} · ID ${id}`)
-      : categories.map((item) => `${achievementCategoryLabel(item)} · ${item.entries.length} 项 · ID ${item.id}`);
+      : categories.map((item) => $t("index.text_1113492a90", { "value1": achievementCategoryLabel(item), "length": item.entries.length, "id": item.id }));
     const pageSize = 12;
     const lastPage = Math.max(1, Math.ceil(lines.length / pageSize));
-    if (pageNo > lastPage) return `共 ${lastPage} 页，请调整页码。`;
+    if (pageNo > lastPage) return $t("index.text_af838aec58", { "lastPage": lastPage });
 
     const header = selected
-      ? `${achievementCategoryLabel(selected)} · ${lines.length} 项 · 第 ${pageNo}/${lastPage} 页`
-      : `成就分类 · ${lines.length} 类 · 第 ${pageNo}/${lastPage} 页`;
+      ? $t("index.text_abf3e7c38f", { "value1": achievementCategoryLabel(selected), "length": lines.length, "pageNo": pageNo, "lastPage": lastPage })
+      : $t("index.text_5ea1d04f1e", { "length": lines.length, "pageNo": pageNo, "lastPage": lastPage });
     const page = [header, ...lines.slice((pageNo - 1) * pageSize, pageNo * pageSize)];
-    if (pageNo < lastPage) page.push("可在指令末尾追加第2页等页码。");
-    if (result.stale) page.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (pageNo < lastPage) page.push($t("index.text_789d6a7807"));
+    if (result.stale) page.push($t("index.text_8980fcebd5"));
     return page.join("\n");
   } catch {
     return missing;
@@ -530,12 +533,12 @@ async function achievementCategoryQuery(catalog: AtlasCatalog, argument: string)
 
 async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: number, delivery?: AtlasDelivery): Promise<AtlasReply> {
   const { game, query } = searchTerms(argument);
-  if (!game) return "用法：#挑战图鉴 原神|星铁|绝区零 模式 [名称或记录 ID]";
+  if (!game) return $t("index.text_d3078be4ad");
   const [modeName = "", ...terms] = query.split(/\s+/u);
   const mode = findChallengeMode(game, modeName);
   if (!mode) {
     const names = challengeModes.filter((item) => item.game === game).map(({ name }) => name);
-    return `${gameNames[game]}挑战图鉴：${names.join("、")}。请输入模式以查看记录。`;
+    return $t("index.text_54024cd9af", { "value1": gameNames[game], "value2": names.join("、") });
   }
   const target = terms.join(" ");
   const currentRequested = /^(?:当前|本期|当期)$/u.test(target);
@@ -548,30 +551,30 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
     (mode.id === apocalypseMode.id || mode.id === chaosMode.id || mode.id === fictionMode.id ||
       mode.id === shiyuMode.id || mode.id === theaterMode.id || mode.id === arbitrationMode.id || mode.id === onslaughtMode.id);
   const relative = previous || forecast;
-  const unverifiedRotation = `${mode.name}${currentRequested ? "本期" : target}轮换时间待核对。请输入记录 ID 或名称查看资料。`;
+  const unverifiedRotation = $t("index.text_1cb115d399", { "name": mode.name, "value2": currentRequested ? $t("index.text_474da3018a") : target });
   if (currentRequested && !hasChallengeRotation(mode) && mode.id !== arbitrationMode.id) return unverifiedRotation;
   if (!relative && /^(?:上期|下期)$/u.test(target)) return unverifiedRotation;
   if (/^第\s*\d+\s*期$/u.test(target)) {
-    return "快照的记录 ID 与正式期号可能不同。请输入记录 ID 或名称，或只输入游戏与模式查看列表。";
+    return $t("index.text_c328e97537");
   }
 
   try {
     const result = await catalog.read();
     const category = result.pages.find((page) => page.game === game && page.challengeMode?.id === mode.id);
-    if (!category) return currentRequested || relative ? unverifiedRotation : `快照中未收录${gameNames[game]}的${mode.name}资料。`;
+    if (!category) return currentRequested || relative ? unverifiedRotation : $t("index.text_9feb60bc21", { "value1": gameNames[game], "name": mode.name });
 
     const pageMatch = /^第(\d+)页$/u.exec(target);
     if (!target || pageMatch) {
       const page = pageMatch ? Number(pageMatch[1]) : 1;
       const pageSize = 12;
       const lastPage = Math.ceil(category.entries.length / pageSize);
-      if (!Number.isSafeInteger(page) || page < 1 || page > lastPage) return `请输入第 1 至 ${lastPage} 页。`;
+      if (!Number.isSafeInteger(page) || page < 1 || page > lastPage) return $t("index.text_5241b1c170", { "lastPage": lastPage });
       const entries = category.entries.slice((page - 1) * pageSize, page * pageSize);
       return [
-        `${gameNames[game]} · ${mode.name} · 共 ${category.entries.length} 条 · 第 ${page}/${lastPage} 页`,
-        ...entries.map(({ name, id }) => name === id ? `记录 ID ${id}` : `${name} · ID ${id}`),
-        "输入记录 ID 或名称查看关卡资料，也可在模式后追加第2页等页码。",
-        ...(result.stale ? ["部分索引未更新，可发送 #图鉴状态 查看版本。"] : []),
+        $t("index.text_eed20307a6", { "value1": gameNames[game], "name": mode.name, "length": category.entries.length, "page": page, "lastPage": lastPage }),
+        ...entries.map(({ name, id }) => name === id ? $t("index.text_30180ca5b7", { "id": id }) : `${name} · ID ${id}`),
+        $t("index.text_3bb7575ef6"),
+        ...(result.stale ? [$t("index.text_8980fcebd5")] : []),
       ].join("\n");
     }
 
@@ -599,17 +602,17 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
       const recordId = target.normalize("NFKC");
       const idMatch = category.entries.find(({ id }) => id === recordId);
       const matches = idMatch ? [idMatch] : category.entries.filter(({ name }) => key && compareKey(name) === key);
-      if (!matches.length) return "未找到挑战记录，请核对完整名称或记录 ID。";
+      if (!matches.length) return $t("index.text_33ff71e25f");
       if (matches.length > 1) {
-        return [`${mode.name}有 ${matches.length} 条同名记录，请用 ID 查询。`,
+        return [$t("index.text_cd528b99b7", { "name": mode.name, "length": matches.length }),
           ...matches.slice(0, 12).map(({ name, id }) => `${name} · ID ${id}`),
-          ...(matches.length > 12 ? ["更多 ID 可在模式列表中查看。"] : []),
+          ...(matches.length > 12 ? [$t("index.text_24453570a4")] : []),
         ].join("\n");
       }
       [entry] = matches;
     }
 
-    if (!entry) return "未找到挑战记录。";
+    if (!entry) return $t("index.text_a1c77908b9");
     if (mode.id === onslaughtMode.id) {
       const image = await onslaughtCard(catalog, entry, delivery, forecast);
       if (image) return image;
@@ -619,7 +622,7 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
       if (theater) {
         try {
           const { renderTheater } = await import("./role-render.ts");
-          const card = forecast ? { ...theater, name: "下期幻想真境剧诗（预览）" } : theater;
+          const card = forecast ? { ...theater, name: $t("index.text_650bb48331") } : theater;
           const { png } = await renderTheater(card, { inlineImageByteLimit: delivery?.inlineImageByteLimit, assetRoot: catalog.assetRoot(entry) });
           return { type: "image", file: png };
         } catch {
@@ -670,7 +673,7 @@ async function challengeQuery(catalog: AtlasCatalog, argument: string, at?: numb
       }
     }
     const lines = await challengeDetails(catalog, entry, mode, displayCurrent, facts, forecast);
-    if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+    if (result.stale) lines.push($t("index.text_8980fcebd5"));
     return lines.join("\n");
   } catch {
     return missing;
@@ -686,7 +689,7 @@ function createTraditionalQueries(catalog: AtlasCatalog, limit: number, roleSett
 
 async function explicitAtlasQuery(catalog: AtlasCatalog, argument: string, limit: number, roleSettings: AtlasRoleSettings, delivery?: AtlasDelivery) {
   const { game, query } = searchTerms(argument);
-  if (!query) return "用法：#图鉴 [原神|星铁|绝区零] 名称或 ID";
+  if (!query) return $t("index.text_a71660671b");
   const challenge = parseExplicitAtlasChallenge(query, game);
   if (challenge?.invalidDate) return invalidChallengeDate;
   if (challenge) return challengeQuery(catalog, `${gameNames[challenge.mode.game]} ${challenge.mode.name} ${challenge.period}`, challenge.at, delivery);
@@ -711,7 +714,7 @@ function searchCommands(catalog: AtlasCatalog, limit: number, roleSettings: Atla
     "#成就图鉴": (argument: string) => achievementQuery(catalog, argument, limit),
     async "#角色图鉴"(argument: string): Promise<string> {
       const { game, query } = searchTerms(argument);
-      if (!query) return "用法：#角色图鉴 [原神|星铁|绝区零] 名称或 ID";
+      if (!query) return $t("index.text_2fde7e30bd");
 
       try {
         const result = await catalog.read();
@@ -721,12 +724,12 @@ function searchCommands(catalog: AtlasCatalog, limit: number, roleSettings: Atla
           const alias = await localZzzAlias(result, query);
           if (alias) matches = [alias.entry];
         }
-        if (!matches.length) return "未找到匹配的角色。";
+        if (!matches.length) return $t("index.text_0022fe1b27");
         matches = matches.filter(character => roleQueriesEnabled(roleSettings, character.game));
-        if (!matches.length) return "所查询的角色资料已关闭。";
+        if (!matches.length) return $t("index.text_5f1fd3609a");
         const lines = await Promise.all(matches.slice(0, limit).map((character) => characterLine(catalog, character)));
-        if (matches.length > lines.length) lines.push("结果较多，请补充游戏名或更完整的角色名。");
-        if (result.stale) lines.push("部分索引未更新，可发送 #图鉴状态 查看版本。");
+        if (matches.length > lines.length) lines.push($t("index.text_cd4bc503b9"));
+        if (result.stale) lines.push($t("index.text_8980fcebd5"));
         return lines.join("\n");
       } catch {
         return missing;
@@ -788,37 +791,37 @@ function atlasDefinitions(catalog: AtlasCatalog) {
       "#成就分类": (argument: string) => achievementCategoryQuery(catalog, argument),
       "#挑战图鉴": (argument: string, delivery?: AtlasDelivery) => challengeQuery(catalog, argument, undefined, delivery),
       "#图鉴帮助": atlasHelp,
-      "#本期幻想图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 本期"),
-      "#本期幻想真境剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 本期"),
-      "#本期剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 本期"),
-      "#上期幻想图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 上期"),
-      "#上期幻想真境剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 上期"),
-      "#上期剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 上期"),
-      "#下期幻想图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 下期"),
-      "#下期幻想真境剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 下期"),
-      "#下期剧诗图鉴": challengeCommand(catalog, "原神 幻想真境剧诗 下期"),
-      "#本期深渊图鉴": challengeCommand(catalog, "原神 深境螺旋 本期"),
-      "#本期深境螺旋图鉴": challengeCommand(catalog, "原神 深境螺旋 本期"),
-      "#上期深渊图鉴": challengeCommand(catalog, "原神 深境螺旋 上期"),
-      "#上期深境螺旋图鉴": challengeCommand(catalog, "原神 深境螺旋 上期"),
-      "#星铁本期末日图鉴": challengeCommand(catalog, "星铁 末日幻影 本期"),
-      "#星铁上期末日图鉴": challengeCommand(catalog, "星铁 末日幻影 上期"),
-      "#星铁下期末日图鉴": challengeCommand(catalog, "星铁 末日幻影 下期"),
-      "#星铁本期虚构图鉴": challengeCommand(catalog, "星铁 虚构叙事 本期"),
-      "#星铁上期虚构图鉴": challengeCommand(catalog, "星铁 虚构叙事 上期"),
-      "#星铁下期虚构图鉴": challengeCommand(catalog, "星铁 虚构叙事 下期"),
-      "#星铁本期混沌图鉴": challengeCommand(catalog, "星铁 混沌回忆 本期"),
-      "#星铁上期混沌图鉴": challengeCommand(catalog, "星铁 混沌回忆 上期"),
-      "#星铁下期混沌图鉴": challengeCommand(catalog, "星铁 混沌回忆 下期"),
-      "#星铁异相图鉴": challengeCommand(catalog, "星铁 异相仲裁"),
-      "#星铁本期异相图鉴": challengeCommand(catalog, "星铁 异相仲裁 本期"),
-      "#星铁上期异相图鉴": challengeCommand(catalog, "星铁 异相仲裁 上期"),
-      "#星铁下期异相图鉴": challengeCommand(catalog, "星铁 异相仲裁 下期"),
-      "#绝区零本期防卫战图鉴": challengeCommand(catalog, "绝区零 式舆防卫战 本期"),
-      "#绝区零上期防卫战图鉴": challengeCommand(catalog, "绝区零 式舆防卫战 上期"),
-      "#绝区零下期防卫战图鉴": challengeCommand(catalog, "绝区零 式舆防卫战 下期"),
-      "#绝区零本期危局图鉴": challengeCommand(catalog, "绝区零 危局强袭战 本期"),
-      "#绝区零上期危局图鉴": challengeCommand(catalog, "绝区零 危局强袭战 上期"),
+      "#本期幻想图鉴": challengeCommand(catalog, $t("index.text_4f615c5b46")),
+      "#本期幻想真境剧诗图鉴": challengeCommand(catalog, $t("index.text_4f615c5b46")),
+      "#本期剧诗图鉴": challengeCommand(catalog, $t("index.text_4f615c5b46")),
+      "#上期幻想图鉴": challengeCommand(catalog, $t("index.text_e0345c079e")),
+      "#上期幻想真境剧诗图鉴": challengeCommand(catalog, $t("index.text_e0345c079e")),
+      "#上期剧诗图鉴": challengeCommand(catalog, $t("index.text_e0345c079e")),
+      "#下期幻想图鉴": challengeCommand(catalog, $t("index.text_f23aa440a0")),
+      "#下期幻想真境剧诗图鉴": challengeCommand(catalog, $t("index.text_f23aa440a0")),
+      "#下期剧诗图鉴": challengeCommand(catalog, $t("index.text_f23aa440a0")),
+      "#本期深渊图鉴": challengeCommand(catalog, $t("index.text_a8586004a5")),
+      "#本期深境螺旋图鉴": challengeCommand(catalog, $t("index.text_a8586004a5")),
+      "#上期深渊图鉴": challengeCommand(catalog, $t("index.text_88ddf3bb5d")),
+      "#上期深境螺旋图鉴": challengeCommand(catalog, $t("index.text_88ddf3bb5d")),
+      "#星铁本期末日图鉴": challengeCommand(catalog, $t("index.text_dbe2bd1676")),
+      "#星铁上期末日图鉴": challengeCommand(catalog, $t("index.text_fbe30ba493")),
+      "#星铁下期末日图鉴": challengeCommand(catalog, $t("index.text_8a9a6307d2")),
+      "#星铁本期虚构图鉴": challengeCommand(catalog, $t("index.text_23f23f332e")),
+      "#星铁上期虚构图鉴": challengeCommand(catalog, $t("index.text_fac8d9c7dc")),
+      "#星铁下期虚构图鉴": challengeCommand(catalog, $t("index.text_372aef067b")),
+      "#星铁本期混沌图鉴": challengeCommand(catalog, $t("index.text_6b0debea9e")),
+      "#星铁上期混沌图鉴": challengeCommand(catalog, $t("index.text_c7ce8f379a")),
+      "#星铁下期混沌图鉴": challengeCommand(catalog, $t("index.text_86140a0ef0")),
+      "#星铁异相图鉴": challengeCommand(catalog, $t("index.text_917308100d")),
+      "#星铁本期异相图鉴": challengeCommand(catalog, $t("index.text_465fd7591f")),
+      "#星铁上期异相图鉴": challengeCommand(catalog, $t("index.text_462fe295af")),
+      "#星铁下期异相图鉴": challengeCommand(catalog, $t("index.text_fa8a08f435")),
+      "#绝区零本期防卫战图鉴": challengeCommand(catalog, $t("index.text_8edfa1d941")),
+      "#绝区零上期防卫战图鉴": challengeCommand(catalog, $t("index.text_9c15bd2faa")),
+      "#绝区零下期防卫战图鉴": challengeCommand(catalog, $t("index.text_4ff826ade5")),
+      "#绝区零本期危局图鉴": challengeCommand(catalog, $t("index.text_66c0400fa3")),
+      "#绝区零上期危局图鉴": challengeCommand(catalog, $t("index.text_db8a4c0aa4")),
       "#图鉴状态": (_argument: string, delivery?: AtlasDelivery) => atlasStatus(catalog, delivery),
     },
   };

@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { samachurlArtwork } from "./challenge-artwork.ts";
 import type { AtlasEntry } from "./catalog.ts";
 import { readChallengeFacts, theaterMode } from "./challenges.ts";
@@ -31,7 +34,7 @@ export interface TheaterDetails {
 }
 
 const difficulties = new Map([
-  [1, "轻简"], [2, "普通"], [3, "困难"], [4, "卓越"], [5, "月谕"],
+  [1, $t("theater-data.text_45daa9092e")], [2, $t("theater-data.text_de907d10df")], [3, $t("theater-data.text_4ea02714a1")], [4, $t("theater-data.text_5102bbdbe1")], [5, $t("theater-data.text_680ea5e43a")],
 ]);
 
 // Compare the May and June notices to distinguish 草/冰, then the October list for 风.
@@ -46,7 +49,7 @@ const elements = new Map<number, readonly [string, string]>([
   [6, ["冰", "UI_AnimalIcon_Wisp_Ice_01"]], [7, ["风", "Skill_E_PlayerWind_01"]],
   [8, ["岩", "Skill_E_PlayerRock_01"]],
 ]);
-const numerals = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+const numerals = ["", $t("theater-data.text_51a75f4634"), $t("theater-data.text_084b42f6e9"), $t("theater-data.text_a4c3313deb"), $t("theater-data.text_754a9d5828"), $t("theater-data.text_c9b87f516a"), $t("theater-data.text_de07b53838"), $t("theater-data.text_1b0542878c"), $t("theater-data.text_2c467d3673"), $t("theater-data.text_df897da6e0"), $t("theater-data.text_fc7edd399a")];
 
 function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
@@ -74,8 +77,8 @@ function list(primary: unknown, fallback: unknown = undefined): unknown[] {
 }
 
 const octoberBosses = new Map([
-  [6, { name: "历经百战的嵌合兽怪箭士", artwork: "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp" }],
-  [8, { name: "嵌合翼骏狮", artwork: "gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp" }],
+  [6, { name: $t("theater-data.text_bef76149bd"), artwork: "gallery/gi/UI_MonsterIcon_Volkodlak_Greyhound_Furiosa.webp" }],
+  [8, { name: $t("theater-data.text_2aeedc74a3"), artwork: "gallery/gi/UI_MonsterIcon_Chimera_Manticore.webp" }],
 ]);
 
 const singleLine = (value: unknown) => effectText(value).replace(/\s*\n\s*/gu, " ");
@@ -111,7 +114,7 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     if (!id) return [];
     return [lookup.character(String(id)).then((known) => ({
       id,
-      name: known?.name ?? `角色 ID ${id}（待核对）`,
+      name: known?.name ?? $t("theater-data.text_45cc49fe49", { "id": id }),
       artwork: known?.artwork,
       description: singleLine(row.desc),
     }))];
@@ -127,7 +130,7 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     const element = elements.get(id);
     return element
       ? [{ name: element[0], artwork: `gallery/gi/${element[1]}.webp` }]
-      : [{ name: `元素代码 ${id}（待核对）` }];
+      : [{ name: $t("theater-data.text_57089b1164", { "id": id }) }];
   }));
 
   const readActs = (key: "room" | "hard_room") => Promise.all(numberRows(config[key]).map(async ([roomId, room], index): Promise<TheaterAct> => {
@@ -150,12 +153,12 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
         const icon = artwork(`detail.difficulty_config.${difficulty}.${key}.${roomId}.monster_preview_list.${position}.icon`);
         const known = id ? lookup.enemy(String(id), sourceName) : Promise.resolve(undefined);
         return [known.then((entry) => ({
-          id, name: sourceName || entry?.name || `敌人 ID ${id}（待核对）`,
+          id, name: sourceName || entry?.name || $t("theater-data.text_e741124190", { "id": id }),
           artwork: icon ?? entry?.artwork, description: effectText(enemy.desc) || entry?.description,
         }))];
       })));
     return {
-      name: key === "room" ? `第${numerals[roomId] ?? roomId}幕` : `圣牌${numerals[index + 1] ?? index + 1}`,
+      name: key === "room" ? $t("theater-data.text_9a41e92526", { "value1": numerals[roomId] ?? roomId }) : $t("theater-data.text_b8745abf83", { "value1": numerals[index + 1] ?? index + 1 }),
       subtitle: [level ? `Lv${level}` : "", title].filter(Boolean).join(" · "),
       description,
       enemies,
@@ -163,7 +166,7 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
   }));
   const [acts, hardActs] = await Promise.all([readActs("room"), readActs("hard_room")]);
   return {
-    name: current ? "当期幻想真境剧诗" : entry.name === entry.id ? theaterMode.name : entry.name,
+    name: current ? $t("theater-data.text_c4a0399bc0") : entry.name === entry.id ? theaterMode.name : entry.name,
     version: entry.version,
     artwork: artwork(),
     window,
@@ -172,10 +175,10 @@ export async function normalizeTheater(entry: AtlasEntry, content: Record<string
     maxAct: positiveInteger(config.boss_max_room_number),
     elements: availableElements,
     groups: [
-      { name: "开幕角色", cards: opening },
-      { name: "特邀角色", cards: invited },
-      { name: "首领阵容", cards: distinct(acts.flatMap((act) => act.enemies)).slice(0, 10) },
-      { name: "圣牌挑战", cards: distinct(hardActs.flatMap((act) => act.enemies)).slice(0, 12) },
+      { name: $t("theater-data.text_8bd1d453a7"), cards: opening },
+      { name: $t("theater-data.text_175721fa68"), cards: invited },
+      { name: $t("theater-data.text_8481f992ad"), cards: distinct(acts.flatMap((act) => act.enemies)).slice(0, 10) },
+      { name: $t("theater-data.text_49b5f6c5a6"), cards: distinct(hardActs.flatMap((act) => act.enemies)).slice(0, 12) },
     ].filter(({ cards }) => cards.length),
     acts: [...acts, ...hardActs],
   };

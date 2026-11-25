@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { reportAtlasInitializationProgress as reportProgress, type AtlasInitializationProgressCallback } from "./initialization-progress.ts";
 import { atlasLocaleBlock, atlasPageKey, defaultAtlasLocale, parseAtlasLocale } from "./locale.ts";
 import { nativeAtlasPageOrigin } from "./native-record-export.ts";
@@ -30,13 +33,13 @@ function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly A
     const keys = new Set(scope.map(({ game, pageId }) => `${game}/${pageId}`));
     profiles = profiles.filter(({ game, pageId }) => keys.has(`${game}/${pageId}`));
     if (!scope.length || keys.size !== scope.length || profiles.length !== keys.size) {
-      throw new Error("请选择已识别且不重复的图鉴分类。");
+      throw new Error($t("download-legacy-atlas.text_9d4c31335c"));
     }
   }
   return profiles.map(({ game, pageId, indexShape }) => {
     const version = versions[game];
     if (typeof version !== "string" || !atlasVersion.test(version) || (game !== "zzz" && version.includes("+"))) {
-      throw new Error(`请选择图鉴原站提供的 ${game} 版本。`);
+      throw new Error($t("download-legacy-atlas.text_3df9d389f2", { "game": game }));
     }
     return { game, pageId, version, locale, indexShape, indexUrl: nativeAtlasPageOrigin({ game, pageId, version, locale }).sourceUrl };
   });
@@ -45,11 +48,11 @@ function selectedExporterPages(versions: AtlasExportVersions, scope?: readonly A
 export async function readSelectedExporterIndexes(versions: AtlasExportVersions, signal?: AbortSignal,
   request: AtlasSourceFetch = fetch, scope?: readonly AtlasExportPageSelection[], locale = defaultAtlasLocale,
   onProgress?: AtlasInitializationProgressCallback): Promise<readonly AtlasSourceIndex[]> {
-  if (locale === "cht") throw new Error("原站导出不提供繁體中文，请使用自备图鉴目录。");
+  if (locale === "cht") throw new Error($t("download-legacy-atlas.text_b64465cf72"));
   const selected = selectedExporterPages(versions, scope, locale);
   const indexes: AtlasSourceIndex[] = [];
   let completedIndexes = 0;
-  await reportProgress(onProgress, { stage: "indexes", message: "读取图鉴分类索引", completed: 0, total: selected.length, unit: "类" }, signal);
+  await reportProgress(onProgress, { stage: "indexes", message: $t("download-legacy-atlas.text_684cdc373a"), completed: 0, total: selected.length, unit: $t("download-legacy-atlas.text_4fb249b9d7") }, signal);
   for (let start = 0; start < selected.length; start += 4) {
     const batch = await Promise.all(selected.slice(start, start + 4).map(async ({ game, pageId, version, indexUrl, indexShape }) => {
       const bytes = await readAtlasSourceBytes(indexUrl, "application/json",
@@ -58,8 +61,8 @@ export async function readSelectedExporterIndexes(versions: AtlasExportVersions,
       const listing = indexShape === "array" && Array.isArray(value) ? value : evidenceObject(value);
       const entries = Object.entries(listing);
       if ((indexShape === "array" && !Array.isArray(listing)) || !entries.length ||
-          entries.some(([, row]) => row !== evidenceObject(row))) throw new Error(`${game}/${pageId} 原站索引结构无效。`);
-      await reportProgress(onProgress, { stage: "indexes", message: `已读取 ${game}/${pageId} 索引`, completed: ++completedIndexes, total: selected.length, unit: "类" }, signal);
+          entries.some(([, row]) => row !== evidenceObject(row))) throw new Error($t("download-legacy-atlas.text_6bd0054d35", { "game": game, "pageId": pageId }));
+      await reportProgress(onProgress, { stage: "indexes", message: $t("download-legacy-atlas.text_f5e34cb3d5", { "game": game, "pageId": pageId }), completed: ++completedIndexes, total: selected.length, unit: $t("download-legacy-atlas.text_4fb249b9d7") }, signal);
       return { game, pageId, version, ...(locale !== defaultAtlasLocale && { locale }), recordCount: entries.length,
         rows: new Map(entries.map(([id, row]) => [id, serializeLegacyJsonEvidence(row)])) };
     }));
@@ -85,21 +88,21 @@ async function acquireWorkspace(path: string, target: string) {
   const resolved = resolve(path);
   const workspace = join(await realpath(dirname(resolved)), basename(resolved));
   if (contains(target, workspace) || contains(workspace, target)) {
-    throw new Error("公网图鉴下载工作目录必须独立于发布目录。");
+    throw new Error($t("download-legacy-atlas.text_95bb7ca492"));
   }
   const existing = await entry(workspace);
-  if (existing && !existing.isDirectory()) throw new Error("图鉴下载工作目录须为实体目录。");
+  if (existing && !existing.isDirectory()) throw new Error($t("download-legacy-atlas.text_c4b8b7fec9"));
   if (!existing) await mkdir(workspace, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "EEXIST") throw error;
   });
-  if (await realpath(workspace) !== workspace) throw new Error("图鉴下载工作目录须为实体目录。");
+  if (await realpath(workspace) !== workspace) throw new Error($t("download-legacy-atlas.text_c4b8b7fec9"));
   return workspace;
 }
 
 async function verifyExporterOutput(directory: string, signal?: AbortSignal) {
   const root = await entry(directory);
   if (!root) return;
-  if (!root.isDirectory()) throw new Error("图鉴下载数据须位于工作区实体目录内。");
+  if (!root.isDirectory()) throw new Error($t("download-legacy-atlas.text_653f0b567a"));
   const pending = [directory];
   while (pending.length) {
     const parent = pending.pop()!;
@@ -108,7 +111,7 @@ async function verifyExporterOutput(directory: string, signal?: AbortSignal) {
       const path = join(parent, name);
       const metadata = await lstat(path);
       if (metadata.isDirectory()) pending.push(path);
-      else if (!metadata.isFile() || metadata.nlink !== 1) throw new Error("图鉴下载数据不能包含链接或特殊文件。");
+      else if (!metadata.isFile() || metadata.nlink !== 1) throw new Error($t("download-legacy-atlas.text_77ca65d8d6"));
     }
   }
 }
@@ -141,7 +144,7 @@ export async function changedAtlasSourceIndexes(directory: string, indexes: read
     const page = object(object(atlasLocaleBlock(gameData, locale).pages)[pageId]);
     if (page.version === version) {
       const missing = Object.keys(object(page.records)).find(id => !rows.has(id));
-      if (missing) throw new Error(`${game}/${pageId} 同版索引缺少现用条目 ${missing}。`);
+      if (missing) throw new Error($t("download-legacy-atlas.text_a69c44183e", { "game": game, "pageId": pageId, "missing": missing }));
       if (page.recordCount === recordCount && await matchesExportIndex(directory, map, { game, pageId, version, recordCount, rows, locale }, signal)) {
         continue;
       }
@@ -219,7 +222,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
   const workspace = await acquireWorkspace(path, await realpath(target));
   const lockFile = join(workspace, ".download.sqlite");
   const lockPath = await entry(lockFile);
-  if (lockPath && !lockPath.isFile()) throw new Error("图鉴下载锁须为实体文件。");
+  if (lockPath && !lockPath.isFile()) throw new Error($t("download-legacy-atlas.text_bf1bf7fb83"));
   const lock = new Database(lockFile);
   let stage: string | undefined;
   try {
@@ -228,12 +231,12 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       lock.exec("BEGIN IMMEDIATE");
     } catch (error) {
       if ((error as NodeJS.ErrnoException | undefined)?.code?.startsWith("SQLITE_BUSY")) {
-        throw new Error("该工作目录已有公网图鉴下载正在进行。");
+        throw new Error($t("download-legacy-atlas.text_3dafe5ba08"));
       }
       throw error;
     }
     const indexes = await selected();
-    await reportProgress(onProgress, { stage: "cache", message: "核对已有快照与可复用缓存" }, signal);
+    await reportProgress(onProgress, { stage: "cache", message: $t("download-legacy-atlas.text_cedf3f02d2") }, signal);
     const pages = indexes.map(({ rows: _rows, ...page }) => page);
     const legacy = join(workspace, "backend");
     const sources = [];
@@ -246,7 +249,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     const cache = join(workspace, "native-cache");
     await mkdir(cache, { recursive: true, mode: 0o700 });
     if (!(await entry(cache))?.isDirectory() || await realpath(cache) !== cache) {
-      throw new Error("图鉴原资源缓存须为实体目录。");
+      throw new Error($t("download-legacy-atlas.text_b7fd9bfe7e"));
     }
     for (const item of await readdir(workspace, { withFileTypes: true })) {
       signal?.throwIfAborted();
@@ -269,7 +272,7 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       const ready = remaining.filter(page => !changed.includes(page));
       if (ready.length) reusable.push({ seed, pages: ready });
       remaining = changed;
-      await reportProgress(onProgress, { stage: "cache", message: `已核对缓存，可复用 ${indexes.length - remaining.length} 类`, completed: ++checkedSeeds, total: sources.length, unit: "份" }, signal);
+      await reportProgress(onProgress, { stage: "cache", message: $t("download-legacy-atlas.text_d56bc78b95", { "value1": indexes.length - remaining.length }), completed: ++checkedSeeds, total: sources.length, unit: $t("download-legacy-atlas.text_0066134b36") }, signal);
     }
 
     let source: string | undefined;
@@ -279,14 +282,14 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
     }
     const recovery = nativeAtlasImageRecovery(cache, sources, request);
     for (const [index, donor] of reusable.entries()) {
-      await reportProgress(onProgress, { stage: "assemble", message: "合并已核验的缓存分类", completed: index, total: reusable.length, unit: "份" }, signal);
+      await reportProgress(onProgress, { stage: "assemble", message: $t("download-legacy-atlas.text_b5d3ed2aca"), completed: index, total: reusable.length, unit: $t("download-legacy-atlas.text_0066134b36") }, signal);
       const destination = join(stage, `merge-${index}`);
       const combined = source ? await assembleAtlasCandidate(source, donor.seed, destination, donor.pages, signal, recovery)
         : await copyAtlasSelectedPages(donor.seed, destination, donor.pages, signal, recovery);
       source = combined.directory;
-      await reportProgress(onProgress, { stage: "assemble", message: "已合并缓存分类", completed: index + 1, total: reusable.length, unit: "份" }, signal);
+      await reportProgress(onProgress, { stage: "assemble", message: $t("download-legacy-atlas.text_14e3c0ff4c"), completed: index + 1, total: reusable.length, unit: $t("download-legacy-atlas.text_0066134b36") }, signal);
     }
-    if (!source) throw new Error("未选中图鉴下载分类。");
+    if (!source) throw new Error($t("download-legacy-atlas.text_8a3f324c06"));
     const roles = indexes.filter(({ game, pageId }) => game === "gi" && pageId === "character");
     if (roles.length) {
       const { completeGenshinPortraits } = await import("./genshin-original-portraits.ts");
@@ -296,10 +299,10 @@ async function downloadAtlasExport<T>(path: string, target: string, selected: ()
       const { completeAtlasRoleMaterials } = await import("./role-material-source.ts");
       await completeAtlasRoleMaterials(source, pages, signal, request, true, onProgress);
     }
-    await reportProgress(onProgress, { stage: "validate", message: "校验完整图鉴候选与资源引用" }, signal);
+    await reportProgress(onProgress, { stage: "validate", message: $t("download-legacy-atlas.text_e0f6853717") }, signal);
     const validated = await validateAtlasCandidate(join(source, "data"), pages, signal);
-    if (!validated.ok) throw new Error(`公网图鉴候选未通过校验。${validated.issues[0] ?? ""}`);
-    await reportProgress(onProgress, { stage: "validate", message: "完整图鉴候选校验通过", completed: 1, total: 1, unit: "次" }, signal);
+    if (!validated.ok) throw new Error($t("download-legacy-atlas.text_1771cc7cef", { "value1": validated.issues[0] ?? "" }));
+    await reportProgress(onProgress, { stage: "validate", message: $t("download-legacy-atlas.text_cef83d8a3f"), completed: 1, total: 1, unit: $t("download-legacy-atlas.text_172fb7e67b") }, signal);
     return await consume(source, pages);
   } finally {
     try { if (stage) await rm(stage, { recursive: true, force: true }); }
@@ -314,7 +317,7 @@ export function downloadLegacyAtlas<T>(path: string, target: string, consume: (s
   return downloadAtlasExport(path, target, async () => {
     const indexes = await readSelectedExporterIndexes(versions, signal, undefined, undefined, undefined, onProgress);
     if (indexes.some(({ recordCount }, index) => recordCount !== legacyAtlasSourcePages[index]?.recordCount)) {
-      throw new Error("原站固定版本图鉴分类或条目数与旧资料记录不符。");
+      throw new Error($t("download-legacy-atlas.text_a2620068b1"));
     }
     return indexes;
   }, consume, signal, undefined, undefined, false, onProgress);

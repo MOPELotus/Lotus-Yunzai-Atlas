@@ -1,3 +1,6 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { matchesLegacyAtlasIndex, maxLegacyAtlasIndexBytes } from "./audit-legacy-source.ts";
@@ -26,10 +29,10 @@ export async function readFixedIndexEvidence(page: LegacyAtlasSourcePage, checkp
 export async function reviewLegacyDetail(exportRoot: string, cache: string, key: string, checkpoint: string, signal?: AbortSignal) {
   const queue = await planLegacyDetailQueue(exportRoot, cache, signal);
   const entry = queue.entries.find((item) => item.key === key && item.state === "eligible-candidate");
-  if (!entry) throw new Error("图鉴详情没有可独立复核的候选身份。");
+  if (!entry) throw new Error($t("review-legacy-details.text_d2e3db0b42"));
   const { body, sha256, bytes } = await readLegacyDetailCandidate(entry, checkpoint, signal);
   const old = evidenceObject((await readOldItemEvidence(await realpath(join(exportRoot, "data")), entry.itemPath)).content ?? null).detail;
-  if (!old) throw new Error("旧导出没有对应的嵌入详情。");
+  if (!old) throw new Error($t("review-legacy-details.text_b56c2f0382"));
   const detail = parseLegacyJsonEvidence(utf8.decode(body));
   const comparison = compareLegacyJsonEvidence(old, detail);
   return { key, url: entry.url, version: entry.version, itemPath: entry.itemPath,
@@ -39,7 +42,7 @@ export async function reviewLegacyDetail(exportRoot: string, cache: string, key:
 /** Show complete list-only classes without increasing the number of independently fixed detail files. */
 export async function reviewLegacyIndexedOnly(exportRoot: string, cache: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (!(await lstat(cache)).isDirectory()) throw new Error("请指定已有的图鉴索引检查点目录。");
+  if (!(await lstat(cache)).isDirectory()) throw new Error($t("review-legacy-details.text_a744932eae"));
   const checkpoints = await openAtlasPinnedCache(cache);
   const inventory = await readLegacyExportInventory(exportRoot, signal);
   const data = await realpath(join(exportRoot, "data"));
@@ -69,7 +72,7 @@ export async function reviewLegacyIndexedOnly(exportRoot: string, cache: string,
 if (import.meta.main) {
   const [source, cache, selector, checkpoint, ...extra] = Bun.argv.slice(2);
   if (!source || !cache || !selector || extra.length || (selector === "--indexed-only" ? checkpoint !== undefined : !checkpoint)) {
-    console.error("用法：bun review-legacy-details.ts <原导出根> <原索引检查点目录> <条目键 候选文件 | --indexed-only>");
+    console.error($t("review-legacy-details.text_580654e1a2"));
     process.exitCode = 2;
   } else {
     try {
@@ -77,7 +80,7 @@ if (import.meta.main) {
         : await reviewLegacyDetail(source, cache, selector, checkpoint!);
       console.log(JSON.stringify(report, null, 2));
     } catch (error) {
-      console.error(error instanceof Error ? error.message : "无法复核图鉴原详情。");
+      console.error(error instanceof Error ? error.message : $t("review-legacy-details.text_70089a5b85"));
       process.exitCode = 1;
     }
   }

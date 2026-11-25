@@ -1,15 +1,18 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import type { Game } from "./catalog.ts";
 import { compareKey, effectText, label, object } from "./source-values.ts";
 
-export const onslaughtMode = { game: "gi", id: "leyline", name: "幽境危战", aliases: ["幽境", "危战", "地脉异常"] } as const;
-export const theaterMode = { game: "gi", id: "rolecombat", name: "幻想真境剧诗", aliases: ["幻想真境"] } as const;
-export const abyssMode = { game: "gi", id: "tower", name: "深境螺旋", aliases: ["深渊"] } as const;
-export const apocalypseMode = { game: "hsr", id: "maze_boss", name: "末日幻影", aliases: ["末日"] } as const;
-export const fictionMode = { game: "hsr", id: "maze_extra", name: "虚构叙事", aliases: ["虚构"] } as const;
-export const chaosMode = { game: "hsr", id: "maze", name: "混沌回忆", aliases: ["混沌", "忘却", "忘却之庭"] } as const;
-export const shiyuMode = { game: "zzz", id: "shiyu", name: "式舆防卫战", aliases: ["防卫", "防卫战", "式舆", "式舆防卫"] } as const;
-export const deadlyAssaultMode = { game: "zzz", id: "boss", name: "危局强袭战", aliases: ["危局", "强袭", "强袭战"] } as const;
-export const arbitrationMode = { game: "hsr", id: "maze_peak", name: "异相仲裁", aliases: ["异相"] } as const;
+export const onslaughtMode = { game: "gi", id: "leyline", name: $t("challenges.text_c3354e0ec8"), aliases: ["幽境", "危战", "地脉异常", "幽境危战"] } as const;
+export const theaterMode = { game: "gi", id: "rolecombat", name: $t("challenges.text_8cb870ae6a"), aliases: ["幻想真境", "幻想真境剧诗"] } as const;
+export const abyssMode = { game: "gi", id: "tower", name: $t("challenges.text_82f72c6585"), aliases: ["深渊", "深境螺旋"] } as const;
+export const apocalypseMode = { game: "hsr", id: "maze_boss", name: $t("challenges.text_8dae72d970"), aliases: ["末日", "末日幻影"] } as const;
+export const fictionMode = { game: "hsr", id: "maze_extra", name: $t("challenges.text_d66b949b63"), aliases: ["虚构", "虚构叙事"] } as const;
+export const chaosMode = { game: "hsr", id: "maze", name: $t("challenges.text_59977c7f79"), aliases: ["混沌", "忘却", "忘却之庭", "混沌回忆"] } as const;
+export const shiyuMode = { game: "zzz", id: "shiyu", name: $t("challenges.text_f718dc4321"), aliases: ["防卫", "防卫战", "式舆", "式舆防卫", "式舆防卫战"] } as const;
+export const deadlyAssaultMode = { game: "zzz", id: "boss", name: $t("challenges.text_4b7b8e83d9"), aliases: ["危局", "强袭", "强袭战", "危局强袭战"] } as const;
+export const arbitrationMode = { game: "hsr", id: "maze_peak", name: $t("challenges.text_fdc6c58c58"), aliases: ["异相", "异相仲裁"] } as const;
 
 export const challengeModes = [
   abyssMode,
@@ -126,16 +129,16 @@ const announcedRotations = {
   // https://hsr.hoyoverse.com/en-us/news/166468
   // https://www.hoyolab.com/article/47394097
   maze_extra: {
-    current: { id: "2027", name: "取象为文", begin: "2026-10-19 04:00:00", end: "2026-11-30 04:00:00" },
-    next: { id: "2028", name: "虚事成理", begin: "2026-11-30 04:00:00", end: "2027-01-11 04:00:00" },
+    current: { id: "2027", name: $t("challenges.text_22edd0035a"), begin: "2026-10-19 04:00:00", end: "2026-11-30 04:00:00" },
+    next: { id: "2028", name: $t("challenges.text_021d012f08"), begin: "2026-11-30 04:00:00", end: "2027-01-11 04:00:00" },
   },
   maze: {
-    current: { id: "1036", name: "物竞天择", begin: "2026-11-02 04:00:00", end: "2026-12-14 04:00:00" },
-    next: { id: "1037", name: "漆黑残响", begin: "2026-12-14 04:00:00", end: "2027-01-25 04:00:00" },
+    current: { id: "1036", name: $t("challenges.text_be12270e62"), begin: "2026-11-02 04:00:00", end: "2026-12-14 04:00:00" },
+    next: { id: "1037", name: $t("challenges.text_6fc1f71265"), begin: "2026-12-14 04:00:00", end: "2027-01-25 04:00:00" },
   },
   maze_boss: {
-    current: { id: "3021", name: "支配遗忘", begin: "2026-10-05 04:00:00", end: "2026-11-16 04:00:00" },
-    next: { id: "3022", name: "领航冥茫", begin: "2026-11-16 04:00:00", end: "2026-12-28 04:00:00" },
+    current: { id: "3021", name: $t("challenges.text_ea18af671f"), begin: "2026-10-05 04:00:00", end: "2026-11-16 04:00:00" },
+    next: { id: "3022", name: $t("challenges.text_64fa2949c6"), begin: "2026-11-16 04:00:00", end: "2026-12-28 04:00:00" },
   },
   // Genshin 7.1 and 7.2 with the monthly reset rule from the original announcement.
   // https://ys.mihoyo.com/main/news/detail/166392
@@ -214,12 +217,12 @@ function detailSections(mode: ChallengeMode, value: unknown): ChallengeSection[]
   switch (mode.id) {
     case "tower": {
       const floors = Object.keys(object(detail.floor)).filter((id) => /^[1-9]\d*$/u.test(id));
-      if (floors.length) sections.push({ label: "楼层", items: floors.map((id) => `第${id}层`), count: floors.length });
+      if (floors.length) sections.push({ label: $t("challenges.text_ce3b386bd7"), items: floors.map((id) => $t("challenges.text_e4539ff0bd", { "id": id })), count: floors.length });
       break;
     }
     case "rolecombat": {
       const count = Object.keys(object(detail.difficulty_config)).length;
-      if (count) sections.push({ label: "难度配置", items: [], count });
+      if (count) sections.push({ label: $t("challenges.text_d9733ee617"), items: [], count });
       break;
     }
     case "leyline": {
@@ -229,29 +232,29 @@ function detailSections(mode: ChallengeMode, value: unknown): ChallengeSection[]
         const name = typeof level === "number" ? onslaughtDifficulties.get(level) : undefined;
         return name ? [name] : [];
       });
-      if (levels.length) sections.push({ label: "难度配置", items, count: levels.length });
+      if (levels.length) sections.push({ label: $t("challenges.text_d9733ee617"), items, count: levels.length });
       break;
     }
     case "maze":
-      sections.push(namedSection("来源关卡", Array.isArray(value) ? value : []));
+      sections.push(namedSection($t("challenges.text_0e9b00150c"), Array.isArray(value) ? value : []));
       break;
     case "maze_boss":
     case "maze_extra":
-      sections.push(namedSection("来源关卡", Array.isArray(detail.level) ? detail.level : []));
+      sections.push(namedSection($t("challenges.text_0e9b00150c"), Array.isArray(detail.level) ? detail.level : []));
       break;
     case "maze_peak":
-      sections.push(namedSection("骑士", Array.isArray(detail.pre_level) ? detail.pre_level : []));
+      sections.push(namedSection($t("challenges.text_0551caec03"), Array.isArray(detail.pre_level) ? detail.pre_level : []));
       if (Object.keys(object(detail.boss_level)).length) {
-        sections.push(namedSection("王棋", [detail.boss_level]));
+        sections.push(namedSection($t("challenges.text_38028918f7"), [detail.boss_level]));
       }
       break;
     case "shiyu":
-      sections.push(namedSection("防线与房间", Object.values(object(detail.zone))));
+      sections.push(namedSection($t("challenges.text_ecaa55b32c"), Object.values(object(detail.zone))));
       break;
     case "boss":
       for (const row of Array.isArray(detail.modes) ? detail.modes : []) {
         const { zone_type, zone } = object(row);
-        const type = zone_type === 1001 ? "试炼" : zone_type === 1002 ? "绝境" : "来源关卡";
+        const type = zone_type === 1001 ? $t("challenges.text_5629e20a86") : zone_type === 1002 ? $t("challenges.text_88d514ca0b") : $t("challenges.text_0e9b00150c");
         sections.push(namedSection(type, Object.values(object(zone))));
       }
       break;

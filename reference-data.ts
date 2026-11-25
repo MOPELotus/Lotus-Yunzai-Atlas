@@ -1,11 +1,14 @@
+import { createTranslator as createTextTranslator } from "../../packages/i18n/index.ts";
+import messageCatalog from "./i18n/zh-CN.json";
+const $t = createTextTranslator("atlas", messageCatalog.messages);
 import { effectText, label, object } from "./source-values.ts";
 
 type RecordValue = Record<string, unknown>;
 
 const statLabels: Readonly<Record<string, string>> = {
-  hp: "生命值", atk: "攻击力", def: "防御力", speed: "速度", speed_base: "速度",
-  hp_base: "生命值", attack_base: "攻击力", defence_base: "防御力",
-  BASE_HP: "基础生命值", BASE_ATTACK: "基础攻击力", BASE_DEFENSE: "基础防御力",
+  hp: $t("reference-data.text_1a256e6376"), atk: $t("reference-data.text_b84ee11f4f"), def: $t("reference-data.text_1cb579e6ba"), speed: $t("reference-data.text_0e14d148b4"), speed_base: $t("reference-data.text_0e14d148b4"),
+  hp_base: $t("reference-data.text_1a256e6376"), attack_base: $t("reference-data.text_b84ee11f4f"), defence_base: $t("reference-data.text_1cb579e6ba"),
+  BASE_HP: $t("reference-data.text_3277ed325c"), BASE_ATTACK: $t("reference-data.text_9a2ba9f61e"), BASE_DEFENSE: $t("reference-data.text_b953c90f99"),
 };
 
 function referenceText(value: unknown, depth = 0): string {
@@ -67,11 +70,11 @@ export function referenceContent(list: RecordValue, detail: RecordValue, materia
   const intro = firstText([partner.profile_desc, detail.desc, detail.description, detail.profile_desc,
     list.desc, list.description, list.effect, detail.effect, detail.story, detail.item_desc, detail.item_bg_desc]);
   const sections = [
-    { title: "效果", content: firstText([detail.effect, list.effect, detail.desc2, list.desc2]) },
-    { title: "专属信息", content: firstText([object(detail.special_element_type).desc, partner.impression_f, partner.impression_m]) },
-    { title: "数值", content: referenceStats(detail.stats ?? detail.weapon_prop ?? list.stats) },
-    { title: "故事", content: firstText([detail.story, detail.background, object(partner.trust_lv)["3"], detail.item_bg_desc]) },
-    { title: "培养材料", content: referenceMaterials(detail.materials ?? detail.ascension ?? detail.level, materialNames) },
+    { title: $t("reference-data.text_86a00cf742"), content: firstText([detail.effect, list.effect, detail.desc2, list.desc2]) },
+    { title: $t("reference-data.text_a7ad704923"), content: firstText([object(detail.special_element_type).desc, partner.impression_f, partner.impression_m]) },
+    { title: $t("reference-data.text_c5500a58e0"), content: referenceStats(detail.stats ?? detail.weapon_prop ?? list.stats) },
+    { title: $t("reference-data.text_4c2c5762d3"), content: firstText([detail.story, detail.background, object(partner.trust_lv)["3"], detail.item_bg_desc]) },
+    { title: $t("reference-data.text_2d84990389"), content: referenceMaterials(detail.materials ?? detail.ascension ?? detail.level, materialNames) },
   ].filter(({ content }) => content && content !== intro);
   return { intro, sections };
 }
