@@ -2,11 +2,12 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { atlasThemeDirectories } from "./theme-directories.ts";
 
-test("图鉴主题按宿主持久目录、模块目录、两种旧部署的顺序查找", () => {
+test("图鉴主题按宿主持久目录、内置主题、模块目录、两种旧部署的顺序查找", () => {
   const checkout = new URL("./fixture/", import.meta.url);
   const module = new URL("plugins/atlas/role-render.ts", checkout);
   const expected = [
     "data/atlas/theme",
+    "resources/builtin/templates/atlas",
     "plugins/atlas/assets/miao-theme",
     "plugins/Lotus-ReFactor/resources/miao-theme",
     "plugins/Lotus-Plugin/resources/miao-theme",

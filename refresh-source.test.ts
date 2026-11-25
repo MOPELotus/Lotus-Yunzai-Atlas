@@ -146,12 +146,18 @@ test("定时与手动共用分类、发布互斥和生命周期，失败后下�
   let checks = 0;
   let fail = true;
   const controller = new AbortController();
+  const manifestEntered = Promise.withResolvers<void>();
+  const continueManifest = Promise.withResolvers<void>();
   const { atlasSchedule, commands } = createAtlasMaintenance(root, {
     signal: controller.signal,
     updateConfig: { version_channel: "live", update_args: ["--page", "zzz=bangboo"], challenge_args: ["--page", "zzz=character"] },
     async manifest() {
       checks++;
-      if (fail) throw new Error("fixture temporary failure");
+      if (fail) {
+        manifestEntered.resolve();
+        await continueManifest.promise;
+        throw new Error("fixture temporary failure");
+      }
       return { zzz: { live: release, available: [release] } };
     },
     request: source(release),
@@ -160,8 +166,16 @@ test("定时与手动共用分类、发布互斥和生命周期，失败后下�
   expect(await atlasSchedule.challenge.run()).toContain("未启用");
   expect(checks).toBe(0);
 
+  expect(atlasSchedule.version.cron).toBeDefined();
   const pending = atlasSchedule.version.run();
-  expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain("已有图鉴更新正在进行");
+  // Scheduled work first enters its queue; wait until it actually owns the update lock.
+  await manifestEntered.promise;
+  try {
+    expect(await commands["#更新图鉴"]("", { atlasMaintenance: true })).toContain("已有图鉴更新正在进行");
+    expect(checks).toBe(1);
+  } finally {
+    continueManifest.resolve();
+  }
   expect(await pending).toContain("图鉴版本清单不可用");
   expect(await readAtlasSnapshotVersion(root)).toBeNull();
   expect(checks).toBe(1);
