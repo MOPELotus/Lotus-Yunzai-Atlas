@@ -1319,7 +1319,7 @@ async function renderAtlasPages(pages: Page[], title: string[], gameId: Game | u
         ctx.restore();
         y += panelGap;
       }
-      paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, muted);
+      paintLines(ctx, [`Lotus-Yunzai · 图鉴 · ${page}`], margin, height - 37, 14, 21, "#fff");
     };
     return renderPng(Math.floor(width * zoom), Math.floor(height * zoom), (ctx) => {
       ctx.scale(zoom, zoom);
