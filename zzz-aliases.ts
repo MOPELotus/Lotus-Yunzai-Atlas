@@ -24,9 +24,11 @@ function safeTitle(value: unknown): value is string {
 }
 
 async function readLegacy(resources: string | undefined): Promise<Record<string, unknown>> {
-  if (!resources) return {};
-  for (const kind of ["config", "defSet"]) {
-    const path = join(dirname(resources), kind, "alias.yaml");
+  const paths: (string | URL)[] = [
+    ...(resources ? [join(dirname(resources), "config/alias.yaml"), join(dirname(resources), "defSet/alias.yaml"), join(resources, "alias.yaml")] : []),
+    new URL("../../resources/builtin/games/zzz/alias.yaml", import.meta.url),
+  ];
+  for (const path of paths) {
     const file = Bun.file(path);
     if (!await file.exists()) continue;
     if (file.size > 512 * 1024) throw new Error("绝区零别名配置过大。");

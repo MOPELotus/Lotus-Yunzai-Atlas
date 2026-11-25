@@ -104,10 +104,13 @@ interface AtlasPage {
   readonly achievementCategories?: readonly AchievementCategory[];
 }
 
+export type ReadAtlasCharacterAliases = (game: "gi" | "hsr") => Promise<ReadonlyMap<string, string>>;
+
 interface Catalog {
   readonly pages: readonly AtlasPage[];
   readonly stale: boolean;
   readonly rebuilt?: true;
+  readonly characterAliases?: ReadonlyMap<Game, ReadonlyMap<string, string>>;
 }
 
 interface Snapshot extends Catalog {
@@ -258,7 +261,11 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
     if (!kind || (game && page.game !== game)) return [];
     const aliasTarget = page.game === "zzz" && kind === "character" ? zzzCharacterAliases.get(literal) : undefined;
     const weaponNames = kind === "equipment" ? equipmentAliases.get(page.game)?.get(literal) : undefined;
-    const legacyNames = legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(legacyKey);
+    const sharedAliases = kind === "character" ? catalog.characterAliases?.get(page.game) : undefined;
+    const sharedTarget = sharedAliases?.get(literal.replace(/[\s·・•]/gu, ""));
+    const legacyNames = sharedAliases
+      ? sharedTarget ? new Set([compareKey(sharedTarget)]) : undefined
+      : legacyCharacterSetAliases.get(page.game)?.get(kind)?.get(legacyKey);
     const pro = page.game === "hsr" && kind === "character" ? starRailProRoles.find(({ id, name }) =>
       literal === id || literal === exactName(name) || legacyNames?.has(compareKey(name))) : undefined;
     return (pro ? proEntries(page, pro) : page.entries).map((entry) => {
@@ -284,11 +291,15 @@ function findMatches<K extends Kind>(catalog: Catalog, kinds: readonly K[], quer
       return { kind, entry, score: alias ? Math.max(direct, matchedPro ? 2.75 : 2.5) : direct };
     });
   });
-  const best = matches.reduce((best, match) => Math.max(best, match.score), 0);
-  if (best > 0 && best <= 2 && includePartial) return matches.filter(({ score }) => score > 0)
+  // A recognized playable-role name/alias expresses character intent in mixed lookup.
+  // Exact playable names still outrank aliases, and explicit non-character queries never enter this branch.
+  const candidates = matches.some(match => match.kind === "character" && match.score >= 2.5)
+    ? matches.filter(match => match.kind === "character") : matches;
+  const best = candidates.reduce((best, match) => Math.max(best, match.score), 0);
+  if (best > 0 && best <= 2 && includePartial) return candidates.filter(({ score }) => score > 0)
     .sort((left, right) => right.score - left.score || left.entry.name.length - right.entry.name.length ||
       left.entry.name.localeCompare(right.entry.name, "zh-Hans-CN"));
-  return best > 0 ? matches.filter((match) => match.score === best) : [];
+  return best > 0 ? candidates.filter((match) => match.score === best) : [];
 }
 
 function findEntries(catalog: Catalog, kind: Kind, query: string, game?: Game): AtlasEntry[] {
@@ -300,6 +311,8 @@ export type TraditionalLookup = "search" | "name" | "equipment" | "weapon" | "ch
 export function findTraditionalEntries(catalog: Catalog, query: string, game?: Game, mode: TraditionalLookup = "search") {
   if (mode === "weapon") return findMatches(catalog, ["equipment"], query, game, true);
   if (mode === "bare") {
+    const characters = findMatches(catalog, ["character"], query, game, true);
+    if (characters.some(({ score }) => score >= 2.5)) return characters;
     const weapons = findMatches(catalog, ["equipment"], query, game, true);
     return weapons.length ? weapons : findMatches(catalog, ["character", "set"], query, game, true);
   }
@@ -313,7 +326,8 @@ export function findTraditionalEntries(catalog: Catalog, query: string, game?: G
   const existing = findMatches({ ...catalog, pages }, ["character", "equipment", "set", "bangboo", "monster", "challenge"],
     query, game, mode === "name", mode === "search");
   const cards = findMatches(catalog, ["gcg"], query, game, mode === "name", mode === "search");
-  const matches = cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
+  const characterIntent = existing[0]?.kind === "character" && existing[0].score >= 2.5;
+  const matches = !characterIntent && cards.length && (cards[0]?.score ?? 0) > (existing[0]?.score ?? 0) ? cards : existing;
   if (mode !== "search" || (matches[0]?.score ?? 0) >= 2.5) return matches;
   const references = findMatches(catalog, ["reference"], query, game, false, true);
   return (references[0]?.score ?? 0) > (matches[0]?.score ?? 0) ? references : matches;
@@ -383,12 +397,14 @@ function artifactName(list: Record<string, unknown>, locale: AtlasLocale): strin
   return names.size === 1 ? [...names][0] ?? "" : "";
 }
 
-export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string, locale = defaultAtlasLocale) {
-  return override ? createAtlasCatalog(override, undefined, false, locale)
-    : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot, true, locale);
+export function createAtlasRuntimeCatalog(atlasRoot: string, override?: string, locale = defaultAtlasLocale,
+  readCharacterAliases?: ReadAtlasCharacterAliases) {
+  return override ? createAtlasCatalog(override, undefined, false, locale, readCharacterAliases)
+    : createAtlasCatalog(join(atlasRoot, "data"), atlasRoot, true, locale, readCharacterAliases);
 }
 
-export function createAtlasCatalog(directory: string, publicationRoot?: string, legacyFallback = false, locale = defaultAtlasLocale) {
+export function createAtlasCatalog(directory: string, publicationRoot?: string, legacyFallback = false, locale = defaultAtlasLocale,
+  readCharacterAliases?: ReadAtlasCharacterAliases) {
   const configuredRoot = resolve(directory);
   const publishedRoot = publicationRoot && resolve(publicationRoot);
   const entryRoots = new WeakMap<AtlasEntry, string>();
@@ -396,6 +412,15 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
   let rebuiltAt = 0;
   let reading: Promise<Catalog> | undefined;
   let checkingShortcuts: Promise<Catalog> | undefined;
+
+  async function withCharacterAliases(catalog: Catalog): Promise<Catalog> {
+    if (!readCharacterAliases) return catalog;
+    const tables = await Promise.all((["gi", "hsr"] as const).map(async game => {
+      const aliases = await readCharacterAliases(game).catch(() => undefined);
+      return aliases ? [[game, aliases] as const] : [];
+    }));
+    return { ...catalog, characterAliases: new Map(tables.flat()) };
+  }
 
   async function locate() {
     if (publishedRoot && legacyFallback) return discoverRuntimeAtlasDataDirectory(publishedRoot, locale);
@@ -655,10 +680,10 @@ export function createAtlasCatalog(directory: string, publicationRoot?: string, 
     },
     read(): Promise<Catalog> {
       return reading ??= (checkingShortcuts ? checkingShortcuts.then(() => read(), () => read()) : read())
-        .finally(() => { reading = undefined; });
+        .then(withCharacterAliases).finally(() => { reading = undefined; });
     },
     readForEquipmentShortcut(): Promise<Catalog> {
-      return reading ?? (checkingShortcuts ??= read(true).finally(() => { checkingShortcuts = undefined; }));
+      return reading ?? (checkingShortcuts ??= read(true).then(withCharacterAliases).finally(() => { checkingShortcuts = undefined; }));
     },
     async characterRarity(character: Character): Promise<string> {
       if (character.game !== "zzz") return character.rarity;

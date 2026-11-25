@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createModule } from "./index.ts";
 import { createAtlasCatalog, findBangboos, findCharacters, findEquipment, findMonsters, findSets, findTraditionalEntries } from "./catalog.ts";
 
 test("原神装备旧称只匹配已核对的武器与圣遗物套装，标题保留正式名称", () => {
@@ -514,4 +515,95 @@ test("显式图鉴可按旧同名文件的完整名称和 ID 查到唯一标准�
   expect(findTraditionalEntries(data, "天使海兔__26157201").map(({ entry }) => entry)).toEqual([second]);
   expect(findTraditionalEntries(data, "天使海兔__26157201", "gi", "bare")).toEqual([]);
   expect(findTraditionalEntries(data, "天使海兔__26157201", "zzz")).toEqual([]);
+});
+
+
+test("明确角色昵称优先于同名敌人和卡牌，显式类别与正式角色名仍可消歧", () => {
+  const base = { version: "7.2", rarity: "五星", path: "items/fixture.json" };
+  const arle = { ...base, game: "gi", id: "10000096", name: "阿蕾奇诺" } as const;
+  const tartaglia = { ...arle, id: "10000033", name: "达达利亚" };
+  const clara = { ...base, game: "hsr", id: "1107", name: "克拉拉" } as const;
+  const father = { ...arle, id: "29100101", name: "「仆人」" };
+  const childe = { ...arle, id: "26050101", name: "公子" };
+  const svarog = { ...clara, id: "1014010", name: "史瓦罗" };
+  const pages = [
+    { ...base, game: "gi", kind: "character", name: "角色", sampled: false, entries: [arle, tartaglia] },
+    { ...base, game: "hsr", kind: "character", name: "角色", sampled: false, entries: [clara] },
+    { ...base, game: "gi", kind: "monster", name: "敌人", sampled: false, entries: [father, childe] },
+    { ...base, game: "hsr", kind: "monster", name: "敌人", sampled: false, entries: [svarog] },
+    { ...base, game: "gi", kind: "gcg", name: "七圣召唤", sampled: false, entries: [{ ...father, id: "1416" }] },
+  ] as const;
+  const catalog = { pages, stale: false };
+  for (const [query, role] of [["仆人", arle], ["父亲", arle], ["公子", tartaglia], ["史瓦罗", clara]] as const) {
+    for (const mode of ["search", "name", "character", "character-search", "bare"] as const) {
+      expect(findTraditionalEntries(catalog, query, role.game, mode).map(({ kind, entry }) => [kind, entry]))
+        .toEqual([["character", role]]);
+    }
+    expect(findCharacters(catalog, query, role.game)).toEqual([role]);
+  }
+  expect(findMonsters(catalog, "仆人", "gi")).toEqual([father]);
+  expect(findTraditionalEntries(catalog, "29100101", "gi")[0]?.entry).toBe(father);
+  expect(findMonsters(catalog, "公子", "gi")).toEqual([childe]);
+  expect(findMonsters(catalog, "史瓦罗", "hsr")).toEqual([svarog]);
+  expect(findTraditionalEntries(catalog, "仆人", "hsr", "search")).toEqual([]);
+  expect(findTraditionalEntries(catalog, "阿蕾奇诺", undefined, "name").map(({ entry }) => entry)).toEqual([arle]);
+  const exactRole = { ...clara, id: "999", name: "仆人" };
+  const formal = { ...catalog, pages: [...pages, { ...pages[1], entries: [exactRole] }] };
+  expect(findTraditionalEntries(formal, "仆人").map(({ entry }) => entry)).toEqual([exactRole]);
+  const ambiguous = { ...catalog, characterAliases: new Map([
+    ["gi", new Map([["仆人", "阿蕾奇诺"]])], ["hsr", new Map([["仆人", "克拉拉"]])],
+  ] as const) };
+  expect(findTraditionalEntries(ambiguous, "仆人").map(({ entry }) => entry)).toEqual([arle, clara]);
+  expect(findTraditionalEntries(ambiguous, "仆人", "gi").map(({ entry }) => entry)).toEqual([arle]);
+  expect(findTraditionalEntries(ambiguous, "仆人", "hsr").map(({ entry }) => entry)).toEqual([clara]);
+});
+
+test("宿主注入的角色别名每次读取刷新，全量表不会退回过期的冻结昵称", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-shared-alias-"));
+  let aliases = new Map([["新昵称", "阿蕾奇诺"], ["仆人", "阿蕾奇诺"]]);
+  try {
+    await Bun.write(join(directory, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: {
+      character: { version: "7.2", recordCount: 1, records: {
+        "10000096": { id: "10000096", name: "阿蕾奇诺", path: "items/10000096.json" },
+      } },
+      monster: { version: "7.2", recordCount: 1, records: {
+        "26080301": { id: "29100101", name: "「仆人」", path: "items/26080301.json" },
+      } },
+    } } } } } }));
+    const catalog = createAtlasCatalog(directory, undefined, false, undefined,
+      async game => game === "gi" ? aliases : new Map());
+    const initial = await catalog.read();
+    expect(findTraditionalEntries(initial, "新昵称")[0]?.entry.id).toBe("10000096");
+    expect(findTraditionalEntries(initial, "仆人")[0]?.kind).toBe("character");
+    aliases = new Map([["新昵称", "阿蕾奇诺"]]);
+    const changed = await catalog.readForEquipmentShortcut();
+    expect(findTraditionalEntries(changed, "仆人")[0]?.kind).toBe("monster");
+    expect(findCharacters(changed, "父亲")).toEqual([]);
+    expect(findTraditionalEntries(changed, "新昵称", "gi", "bare")[0]?.entry.id).toBe("10000096");
+    expect(findCharacters(changed, "阿蕾奇诺")[0]?.id).toBe("10000096");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test("模块角色图鉴也使用宿主共享昵称能力而不回查同名敌人", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lotus-atlas-module-alias-"));
+  const previous = Bun.env.LOTUS_ATLAS_DATA_DIR;
+  try {
+    await Bun.write(join(directory, "map.json"), JSON.stringify({ games: { gi: { locales: { zh: { pages: {
+      character: { version: "7.2", recordCount: 1, records: {
+        "10000096": { id: "10000096", name: "阿蕾奇诺", rarity: "五星", path: "items/10000096.json" },
+      } },
+      monster: { version: "7.2", recordCount: 1, records: {
+        "26080301": { id: "26080301", name: "现场昵称", path: "items/26080301.json" },
+      } },
+    } } } } } }));
+    Bun.env.LOTUS_ATLAS_DATA_DIR = directory;
+    const module = createModule({ readCharacterAliases: async game =>
+      new Map(game === "gi" ? [["现场昵称", "阿蕾奇诺"]] : []) });
+    expect(await module.commands["#角色图鉴"]("原神 现场昵称")).toBe("原神 · 阿蕾奇诺 · 五星 · ID 10000096");
+  } finally {
+    if (previous === undefined) delete Bun.env.LOTUS_ATLAS_DATA_DIR;
+    else Bun.env.LOTUS_ATLAS_DATA_DIR = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
 });

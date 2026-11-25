@@ -12,7 +12,7 @@ import { createArbitrationLookup } from "./versioned-challenges.ts";
 import { compareKey } from "./source-values.ts";
 import { findAchievementCategories, findAchievements, type AchievementCategory } from "./achievements.ts";
 import { createAtlasRuntimeCatalog, findBangboos, findSets, findCharacters, findEquipment, findTraditionalEntries,
-  gameNames, type AtlasEntry, type Game, type TraditionalLookup } from "./catalog.ts";
+  gameNames, type AtlasEntry, type Game, type TraditionalLookup, type ReadAtlasCharacterAliases } from "./catalog.ts";
 import { invalidChallengeDate, parseExplicitAtlasChallenge, traditionalAtlasEvent,
   type AtlasDelivery, type AtlasImage, type AtlasReply, type RoleQueryView, type RoleSection } from "./traditional.ts";
 import type { StarrailChallengeMode } from "./starrail-challenge-data.ts";
@@ -330,7 +330,8 @@ async function traditionalQuery(
     const lookup = mode === "legacy-character" ? "character" : mode === "character" ? "character-search" :
       mode === "shortcut" ? "search" : mode;
     let matches: ReturnType<typeof findTraditionalEntries>[number][] = findTraditionalEntries(result, query, game, lookup);
-    if ((!game || game === "zzz") && !quickLookup && mode !== "equipment" && matches.every(({ score }) => score < 2.5)) {
+    if ((!game || game === "zzz") && mode !== "weapon" && mode !== "equipment" &&
+        findTraditionalEntries(result, query, game, "character").every(({ score }) => score < 2.5)) {
       const alias = await localZzzAlias(result, query);
       if (alias) matches = [alias];
     }
@@ -823,13 +824,16 @@ function atlasDefinitions(catalog: AtlasCatalog) {
   };
 }
 
-export function createModule({ signal, atlasUpdateConfig }: { readonly signal?: AbortSignal; readonly atlasUpdateConfig?: unknown } = {}) {
+export function createModule({ signal, atlasUpdateConfig, readCharacterAliases }: {
+  readonly signal?: AbortSignal; readonly atlasUpdateConfig?: unknown;
+  readonly readCharacterAliases?: ReadAtlasCharacterAliases;
+} = {}) {
   const { commands, atlasSchedule } = createAtlasMaintenance(atlasRoot, {
     signal, updateConfig: atlasUpdateConfig, dataOverride: Bun.env.LOTUS_ATLAS_DATA_DIR,
   });
   const configured = atlasUpdateConfig as { readonly max_results?: unknown; readonly locale?: unknown } | undefined;
   const locale = parseAtlasLocale(configured?.locale) ?? defaultAtlasLocale;
-  const catalog = createAtlasRuntimeCatalog(atlasRoot, Bun.env.LOTUS_ATLAS_DATA_DIR, locale);
+  const catalog = createAtlasRuntimeCatalog(atlasRoot, Bun.env.LOTUS_ATLAS_DATA_DIR, locale, readCharacterAliases);
   const atlas = atlasDefinitions(catalog);
   const limit = parseAtlasSearchLimit(configured?.max_results) ?? defaultAtlasSearchLimit;
   const roles = readAtlasRoleSettings(configured);
